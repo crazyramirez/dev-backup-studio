@@ -21,9 +21,9 @@ jobs:
           - name: macOS (Apple Silicon)
             os: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -32,31 +32,76 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller pillow
 
-      - name: Compilar .exe (Windows)
+      - name: Versión
+        id: version
+        shell: bash
+        run: |
+          version=$(python tools/win_version.py)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF_NAME#v}" != "$version" ]]; then
+            echo "::error::La etiqueta $GITHUB_REF_NAME no coincide con APP_VERSION=$version"
+            exit 1
+          fi
+
+      # ── Windows: app → autoprueba → instalador → instalar, probar y desinstalar ──
+      - name: Compilar app (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name "DEV-Backup-Studio" \
-            --icon assets/icon.png backup_studio.py
-          mv dist/DEV-Backup-Studio.exe dist/DEV-Backup-Studio-Windows.exe
+          pyinstaller --noconfirm --clean --windowed --name "DEV Backup Studio" \
+            --icon assets/icon.ico --version-file build/version_info.txt backup_studio.py
 
-      - name: Autoprueba del .exe (Windows)
+      - name: Autoprueba de la app (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath dist\DEV-Backup-Studio-Windows.exe -ArgumentList '--selftest' -Wait -PassThru
+          $p = Start-Process -FilePath "dist\DEV Backup Studio\DEV Backup Studio.exe" -ArgumentList '--selftest' -Wait -PassThru
           Get-Content selftest.log
           exit $p.ExitCode
 
-      - name: Compilar .app y .dmg (macOS)
+      - name: Crear instalador (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc /Qp "/DAppVersion=${{ steps.version.outputs.version }}" `
+            "/DSourceDir=$PWD\dist\DEV Backup Studio" installer\windows.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Probar instalación y desinstalación (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = "dist\DEV-Backup-Studio-Setup-${{ steps.version.outputs.version }}.exe"
+          $dir = Join-Path $env:RUNNER_TEMP "instalado"
+          $p = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/DIR=$dir" -Wait -PassThru
+          if ($p.ExitCode) { throw "el instalador terminó con $($p.ExitCode)" }
+          $exe = Join-Path $dir "DEV Backup Studio.exe"
+          if (-not (Test-Path $exe)) { throw "no se instaló $exe" }
+          $menu = Join-Path ([Environment]::GetFolderPath('Programs')) "DEV Backup Studio.lnk"
+          if (-not (Test-Path $menu)) { throw "falta el acceso del menú Inicio" }
+          $p = Start-Process -FilePath $exe -ArgumentList '--selftest' -Wait -PassThru
+          Get-Content selftest.log
+          if ($p.ExitCode) { throw "la autoprueba de la app instalada falló" }
+          Start-Process -FilePath (Join-Path $dir "unins000.exe") -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          # el desinstalador se relanza desde una copia temporal: se espera a que termine de verdad
+          for ($i = 0; $i -lt 60 -and (Test-Path $exe); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path $exe) { throw "la desinstalación dejó la app" }
+          if (Test-Path $menu) { throw "la desinstalación dejó el acceso del menú Inicio" }
+          "instalar → autoprueba → desinstalar: correcto"
+
+      # ── macOS: .app → autoprueba → .dmg ──
+      - name: Compilar .app (macOS)
         if: runner.os == 'macOS'
         run: |
+          version="${{ steps.version.outputs.version }}"
           pyinstaller --noconfirm --clean --windowed --name "DEV Backup Studio" \
             --icon assets/icon.png --osx-bundle-identifier com.crazyramirez.devbackupstudio backup_studio.py
-          mkdir -p dmg
-          cp -R "dist/DEV Backup Studio.app" dmg/
-          ln -s /Applications dmg/Applications
-          hdiutil create -volname "DEV Backup Studio" -srcfolder dmg -ov -format UDZO dist/DEV-Backup-Studio-macOS.dmg
+          plist="dist/DEV Backup Studio.app/Contents/Info.plist"
+          plutil -replace CFBundleShortVersionString -string "$version" "$plist"
+          plutil -replace CFBundleVersion -string "$version" "$plist"
+          codesign --force --deep --sign - "dist/DEV Backup Studio.app"
 
       - name: Autoprueba de la .app (macOS)
         if: runner.os == 'macOS'
@@ -66,11 +111,20 @@ jobs:
           cat selftest.log
           exit $status
 
-      - uses: actions/upload-artifact@v4
+      - name: Crear .dmg (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dmg
+          cp -R "dist/DEV Backup Studio.app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "DEV Backup Studio" -srcfolder dmg -ov -format UDZO \
+            "dist/DEV-Backup-Studio-${{ steps.version.outputs.version }}-macOS.dmg"
+
+      - uses: actions/upload-artifact@v7
         with:
           name: DEV-Backup-Studio-${{ runner.os }}
           path: |
-            dist/*.exe
+            dist/DEV-Backup-Studio-Setup-*.exe
             dist/*.dmg
           if-no-files-found: error
 
@@ -80,12 +134,13 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: artifacts/*
           generate_release_notes: true
+          fail_on_unmatched_files: true

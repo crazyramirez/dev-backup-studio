@@ -1,20 +1,23 @@
-# DEV Backup Studio
+<p align="center">
+  <img src="docs/header.png" alt="DEV Backup Studio — tus proyectos, siempre a salvo" width="100%">
+</p>
 
 Copia de seguridad y sincronización de carpetas de proyectos a un disco externo, para Windows y macOS.
 Detecta qué ha cambiado, mueve lo renombrado en vez de volver a copiarlo, guarda versiones de lo que
 borras o modificas, comprueba cada copia con SHA-256 y te pregunta si quieres sincronizar en cuanto
 conectas el disco.
 
-![Progreso de una sincronización](docs/progreso.png)
-
-## Descargar
+## Descargar e instalar
 
 En [Releases](https://github.com/crazyramirez/dev-backup-studio/releases/latest):
 
-| Sistema | Archivo |
-|---|---|
-| Windows 10/11 | `DEV-Backup-Studio-Windows.exe` (un solo archivo, no necesita instalación) |
-| macOS 12+ (Apple Silicon) | `DEV-Backup-Studio-macOS.dmg` |
+| Sistema | Archivo | Instalación |
+|---|---|---|
+| Windows 10/11 (64 bits) | `DEV-Backup-Studio-Setup-x.y.z.exe` | Asistente de instalación. Por defecto se instala para tu usuario, sin pedir permisos de administrador; crea el acceso en el menú Inicio (y en el escritorio si lo marcas) y se desinstala desde *Configuración → Aplicaciones*. |
+| macOS 12+ (Apple Silicon) | `DEV-Backup-Studio-x.y.z-macOS.dmg` | Abre el `.dmg` y arrastra la app a *Aplicaciones*. |
+
+Para actualizar, instala la versión nueva encima: si la app está abierta (también en la bandeja), el
+asistente pide cerrarla antes. Los ajustes, índices y copias se conservan, también al desinstalar.
 
 Las aplicaciones no están firmadas con un certificado de desarrollador, así que el sistema avisa la
 primera vez:
@@ -22,6 +25,8 @@ primera vez:
 - **Windows** (SmartScreen): *Más información* → *Ejecutar de todas formas*.
 - **macOS**: clic derecho sobre la app → *Abrir*, o *Ajustes del Sistema → Privacidad y seguridad →
   Abrir igualmente*.
+
+![Progreso de una sincronización](docs/progreso.png)
 
 ## Qué hace
 
@@ -84,12 +89,18 @@ verificación, movidos y reparación) y deja el resultado en `selftest.log`.
 
 ## Compilar
 
-Al publicar una etiqueta `v*`, GitHub Actions compila el `.exe` y el `.dmg` con PyInstaller, ejecuta la
-autoprueba sobre cada aplicación ya compilada y las adjunta a la versión.
+Al publicar una etiqueta `v*` (que debe coincidir con `APP_VERSION` en `backup_studio.py`), GitHub
+Actions:
+
+1. compila la app con PyInstaller en Windows y macOS y ejecuta la autoprueba sobre cada una;
+2. en Windows crea el instalador con Inno Setup (`installer/windows.iss`), lo instala sin ventanas,
+   repite la autoprueba con la app instalada y la desinstala;
+3. en macOS empaqueta la `.app` en un `.dmg`;
+4. publica la versión con el instalador y el `.dmg`.
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 ## Limitaciones

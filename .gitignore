@@ -4,6 +4,9 @@ estado/
 logs/
 selftest.log
 
+# binarios descargados de GitHub Releases
+releases/
+
 # Python y PyInstaller
 __pycache__/
 *.pyc

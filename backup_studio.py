@@ -45,7 +45,7 @@ from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QChe
 import engine
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -3191,9 +3191,16 @@ def selftest() -> int:
         report.close()
 
 
+_app_mutex = None
+
+
 def main() -> int:
+    global _app_mutex
     if "--selftest" in sys.argv:
         return selftest()
+    if IS_WIN:
+        # el instalador (AppMutex) lo usa para pedir que se cierre la app antes de actualizarla
+        _app_mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "DevBackupStudioMutex")
     try:
         migrate_data()
     except OSError:
