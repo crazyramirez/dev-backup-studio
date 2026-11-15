@@ -73,6 +73,9 @@ ROOT_SKIP = {META_DIR, "system volume information", "$recycle.bin", ".spotlight-
              ".trashes", ".temporaryitems", ".documentrevisions-v100"}
 INDEX_SCHEMA = "2"
 SCRUB_THREADS = 4
+# La revisión de integridad no vuelve a leer lo comprobado hace menos de esto
+# (al copiar ya se verifica). «Comprobar todo el disco» no tiene en cuenta el plazo.
+SCRUB_RECHECK_DAYS = 30
 # cuando vuelve un disco que había desaparecido, margen para que termine de montarse
 DISK_SETTLE = 3.0
 
@@ -533,6 +536,10 @@ class Stats:
     step: str = ""
     files_done: int = 0
     bytes_done: int = 0
+    new_done: int = 0          # de files_done: nuevos y modificados
+    new_done_bytes: int = 0
+    changed_done: int = 0
+    changed_done_bytes: int = 0
     files_failed: int = 0
     bytes_failed: int = 0
     moves_done: int = 0
@@ -553,6 +560,7 @@ class Stats:
     scrub_total: int = 0       # archivos en el índice
     scrub_covered: int = 0     # de ellos, comprobados alguna vez
     scrub_start: float = 0.0
+    scrub_due: int = 0         # archivos pendientes de revisión al empezar
     # disco de copia que desaparece a mitad (suspensión, cable, reinicio del USB)
     disk_waits: int = 0        # veces que se ha esperado a que volviera
     disk_wait_s: float = 0.0   # tiempo total esperando
@@ -612,6 +620,7 @@ class BackupJob:
 
         self._lock = threading.Lock()
         self._cancel = threading.Event()
+        self._scrub_stop = threading.Event()  # fin de la revisión: tiempo agotado o cancelar
         self._resume = threading.Event()
         self._resume.set()
         self._big = threading.Semaphore(1)
@@ -658,6 +667,7 @@ class BackupJob:
 
     def cancel(self) -> None:
         self._cancel.set()
+        self._scrub_stop.set()
         self._resume.set()
 
     @property
@@ -772,7 +782,10 @@ class BackupJob:
                         ddirs.pop(key, None)
                         child = os.path.join(rel, name) if rel else name
                         rule = match_rule(name, self.patterns)
-                        if rule:
+                        if not rel and name.lower() in ROOT_SKIP:
+                            # papelera, puntos de restauración, índices de Spotlight…: no son datos tuyos
+                            self.pruned.append((child, "carpeta del sistema"))
+                        elif rule:
                             s.excluded_rule += 1
                             self.pruned.append((child, f"regla «{rule}»"))
                         elif norm_rel(child) in self.excluded:
@@ -1170,6 +1183,12 @@ class BackupJob:
                                 # cuadra con el tamaño del plan aunque el archivo traiga flujos alternativos
                                 stats.bytes_done += size - slot[2]
                                 stats.files_done += 1
+                                if kind == "c":
+                                    stats.changed_done += 1
+                                    stats.changed_done_bytes += size
+                                else:
+                                    stats.new_done += 1
+                                    stats.new_done_bytes += size
                         break
                 finally:
                     if big:
@@ -1388,17 +1407,30 @@ class BackupJob:
         s = self.stats
         if not self.index_path or not os.path.exists(self.index_path):
             return
+        # todo el disco a mano: sin plazo; si no, solo lo nunca comprobado o comprobado hace tiempo
+        since = 0.0 if self.scrub_seconds < 0 else time.time() - SCRUB_RECHECK_DAYS * 86400
         try:
             con = sqlite3.connect(self.index_path, check_same_thread=False)
             s.scrub_total, s.scrub_covered = con.execute("SELECT count(*), count(verified) FROM files").fetchone()
+            s.scrub_due = con.execute("SELECT count(*) FROM files WHERE verified IS NULL OR verified < ?",
+                                      (since or time.time() + 1,)).fetchone()[0]
+            if not s.scrub_due:
+                con.close()
+                return  # todo comprobado hace poco: nada que revisar
             cur = con.execute(
                 "SELECT f.dir, d.path, f.name, f.size, f.mtime, f.hash FROM files f JOIN dirs d ON d.key = f.dir "
-                "ORDER BY f.verified IS NOT NULL, f.verified")
+                "WHERE f.verified IS NULL OR f.verified < ? ORDER BY f.verified IS NOT NULL, f.verified",
+                (since or time.time() + 1,))
         except sqlite3.Error as exc:
             self._error(self.index_path, exc)
             return
         s.scrub_start = time.perf_counter()
-        deadline = s.scrub_start + self.scrub_seconds if self.scrub_seconds > 0 else None
+        timer = None
+        if self.scrub_seconds > 0:
+            # el límite se respeta también a mitad de un archivo grande
+            timer = threading.Timer(self.scrub_seconds, self._scrub_stop.set)
+            timer.daemon = True
+            timer.start()
         updates: list[tuple] = []
         lock = threading.Lock()
 
@@ -1412,7 +1444,7 @@ class BackupJob:
             try:
                 while True:
                     self._wait_if_paused()
-                    if self._cancel.is_set() or (deadline and time.perf_counter() > deadline):
+                    if self._cancel.is_set() or self._scrub_stop.is_set():
                         return
                     with lock:
                         row = cur.fetchone()
@@ -1432,6 +1464,8 @@ class BackupJob:
             t.start()
         for t in threads:
             t.join()
+        if timer:
+            timer.cancel()
         try:
             cur.close()
             con.executemany("UPDATE files SET hash=?, verified=? WHERE dir=? AND name=?", updates)
@@ -1455,7 +1489,7 @@ class BackupJob:
         self.active[tid] = [dst, size, 0]
         try:
             try:
-                on_disk = file_digest(dst, rb, uncached=True, stop=self._cancel)
+                on_disk = file_digest(dst, rb, uncached=True, stop=self._scrub_stop)
             except FileNotFoundError:
                 if not self._dst_online():
                     raise  # no falta el archivo, falta el disco: abajo se espera y se repite
@@ -1465,7 +1499,7 @@ class BackupJob:
                 self._error(dst, OSError(0, "faltaba en el destino (¿borrado a mano?); copiado de nuevo "
                                             "desde el original"))
                 return digest or file_digest(src, rb, stop=self._cancel)
-            original = file_digest(src, rb, stop=self._cancel)
+            original = file_digest(src, rb, stop=self._scrub_stop)
             with self._lock:
                 self.stats.scrub_files += 1
                 self.stats.scrub_bytes += size

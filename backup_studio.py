@@ -48,7 +48,7 @@ import keepawake
 import updater
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -682,7 +682,7 @@ class Tile(QFrame):
         super().__init__()
         self.setObjectName("tile")
         self.setMinimumWidth(150)
-        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(15, 13, 15, 13)
         lay.setSpacing(3)
@@ -1747,6 +1747,7 @@ class MainWindow(QMainWindow):
         self._paused_total = 0.0
         self._paused_copy = 0.0
         self._copy_seen = False
+        self._scrub_seen = False
         self._copy_requested = False
         self._err_seen = 0
         self._last_log = ""
@@ -2251,6 +2252,31 @@ class MainWindow(QMainWindow):
 
         self.banner = Banner()
         v.addWidget(self.banner)
+
+        self.summary_card = Card("Resumen de la copia", G.DONE)
+        sgrid = QGridLayout()
+        sgrid.setSpacing(12)
+        self.s_new = Tile("Nuevos", G.ADD, C["ok"])
+        self.s_changed = Tile("Modificados", G.REFRESH, C["accent2"])
+        self.s_moved = Tile("Movidos", G.NEXT, C["accent"])
+        self.s_versions = Tile("A versiones", G.CLOCK, C["warn"])
+        self.s_dirs_new = Tile("Carpetas nuevas", G.FOLDER, C["folder"])
+        self.s_dirs_gone = Tile("Carpetas quitadas", G.FOLDER, C["muted"])
+        self.s_same = Tile("Sin cambios", G.CHECK, C["ok"])
+        self.s_checked = Tile("Verificados", G.SHIELD, C["accent2"])
+        self.summary_tiles = [self.s_new, self.s_changed, self.s_moved, self.s_versions,
+                              self.s_dirs_new, self.s_dirs_gone, self.s_same, self.s_checked]
+        for i, t in enumerate(self.summary_tiles):
+            sgrid.addWidget(t, i // 4, i % 4)
+        for c in range(4):
+            sgrid.setColumnStretch(c, 1)
+        self.summary_card.body.addLayout(sgrid)
+        self.summary_line = QLabel("")
+        self.summary_line.setObjectName("muted")
+        self.summary_line.setWordWrap(True)
+        self.summary_card.body.addWidget(self.summary_line)
+        self.summary_card.hide()
+        v.addWidget(self.summary_card)
 
         top = QHBoxLayout()
         top.setSpacing(14)
@@ -2805,6 +2831,8 @@ class MainWindow(QMainWindow):
         self.btn_start.setEnabled(not running)
         self.btn_pause.setVisible(running)
         self.btn_cancel.setVisible(running)
+        scrubbing = running and self.job is not None and self.job.stats.step == "verificando"
+        self.btn_cancel.setText("  Omitir revisión" if scrubbing else "  Cancelar")
         self.btn_open.setVisible(not running)
         if state == "paused":
             self.btn_pause.setText("  Reanudar")
@@ -2818,6 +2846,8 @@ class MainWindow(QMainWindow):
         else:
             self.btn_start.setText("  Sincronizar")
         text, color = PILL[state]
+        if state == "copying" and self.job is not None and self.job.stats.step == "verificando":
+            text, color = "Comprobando", C["accent2"]
         self.pill.setText(f"●  {text}")
         self.pill.setStyleSheet(f"QLabel#pill {{ color:{color}; background:{rgba(color, 30)}; "
                                 f"border:1px solid {rgba(color, 90)}; }}")
@@ -2887,6 +2917,8 @@ class MainWindow(QMainWindow):
         self.job = job
         self._finalized = False
         self._copy_seen = False
+        self._scrub_seen = False
+        self.summary_card.hide()
         self._copy_requested = copy
         self._guard_logged = False
         self._sleep_paused = False
@@ -2915,6 +2947,8 @@ class MainWindow(QMainWindow):
         self.ring.set_busy(False)
         self.ring.set_value(0, animate=False)
         self.ring.set_text("0 %", "", "PREPARADO")
+        self.summary_card.hide()
+        self._scrub_seen = False
         for t in self.tiles:
             t.set("—", "")
         for bar in (self.bar_bytes, self.bar_files):
@@ -2963,6 +2997,11 @@ class MainWindow(QMainWindow):
     def _cancel(self):
         if not self.job or self._state not in RUNNING:
             return
+        if self.job.phase == "copying" and self.job.stats.step == "verificando":
+            # la sincronización ya está completa: omitir la revisión no deshace nada
+            self.job.cancel()
+            self._log("Revisión de integridad omitida: la sincronización ya estaba completa.", C["warn"])
+            return
         what = "la sincronización" if self.job.phase == "copying" else "el análisis"
         ans = QMessageBox.question(self, APP_NAME, f"¿Cancelar {what}?\n\nLo que ya se haya copiado se conserva; "
                                    "el archivo a medias se descarta.")
@@ -2989,6 +3028,9 @@ class MainWindow(QMainWindow):
         if phase == "copying" and not self._copy_seen:
             self._copy_seen = True
             self._on_copy_started(job)
+        if phase == "copying" and job.stats.step == "verificando" and not self._scrub_seen:
+            self._scrub_seen = True
+            self._on_scrub_started(job)
         if ui in RUNNING and ui != self._state:
             self._set_state(ui)
         if phase == "scanning":
@@ -3043,6 +3085,23 @@ class MainWindow(QMainWindow):
         self.banner.set("run", f"Sincronizando  {job.src}  →  {job.dst}",
                         self._plan_text(s) + f"  ·  análisis en {fmt_clock(s.scan_end - s.scan_start, ms=True)}",
                         G.SYNC)
+
+    def _scrub_left(self, job: engine.BackupJob) -> float | None:
+        s = job.stats
+        if job.scrub_seconds <= 0 or not s.scrub_start:
+            return None
+        return max(0.0, job.scrub_seconds - (time.perf_counter() - s.scrub_start))
+
+    def _on_scrub_started(self, job: engine.BackupJob):
+        s = job.stats
+        limit = (f"como mucho {fmt_human(job.scrub_seconds)}" if job.scrub_seconds > 0
+                 else "todo el disco, sin límite de tiempo")
+        self._log(f"Sincronización completada. Revisión de integridad: {fmt_int(s.scrub_due)} archivos pendientes "
+                  f"de comprobar ({limit}).", C["accent2"])
+        self.banner.set("run", "Sincronización completada  ·  revisando la integridad del disco",
+                        f"Relee del disco una tanda de archivos ya copiados para detectar daños silenciosos ({limit}). "
+                        "La copia ya está completa: puedes terminar ahora con «Omitir revisión».", G.SHIELD)
+        self._set_state(self._state)  # píldora «Comprobando» y botón «Omitir revisión»
 
     def _progress(self, s: engine.Stats) -> float:
         done_b = s.bytes_done + s.bytes_failed
@@ -3118,13 +3177,15 @@ class MainWindow(QMainWindow):
         if final:
             eta = 0.0
 
+        scrubbing = s.step == "verificando" and not final
         self.ring.set_value(frac)
         if final:
             caption = "COMPLETADO" if job.phase == "done" else "CANCELADO"
         else:
             caption = ("ESPERANDO AL DISCO" if s.disk_lost_at else "EN PAUSA" if paused
                        else "COMPROBANDO" if s.step == "verificando" else "SINCRONIZANDO")
-        self.ring.set_text(pct(frac), f"{fmt_bytes(s.bytes_done)} de {fmt_bytes(s.plan_bytes)}", caption)
+        self.ring.set_text(pct(frac), "sincronizado · revisando integridad" if scrubbing
+                           else f"{fmt_bytes(s.bytes_done)} de {fmt_bytes(s.plan_bytes)}", caption)
         self.bar_bytes.setValue(int(frac * 10000))
         self.bar_bytes_val.setText(f"{fmt_bytes(s.bytes_done)}  /  {fmt_bytes(s.plan_bytes)}   ·   {pct(frac)}")
         ffrac = s.ops_done / s.ops_total if s.ops_total else 1.0
@@ -3136,6 +3197,16 @@ class MainWindow(QMainWindow):
         if final:
             self.t_left.set("00:00:00", "terminado", C["ok"] if job.phase == "done" else None)
             self.t_eta.set(datetime.now().strftime("%H:%M:%S"), "hora de fin real")
+        elif scrubbing and not paused and not s.disk_lost_at:
+            left = self._scrub_left(job)
+            if left is None:
+                self.t_left.set(fmt_int(max(0, s.scrub_due - s.scrub_files)),
+                                f"archivos por revisar de {fmt_int(s.scrub_due)}")
+                self.t_eta.set("—", "revisión sin límite de tiempo")
+            else:
+                self.t_left.set(fmt_clock(left), "revisión de integridad")
+                self.t_eta.set((datetime.now() + timedelta(seconds=left)).strftime("%H:%M:%S"),
+                               "fin de la revisión (como mucho)")
         elif paused or s.disk_lost_at:
             why = "esperando al disco" if s.disk_lost_at else "en pausa"
             self.t_left.set("—", why)
@@ -3151,6 +3222,9 @@ class MainWindow(QMainWindow):
             self.t_eta.set(fin.strftime("%H:%M:%S"), when)
         if final:
             self.t_speed.set(fmt_speed(avg), "media de la copia")
+        elif scrubbing:
+            span = max(1e-6, time.perf_counter() - s.scrub_start) if s.scrub_start else 0
+            self.t_speed.set(fmt_speed(s.scrub_bytes / span) if span else "—", "lectura de comprobación")
         else:
             self.t_speed.set(fmt_speed(speed) if not paused else "—", f"{fmt_int(fps)} archivos/s")
         self.t_copied.set(fmt_bytes(s.bytes_done), f"de {fmt_bytes(s.plan_bytes)}")
@@ -3173,7 +3247,8 @@ class MainWindow(QMainWindow):
             self.cur_label.setText(self._step_text(s))
 
         if not final:
-            self.setWindowTitle(f"{pct(frac)} · {'En pausa' if paused else 'Sincronizando'} · {APP_NAME}")
+            doing = "En pausa" if paused else "Comprobando integridad" if scrubbing else "Sincronizando"
+            self.setWindowTitle(f"{pct(frac)} · {doing} · {APP_NAME}")
             if self.taskbar:
                 self.taskbar.value(frac)
             if self.tray:
@@ -3302,6 +3377,7 @@ class MainWindow(QMainWindow):
             self.ring.set_text("100 %", f"{fmt_bytes(s.bytes_done)} copiados",
                                "COMPLETADO" if not s.errors else "CON INCIDENCIAS")
         self._last_log = self._write_log(job, phase)
+        self._show_summary(job, phase, total, scan, copy, avg)
         parts = [f"{fmt_int(s.files_done)} copiados ({fmt_bytes(s.bytes_done)})",
                  f"{fmt_int(s.moves_done)} movidos", f"{fmt_int(s.versions_saved)} versiones guardadas",
                  f"{fmt_int(s.skip_files)} sin cambios", f"media {fmt_speed(avg)}",
@@ -3320,17 +3396,17 @@ class MainWindow(QMainWindow):
         if s.errors:
             parts.append(issues)
         action = ("Ver registro", self._open_log) if self._last_log else None
+        brief = f"{job.src}  →  {job.dst}  ·  {fmt_bytes(s.bytes_done)} copiados  ·  media {fmt_speed(avg)}"
         if phase == "cancelled":
             self.banner.set("warn", f"Sincronización cancelada tras {fmt_clock(total, ms=True)}",
-                            "  ·  ".join(parts) + "  ·  lo copiado se conserva; vuelve a pulsar Sincronizar para "
-                                                  "continuar", G.WARN, action)
+                            brief + "  ·  lo copiado se conserva; vuelve a pulsar Sincronizar para continuar",
+                            G.WARN, action)
             self._log("Sincronización cancelada", C["warn"])
         elif s.errors:
             self.banner.set("warn", f"Sincronización terminada en {fmt_clock(total, ms=True)} con {issues}",
-                            "  ·  ".join(parts), G.WARN, action)
+                            brief + "  ·  detalles en la pestaña Incidencias", G.WARN, action)
         else:
-            self.banner.set("ok", f"Sincronización completada en {fmt_clock(total, ms=True)}",
-                            "  ·  ".join(parts), G.DONE, action)
+            self.banner.set("ok", f"Sincronización completada en {fmt_clock(total, ms=True)}", brief, G.DONE, action)
         self._log(f"Fin  ·  duración total {fmt_clock(total, ms=True)}  ·  " + "  ·  ".join(parts),
                   C["ok"] if phase == "done" and not s.errors else C["warn"])
         if self._last_log:
@@ -3340,14 +3416,53 @@ class MainWindow(QMainWindow):
         self.full_box.setChecked(False)
         self._refresh_disk_status()
         if phase == "done":
-            self._notify("Copia terminada", f"{fmt_int(s.files_done)} copiados · {fmt_int(s.moves_done)} movidos · "
-                                            f"{fmt_int(s.versions_saved)} a versiones · {fmt_clock(total)}")
+            self._notify("Copia terminada" + (f" con {issues}" if s.errors else ""),
+                         f"{fmt_int(s.new_done)} nuevos · {fmt_int(s.changed_done)} modificados · "
+                         f"{fmt_int(s.moves_done)} movidos · {fmt_int(s.deletes_done)} a versiones · "
+                         f"{fmt_int(s.dirs_created)} carpetas nuevas · {fmt_clock(total)}")
         if os.name == "nt":
             try:
                 import winsound
                 winsound.MessageBeep(winsound.MB_ICONASTERISK)
             except Exception:  # noqa: BLE001
                 pass
+
+    def _show_summary(self, job: engine.BackupJob, phase: str, total: float, scan: float, copy: float,
+                      avg: float):
+        """Las cifras de la copia que acaba de terminar, de un vistazo."""
+        s = job.stats
+
+        def of(done: int, planned: int) -> str:
+            return f"de {fmt_int(planned)} previstos" if done != planned else ""
+
+        self.s_new.set(fmt_int(s.new_done), f"{fmt_bytes(s.new_done_bytes)}  {of(s.new_done, s.new_files)}".strip())
+        self.s_changed.set(fmt_int(s.changed_done),
+                           f"{fmt_bytes(s.changed_done_bytes)}  {of(s.changed_done, s.changed_files)}".strip())
+        self.s_moved.set(fmt_int(s.moves_done), "renombrados o movidos, sin copiar")
+        self.s_versions.set(fmt_int(s.deletes_done), "borrados del origen, guardados"
+                            + (f" · {fmt_int(s.versions_purged)} antiguos retirados" if s.versions_purged else ""))
+        self.s_dirs_new.set(fmt_int(s.dirs_created), "creadas en el destino")
+        self.s_dirs_gone.set(fmt_int(s.dirs_removed), "ya no estaban en el origen")
+        self.s_same.set(fmt_int(s.skip_files), f"{fmt_bytes(s.skip_bytes)} ya al día")
+        if job.verify:
+            extra = (f" · {fmt_int(s.scrub_files)} revisados, {fmt_int(s.scrub_repaired)} reparados"
+                     if s.scrub_files else "")
+            self.s_checked.set(fmt_int(s.verified_copies), "SHA-256 releyendo el disco" + extra)
+        else:
+            self.s_checked.set("—", "verificación desactivada")
+        failed = s.files_failed + s.other_failed
+        bits = [f"Duración {fmt_clock(total, ms=True)}", f"análisis {fmt_clock(scan, ms=True)}",
+                f"copia {fmt_clock(copy, ms=True)}", f"{fmt_bytes(s.bytes_done)} copiados a {fmt_speed(avg)}"]
+        if failed:
+            bits.append(f"{fmt_int(failed)} sin copiar")
+        if s.errors:
+            bits.append(f"{fmt_int(s.errors)} incidencia{'s' if s.errors != 1 else ''} (pestaña Incidencias)")
+        if s.disk_waits:
+            bits.append(f"esperó al disco {fmt_int(s.disk_waits)} vez/veces ({fmt_human(s.disk_wait_s)})")
+        if phase == "cancelled":
+            bits.append("cancelada: lo copiado se conserva")
+        self.summary_line.setText("  ·  ".join(bits))
+        self.summary_card.show()
 
     def _write_log(self, job: engine.BackupJob, phase: str) -> str:
         s = job.stats
@@ -3702,6 +3817,9 @@ def selftest() -> int:
                 with open(p, "wb") as fh:
                     fh.write(os.urandom(2000 + i * 37))
             os.makedirs(os.path.join(src, "proyecto", "node_modules"))
+            os.makedirs(os.path.join(src, "$RECYCLE.BIN", "S-1-5-21"))  # como al usar una unidad entera de origen
+            with open(os.path.join(src, "$RECYCLE.BIN", "S-1-5-21", "borrado.zip"), "wb") as fh:
+                fh.write(b"papelera")
             with open(os.path.join(src, "proyecto", "node_modules", "x.js"), "w") as fh:
                 fh.write("x")
 
@@ -3719,6 +3837,8 @@ def selftest() -> int:
             s = run()
             assert s.files_done == 40 and s.verified_copies == 40 and s.scrub_files == 40
             assert not os.path.exists(os.path.join(dst, "proyecto", "node_modules"))
+            assert not os.path.exists(os.path.join(dst, "$RECYCLE.BIN")), "papelera copiada"
+            assert s.new_done == 40 and s.changed_done == 0, "contadores del resumen"
             assert updater.is_newer("v1.10.0", "1.9.3") and not updater.is_newer("1.2.0", "1.2.0")
             assert updater.parse_version("v2.0") == (2, 0, 0)
             say("  versiones: comparación correcta")
@@ -3734,7 +3854,7 @@ def selftest() -> int:
             s = run()
             assert s.fast and s.moves_done == 20 and s.scrub_repaired == 1, "movidos/reparación"
             for root, _dirs, files in os.walk(src):
-                if "node_modules" in root:
+                if "node_modules" in root or "$RECYCLE.BIN" in root:
                     continue
                 for f in files:
                     a = os.path.join(root, f)

@@ -1,5 +1,21 @@
 # Novedades
 
+## 1.4.0
+
+- **Resumen al terminar.** Una tarjeta con lo que ha hecho la copia: archivos nuevos, modificados,
+  movidos y pasados a versiones, carpetas creadas y quitadas, sin cambios y verificados, más la
+  duración y la velocidad media. La notificación de fin trae las mismas cifras.
+- **La revisión de integridad ya no se alarga.** El tiempo elegido (5 minutos por defecto) se respeta
+  aunque haya un archivo de varios GB a medias; antes se terminaba de leer entero y podía pasarse
+  muchos minutos con la pantalla en «Comprobando 100 %».
+- **No repite lo recién comprobado.** La revisión se salta lo verificado hace menos de 30 días (al copiar
+  ya se verifica cada archivo), así que justo después de una copia grande no vuelve a releer el disco.
+  *Comprobar todo el disco ahora* sigue revisándolo todo.
+- **Se ve que está comprobando.** Mientras revisa, la pantalla lo dice, enseña el tiempo que le queda y
+  la hora a la que acaba, y el botón *Omitir revisión* la termina al momento sin deshacer nada.
+- **Unidad entera como origen.** Con la raíz de un disco como origen (`F:\`), ya no se copian la papelera
+  (`$RECYCLE.BIN`) ni `System Volume Information`.
+
 ## 1.3.0
 
 - **Equipo y disco despiertos mientras copia.** Durante el análisis y la sincronización el equipo no

@@ -42,11 +42,18 @@ primera vez:
   Lo reconoce aunque Windows le dé otra letra.
 - **Verifica cada copia.** Relee del disco cada archivo copiado, sin pasar por la caché del sistema, y
   compara su SHA-256 con el original. Si no coincide, repite la copia.
-- **Revisa la integridad del disco poco a poco.** Tras cada sincronización comprueba una tanda de
-  archivos ya copiados (primero los nunca comprobados) para detectar corrupción silenciosa. Si el
-  dañado es el destino, lo repara desde el original; si es el original, avisa y no toca la copia buena.
-- **Progreso exacto.** Porcentaje, velocidad, tiempo restante, hora de fin, archivos en curso por hilo
-  y duración final al milisegundo. Pausa, cancelación y reanudación sin dejar archivos a medias.
+- **Revisa la integridad del disco poco a poco.** Tras cada sincronización, y durante el tiempo que
+  elijas (5 minutos por defecto, sin pasarse aunque haya un archivo enorme a medias), comprueba una
+  tanda de archivos ya copiados para detectar corrupción silenciosa: primero los nunca comprobados y
+  luego los comprobados hace más de 30 días. Si el dañado es el destino, lo repara desde el original;
+  si es el original, avisa y no toca la copia buena. Se puede omitir en cualquier momento: la copia ya
+  está completa.
+- **Progreso exacto y resumen al terminar.** Porcentaje, velocidad, tiempo restante, hora de fin,
+  archivos en curso por hilo y duración final al milisegundo. Al acabar, un resumen con los archivos
+  nuevos, modificados, movidos y pasados a versiones, las carpetas creadas y quitadas, lo que ya estaba
+  al día y lo verificado. Pausa, cancelación y reanudación sin dejar archivos a medias.
+- **Admite una unidad entera como origen.** Si el origen es la raíz de un disco (`F:\`), se omiten la
+  papelera (`$RECYCLE.BIN`), `System Volume Information` y las carpetas de sistema de macOS.
 - **No deja que nada pare la copia.** Mientras analiza o sincroniza, el equipo no se suspende por
   inactividad y el disco USB no se duerme. Apagar o reiniciar pide confirmación: en Windows aparece
   «Copia de seguridad en curso», y en macOS lo pide la propia app. Si el equipo se suspende igualmente
@@ -109,8 +116,8 @@ sección en `CHANGELOG.md`, de donde salen las notas de la versión), GitHub Act
 4. publica la versión con el instalador y el `.dmg`.
 
 ```bash
-git tag v1.3.0
-git push origin v1.3.0
+git tag v1.4.0
+git push origin v1.4.0
 ```
 
 ## Limitaciones
