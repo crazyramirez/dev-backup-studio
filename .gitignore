@@ -1,0 +1,13 @@
+# datos locales de versiones antiguas (ahora viven en %APPDATA% / Application Support)
+settings.ini
+estado/
+logs/
+selftest.log
+
+# Python y PyInstaller
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+dmg/

@@ -1,0 +1,91 @@
+name: Compilar aplicaciones
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS (Apple Silicon)
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pillow
+
+      - name: Compilar .exe (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name "DEV-Backup-Studio" \
+            --icon assets/icon.png backup_studio.py
+          mv dist/DEV-Backup-Studio.exe dist/DEV-Backup-Studio-Windows.exe
+
+      - name: Autoprueba del .exe (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\DEV-Backup-Studio-Windows.exe -ArgumentList '--selftest' -Wait -PassThru
+          Get-Content selftest.log
+          exit $p.ExitCode
+
+      - name: Compilar .app y .dmg (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller --noconfirm --clean --windowed --name "DEV Backup Studio" \
+            --icon assets/icon.png --osx-bundle-identifier com.crazyramirez.devbackupstudio backup_studio.py
+          mkdir -p dmg
+          cp -R "dist/DEV Backup Studio.app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "DEV Backup Studio" -srcfolder dmg -ov -format UDZO dist/DEV-Backup-Studio-macOS.dmg
+
+      - name: Autoprueba de la .app (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          status=0
+          "dist/DEV Backup Studio.app/Contents/MacOS/DEV Backup Studio" --selftest || status=$?
+          cat selftest.log
+          exit $status
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DEV-Backup-Studio-${{ runner.os }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Publicar versión
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
