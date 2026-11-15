@@ -40,12 +40,14 @@ from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QChe
                              QLabel, QLayout, QLineEdit, QMainWindow, QMenu, QMessageBox,
                              QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
                              QSpinBox, QStackedWidget, QSystemTrayIcon, QTableView, QTableWidget,
-                             QTableWidgetItem, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+                             QTableWidgetItem, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
+                             QWidget)
 
 import engine
+import updater
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -127,6 +129,7 @@ ICONS = {
                                                                        "1.9 1.4L19 13") + _p("M16.5 16.5h.01"),
     "filter": _p("M4 5h16l-6.2 7.6v5.6l-3.6 1.8v-7.4z"),
     "shield": _p("M12 3l7.5 3v5.6c0 4.5-3.1 8.2-7.5 9.4-4.4-1.2-7.5-4.9-7.5-9.4V6z") + _p("M8.8 12.2l2.2 2.2 4.3-4.4"),
+    "download": _p("M12 4v11M7.5 10.5L12 15l4.5-4.5") + _p("M5 19.5h14"),
 }
 
 
@@ -137,7 +140,7 @@ class G:
     ERROR, FLAG, OPEN, FOLDER, NEXT = "error", "flag", "open", "folder", "next"
     DOC, COPY, TREE, SYNC, TIMER = "doc", "copy", "tree", "sync", "timer"
     DONE, INFO, CLOCK, SPEED, DRIVE, FILTER = "done", "info", "clock", "speed", "drive", "filter"
-    SHIELD = "shield"
+    SHIELD, DOWNLOAD = "shield", "download"
 
 
 # ── formato (es-ES) ──────────────────────────────────────────────────────────
@@ -397,6 +400,10 @@ QCheckBox::indicator { width: 16px; height: 16px; border-radius: 5px; border: 1p
 QCheckBox::indicator:hover { border-color: %(accent)s; }
 QCheckBox::indicator:checked { background: %(accent)s; border-color: %(accent)s; image: url(%(a)s/check.svg); }
 QDialog { background: %(card)s; }
+QTextBrowser {
+    background: %(panel)s; border: 1px solid %(line)s; border-radius: 12px; padding: 10px 14px;
+    color: %(text)s; font-size: 13px;
+}
 QLabel#count { color: %(faint)s; font-size: 12px; }
 QTreeView::item, QTableView::item { padding: 5px 2px; border: none; }
 QTreeView::item:hover { background: %(hover)s; border-radius: 6px; }
@@ -1519,8 +1526,178 @@ class ConnectDialog(QDialog):
         super().reject()
 
 
+CURRENT_VERSION = os.environ.get("DEVBACKUP_PRETEND_VERSION") or APP_VERSION  # para probar el actualizador
+
+
+class UpdateChecker(QObject):
+    """Consulta GitHub en un hilo; el resultado vuelve por señales al hilo de la UI."""
+    finished = pyqtSignal(object, str, bool)  # Release o None, error, manual
+
+    def check(self, manual: bool) -> None:
+        def work():
+            try:
+                rel = updater.fetch_latest(CURRENT_VERSION)
+                self.finished.emit(rel, "", manual)
+            except Exception as exc:  # noqa: BLE001 - sin red, límite de la API…
+                self.finished.emit(None, str(exc), manual)
+        threading.Thread(target=work, name="actualizaciones", daemon=True).start()
+
+
+class UpdateDialog(QDialog):
+    """Novedades de la versión nueva y descarga con progreso."""
+    progressed = pyqtSignal(int, int)
+    downloaded = pyqtSignal(str, str)  # ruta, error
+
+    def __init__(self, win: "MainWindow", rel: updater.Release):
+        super().__init__(win)
+        self.win = win
+        self.rel = rel
+        self._stop = threading.Event()
+        self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(app_icon())
+        self.setMinimumSize(640, 520)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(26, 24, 26, 22)
+        lay.setSpacing(14)
+        head = QHBoxLayout()
+        head.setSpacing(14)
+        logo = QLabel()
+        logo.setPixmap(app_icon().pixmap(46, 46))
+        head.addWidget(logo, 0, Qt.AlignmentFlag.AlignTop)
+        col = QVBoxLayout()
+        col.setSpacing(3)
+        title = QLabel(f"Hay una versión nueva: {rel.version}")
+        title.setObjectName("h1")
+        when = ""
+        if rel.published:
+            try:
+                # GitHub da la hora en UTC; fmt_ago compara con la hora local
+                local = datetime.fromisoformat(rel.published.replace("Z", "+00:00")).astimezone()
+                when = f"  ·  publicada {fmt_ago(local.replace(tzinfo=None).isoformat())}"
+            except ValueError:
+                pass
+        size = f"  ·  {fmt_bytes(rel.asset_size)}" if rel.asset_size else ""
+        sub = QLabel(f"Tienes la {CURRENT_VERSION}{when}{size}")
+        sub.setObjectName("muted")
+        col.addWidget(title)
+        col.addWidget(sub)
+        head.addLayout(col, 1)
+        lay.addLayout(head)
+
+        notes = QTextBrowser()
+        notes.setOpenExternalLinks(True)
+        notes.setMarkdown(rel.notes.strip() or "Sin notas de versión.")
+        lay.addWidget(notes, 1)
+
+        self.status = QLabel("")
+        self.status.setObjectName("muted")
+        self.status.setWordWrap(True)
+        lay.addWidget(self.status)
+        self.bar = thin_bar(6)
+        self.bar.hide()
+        lay.addWidget(self.bar)
+
+        buttons = QHBoxLayout()
+        buttons.setSpacing(10)
+        self.b_skip = QPushButton("Omitir esta versión")
+        self.b_skip.setObjectName("link")
+        buttons.addWidget(self.b_skip)
+        buttons.addStretch(1)
+        self.b_later = QPushButton("Más tarde")
+        self.b_go = QPushButton()
+        self.b_go.setObjectName("primary")
+        for b in (self.b_skip, self.b_later, self.b_go):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+        buttons.addWidget(self.b_later)
+        buttons.addWidget(self.b_go)
+        lay.addLayout(buttons)
+
+        if updater.can_self_update() and rel.asset_url:
+            self.b_go.setText("  Actualizar ahora")
+            self.b_go.setIcon(glyph_icon(G.DOWNLOAD, "#FFFFFF", 14))
+            self.b_go.clicked.connect(self._update)
+            how = ("se descarga el instalador, se comprueba su SHA-256 y se instala; la app se cierra y vuelve a "
+                   "abrirse sola.")
+            self.status.setText(f"Al actualizar {how} Tus ajustes y copias no se tocan.")
+        else:
+            self.b_go.setText("  Ver en GitHub")
+            self.b_go.setIcon(glyph_icon(G.OPEN, "#FFFFFF", 14))
+            self.b_go.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(rel.page)))
+            self.status.setText("Esta copia se ejecuta desde el código: actualízala con «git pull»."
+                                if not FROZEN else "No hay instalador para este sistema en esta versión.")
+        self.b_later.clicked.connect(self.reject)
+        self.b_skip.clicked.connect(self._skip)
+        self.progressed.connect(self._on_progress)
+        self.downloaded.connect(self._on_downloaded)
+        self._sync_busy()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        set_dark_titlebar(self)
+
+    def _sync_busy(self):
+        if self.win._state in RUNNING and updater.can_self_update():
+            self.b_go.setEnabled(False)
+            self.status.setText("Hay una sincronización en marcha: podrás actualizar en cuanto termine.")
+
+    def _skip(self):
+        self.win.update_skip = self.rel.version
+        self.win._save_settings()
+        self.win._refresh_update_status()
+        self.reject()
+
+    def _update(self):
+        if self.win._state in RUNNING:
+            self._sync_busy()
+            return
+        self.b_go.setEnabled(False)
+        self.b_skip.setEnabled(False)
+        self.b_later.setText("Cancelar")
+        self.bar.show()
+        self.bar.setRange(0, 0)
+        self.status.setText(f"Descargando {self.rel.asset_name}…")
+
+        def work():
+            try:
+                path = updater.download(self.rel, CURRENT_VERSION, lambda d, t: self.progressed.emit(d, t), self._stop)
+                self.downloaded.emit(path, "")
+            except Exception as exc:  # noqa: BLE001
+                self.downloaded.emit("", str(exc))
+        threading.Thread(target=work, name="descarga", daemon=True).start()
+
+    def _on_progress(self, done: int, total: int):
+        if total:
+            self.bar.setRange(0, 10000)
+            self.bar.setValue(int(done / total * 10000))
+            self.status.setText(f"Descargando {self.rel.asset_name}…  {fmt_bytes(done)} de {fmt_bytes(total)}")
+
+    def _on_downloaded(self, path: str, error: str):
+        if error:
+            if self._stop.is_set():
+                return
+            self.bar.hide()
+            self.status.setText(f"No se pudo descargar la actualización: {error}")
+            self.b_go.setEnabled(True)
+            self.b_skip.setEnabled(True)
+            self.b_later.setText("Más tarde")
+            return
+        self.bar.setRange(0, 10000)
+        self.bar.setValue(10000)
+        self.status.setText("Descarga comprobada con SHA-256. Instalando: la app se cerrará y volverá a abrirse…")
+        try:
+            updater.launch_install(path)
+        except OSError as exc:
+            self.status.setText(f"No se pudo lanzar el instalador: {exc}")
+            return
+        QTimer.singleShot(600, self.win.quit_for_update)
+
+    def reject(self):
+        self._stop.set()
+        super().reject()
+
+
 class MainWindow(QMainWindow):
-    def __init__(self, tray_mode: bool = False):
+    def __init__(self, tray_mode: bool = False, updated: bool = False):
         super().__init__()
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(app_icon())
@@ -1572,6 +1749,95 @@ class MainWindow(QMainWindow):
             # si el disco ya está puesto y hace tiempo de la última copia, preguntar
             QTimer.singleShot(4000, self._startup_check)
 
+        # actualizaciones: al poco de arrancar y luego cada 6 h (como mucho una consulta al día)
+        self.update_dialog: UpdateDialog | None = None
+        self._pending_release: updater.Release | None = None
+        self.checker = UpdateChecker(self)
+        self.checker.finished.connect(self._on_update_result)
+        self._update_timer = QTimer(self)
+        self._update_timer.setInterval(6 * 3600 * 1000)
+        self._update_timer.timeout.connect(lambda: self._check_updates(manual=False))
+        self._update_timer.start()
+        QTimer.singleShot(15000, lambda: self._check_updates(manual=False))
+        self._refresh_update_status()
+        if updated:
+            self._log(f"Actualizado a la versión {APP_VERSION}", C["ok"])
+            QTimer.singleShot(1500, lambda: self._notify(APP_NAME, f"Actualizado a la versión {APP_VERSION}."))
+
+    # ── actualizaciones ──────────────────────────────────────────────────
+    def _on_update_toggled(self, on: bool):
+        self._save_settings()
+        self._refresh_update_status()
+        if on:
+            self._check_updates(manual=False)
+
+    def _check_updates(self, manual: bool):
+        if not manual:
+            if not self.update_box.isChecked():
+                return
+            try:
+                last = datetime.fromisoformat(self.update_checked) if self.update_checked else None
+            except ValueError:
+                last = None
+            if last and (datetime.now() - last).total_seconds() < 20 * 3600:
+                return
+        self.btn_update.setEnabled(False)
+        self.update_status.setText("Consultando GitHub…")
+        self.checker.check(manual)
+
+    def _on_update_result(self, rel, error: str, manual: bool):
+        self.btn_update.setEnabled(True)
+        if rel is None:
+            self.update_status.setText(f"No se pudo consultar GitHub: {error}")
+            if manual:
+                QMessageBox.warning(self, APP_NAME, f"No se pudo consultar si hay versiones nuevas.\n\n{error}")
+            return
+        self.update_checked = datetime.now().isoformat(timespec="seconds")
+        self._save_settings()
+        newer = updater.is_newer(rel.version, CURRENT_VERSION)
+        if newer and (manual or rel.version != self.update_skip):
+            self._pending_release = rel
+            self._offer_update()
+        elif manual:
+            QMessageBox.information(self, APP_NAME, f"Tienes la última versión ({CURRENT_VERSION}).")
+        self._refresh_update_status(rel)
+
+    def _offer_update(self):
+        rel = self._pending_release
+        if rel is None or (self.update_dialog and self.update_dialog.isVisible()):
+            return
+        if self._state in RUNNING:
+            # se ofrece al terminar la sincronización (ver _finish)
+            self._notify("Versión nueva disponible", f"{APP_NAME} {rel.version}: te preguntaré al terminar la copia.")
+            return
+        self._notify("Versión nueva disponible", f"{APP_NAME} {rel.version} está lista para instalar.")
+        self._show_window()
+        self.update_dialog = UpdateDialog(self, rel)
+        self.update_dialog.open()
+        QApplication.alert(self.update_dialog, 0)
+
+    def _refresh_update_status(self, rel: updater.Release | None = None):
+        if not hasattr(self, "update_status"):
+            return
+        parts = [f"Versión instalada: {CURRENT_VERSION}"]
+        if rel is not None and updater.is_newer(rel.version, CURRENT_VERSION):
+            skipped = "  (omitida)" if rel.version == self.update_skip else ""
+            parts.append(f"nueva disponible: {rel.version}{skipped}")
+        elif self.update_checked:
+            parts.append(f"al día · comprobado {fmt_ago(self.update_checked)}")
+        if not self.update_box.isChecked():
+            parts.append("búsqueda automática desactivada")
+        self.update_status.setText("  ·  ".join(parts))
+
+    def quit_for_update(self):
+        """Cierra la app para que el instalador pueda sustituirla."""
+        self._save_settings()
+        self._quitting = True
+        if self.tray:
+            self.tray.hide()
+        keep_awake(False)
+        QApplication.quit()
+
     # ── construcción ─────────────────────────────────────────────────────
     def _build(self):
         root = QWidget()
@@ -1599,11 +1865,18 @@ class MainWindow(QMainWindow):
         h.addWidget(logo)
         col = QVBoxLayout()
         col.setSpacing(1)
+        trow = QHBoxLayout()
+        trow.setSpacing(10)
         title = QLabel(APP_NAME)
         title.setObjectName("h1")
+        version = QLabel(f"v{APP_VERSION}")
+        version.setObjectName("count")
+        trow.addWidget(title)
+        trow.addWidget(version, 0, Qt.AlignmentFlag.AlignBottom)
+        trow.addStretch(1)
         sub = QLabel("Sincronización de proyectos  ·  detecta cambios, movidos y borrados  ·  guarda versiones")
         sub.setObjectName("muted")
-        col.addWidget(title)
+        col.addLayout(trow)
         col.addWidget(sub)
         h.addLayout(col)
         h.addStretch(1)
@@ -1672,6 +1945,21 @@ class MainWindow(QMainWindow):
         self.btn_scrub.clicked.connect(lambda: self._start(copy=True, scrub_all=True))
         integ.body.addWidget(self.btn_scrub)
         lay.addWidget(integ)
+
+        upd = Card("Actualizaciones", G.DOWNLOAD)
+        self.update_box = QCheckBox("Buscar versiones nuevas en GitHub\ny preguntar antes de actualizar")
+        self.update_box.toggled.connect(self._on_update_toggled)
+        upd.body.addWidget(self.update_box)
+        self.update_status = QLabel("")
+        self.update_status.setObjectName("faint")
+        self.update_status.setWordWrap(True)
+        upd.body.addWidget(self.update_status)
+        self.btn_update = QPushButton("  Buscar ahora")
+        self.btn_update.setIcon(glyph_icon(G.REFRESH, C["text"], 14))
+        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_update.clicked.connect(lambda: self._check_updates(manual=True))
+        upd.body.addWidget(self.btn_update)
+        lay.addWidget(upd)
 
         rules = Card("Excluir carpetas por nombre", G.FILTER)
         hint = QLabel("Se omiten en cualquier nivel de cada proyecto, en el origen y en el destino. Admite "
@@ -2062,9 +2350,12 @@ class MainWindow(QMainWindow):
             "watch": st.value("watch", "false") == "true",
             "verify": st.value("verify", "true") == "true",
             "scrub": int(st.value("scrub", 300)),
+            "auto_update": st.value("auto_update", "true") == "true",
         }
         self.disk_id = st.value("disk_id", "") or ""
         self.dst_rel = st.value("dst_rel", "") or ""
+        self.update_skip = st.value("update_skip", "") or ""
+        self.update_checked = st.value("update_checked", "") or ""
         saved = js("rules", {})
         self.rules = {n: saved.get(n, n in DEFAULT_RULES) for n in PRESET_RULES}
         self.custom_rules = [r for r in js("custom_rules", []) if r not in self.rules]
@@ -2086,6 +2377,9 @@ class MainWindow(QMainWindow):
         st.setValue("watch", "true" if self.watch_box.isChecked() else "false")
         st.setValue("verify", "true" if self.verify_box.isChecked() else "false")
         st.setValue("scrub", self.scrub_combo.currentData())
+        st.setValue("auto_update", "true" if self.update_box.isChecked() else "false")
+        st.setValue("update_skip", self.update_skip)
+        st.setValue("update_checked", self.update_checked)
         st.setValue("disk_id", self.disk_id)
         st.setValue("dst_rel", self.dst_rel)
         st.setValue("rules", json.dumps(self.rules))
@@ -2104,6 +2398,9 @@ class MainWindow(QMainWindow):
         self.threads_spin.setValue(max(1, min(32, self._cfg["threads"])))
         self.verify_box.setChecked(self._cfg["verify"])
         self.scrub_combo.setCurrentIndex(max(0, self.scrub_combo.findData(self._cfg["scrub"])))
+        self.update_box.blockSignals(True)
+        self.update_box.setChecked(self._cfg["auto_update"])
+        self.update_box.blockSignals(False)
         self.watch_box.blockSignals(True)
         self.watch_box.setChecked(self._cfg["watch"])
         self.watch_box.blockSignals(False)
@@ -2865,6 +3162,9 @@ class MainWindow(QMainWindow):
             self.taskbar.state(Taskbar.OFF)
         if phase != "ready" or not (self.dialog and self.dialog.isVisible()):
             QApplication.alert(self, 0)
+        if self._pending_release is not None and phase != "ready":
+            # había una versión nueva esperando a que terminara la copia
+            QTimer.singleShot(2500, self._offer_update)
 
     def _finish_scan(self, job: engine.BackupJob):
         s = job.stats
@@ -3158,6 +3458,9 @@ def selftest() -> int:
             s = run()
             assert s.files_done == 40 and s.verified_copies == 40 and s.scrub_files == 40
             assert not os.path.exists(os.path.join(dst, "proyecto", "node_modules"))
+            assert updater.is_newer("v1.10.0", "1.9.3") and not updater.is_newer("1.2.0", "1.2.0")
+            assert updater.parse_version("v2.0") == (2, 0, 0)
+            say("  versiones: comparación correcta")
             os.rename(os.path.join(src, "proyecto", "lib"), os.path.join(src, "proyecto", "libreria"))
             victim = os.path.join(dst, "proyecto", "src", "f1.txt")
             st = os.stat(victim)
@@ -3226,7 +3529,7 @@ def main() -> int:
     server = QLocalServer()
     QLocalServer.removeServer(INSTANCE)
     server.listen(INSTANCE)
-    win = MainWindow(tray_mode=tray_mode)
+    win = MainWindow(tray_mode=tray_mode, updated="--updated" in sys.argv)
     server.newConnection.connect(lambda: win.on_instance_message(server))
     if IS_MAC:
         # clic en el icono del Dock con la ventana escondida en la barra de menús

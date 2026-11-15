@@ -47,6 +47,10 @@ primera vez:
   dañado es el destino, lo repara desde el original; si es el original, avisa y no toca la copia buena.
 - **Progreso exacto.** Porcentaje, velocidad, tiempo restante, hora de fin, archivos en curso por hilo
   y duración final al milisegundo. Pausa, cancelación y reanudación sin dejar archivos a medias.
+- **Se actualiza sola, preguntando.** Comprueba en GitHub si hay una versión nueva (como mucho una vez
+  al día), enseña las novedades y, si aceptas, descarga el instalador, comprueba su SHA-256, lo instala
+  y se vuelve a abrir. Se puede desactivar o buscar a mano en *Actualizaciones*. Novedades de cada
+  versión en [CHANGELOG.md](CHANGELOG.md).
 
 | Al conectar el disco | Revisar los cambios antes de copiar |
 |---|---|
@@ -89,8 +93,8 @@ verificación, movidos y reparación) y deja el resultado en `selftest.log`.
 
 ## Compilar
 
-Al publicar una etiqueta `v*` (que debe coincidir con `APP_VERSION` en `backup_studio.py`), GitHub
-Actions:
+Al publicar una etiqueta `v*` (que debe coincidir con `APP_VERSION` en `backup_studio.py` y tener su
+sección en `CHANGELOG.md`, de donde salen las notas de la versión), GitHub Actions:
 
 1. compila la app con PyInstaller en Windows y macOS y ejecuta la autoprueba sobre cada una;
 2. en Windows crea el instalador con Inno Setup (`installer/windows.iss`), lo instala sin ventanas,
@@ -99,8 +103,8 @@ Actions:
 4. publica la versión con el instalador y el `.dmg`.
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 ## Limitaciones

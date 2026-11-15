@@ -63,8 +63,20 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; actualización lanzada desde la propia app: al terminar se vuelve a abrir sola
+Filename: "{app}\{#AppExe}"; Parameters: "--updated"; Flags: nowait; Check: IsAutoUpdate
 
 [Code]
+function IsAutoUpdate: Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/AUTOUPDATE') = 0 then
+      Result := True;
+end;
+
 { Al desinstalar, quita el arranque con Windows solo si apunta a esta instalación
   (no toca el de una copia que se ejecute desde el código). Los ajustes, índices y
   registros en %APPDATA% se conservan, igual que las copias del disco externo. }
