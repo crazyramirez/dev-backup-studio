@@ -47,6 +47,11 @@ primera vez:
   dañado es el destino, lo repara desde el original; si es el original, avisa y no toca la copia buena.
 - **Progreso exacto.** Porcentaje, velocidad, tiempo restante, hora de fin, archivos en curso por hilo
   y duración final al milisegundo. Pausa, cancelación y reanudación sin dejar archivos a medias.
+- **No deja que nada pare la copia.** Mientras analiza o sincroniza, el equipo no se suspende por
+  inactividad y el disco USB no se duerme. Apagar o reiniciar pide confirmación: en Windows aparece
+  «Copia de seguridad en curso», y en macOS lo pide la propia app. Si el equipo se suspende igualmente
+  o el disco se desconecta, la copia espera y sigue sola sin dar nada por fallido. Se desactiva en
+  *Energía*.
 - **Se actualiza sola, preguntando.** Comprueba en GitHub si hay una versión nueva (como mucho una vez
   al día), enseña las novedades y, si aceptas, descarga el instalador, comprueba su SHA-256, lo instala
   y se vuelve a abrir. Se puede desactivar o buscar a mano en *Actualizaciones*. Novedades de cada
@@ -77,7 +82,8 @@ cambiado. Cada 7 días, o si cambia la configuración, se lee el destino entero.
 ## Dónde guarda cada cosa
 
 - **En el disco de copia**: carpeta oculta `.devbackup/` en la raíz con la marca del disco
-  (`disco.json`), el historial de copias y las versiones.
+  (`disco.json`), el historial de copias, las versiones y `latido`, el archivo diminuto que mantiene
+  despierto el disco.
 - **En el equipo**: ajustes, índices y registros en `%APPDATA%\DEV Backup Studio` (Windows) o
   `~/Library/Application Support/DEV Backup Studio` (macOS).
 
@@ -103,8 +109,8 @@ sección en `CHANGELOG.md`, de donde salen las notas de la versión), GitHub Act
 4. publica la versión con el instalador y el `.dmg`.
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 ## Limitaciones

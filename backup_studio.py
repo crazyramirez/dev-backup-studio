@@ -27,9 +27,9 @@ from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from PyQt6.QtCore import (QAbstractTableModel, QByteArray, QEasingCurve, QModelIndex, QObject, QPoint,
-                          QPointF, QRect, QRectF, QSettings, QSize, Qt, QTimer, QUrl, QVariantAnimation,
-                          pyqtSignal)
+from PyQt6.QtCore import (QAbstractNativeEventFilter, QAbstractTableModel, QByteArray, QEasingCurve, QEvent,
+                          QModelIndex, QObject, QPoint, QPointF, QRect, QRectF, QSettings, QSize, Qt, QTimer,
+                          QUrl, QVariantAnimation, pyqtSignal)
 from PyQt6.QtGui import (QBrush, QColor, QConicalGradient, QDesktopServices, QFont,
                          QFontDatabase, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette,
                          QPen, QPixmap)
@@ -44,10 +44,11 @@ from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QChe
                              QWidget)
 
 import engine
+import keepawake
 import updater
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -130,6 +131,7 @@ ICONS = {
     "filter": _p("M4 5h16l-6.2 7.6v5.6l-3.6 1.8v-7.4z"),
     "shield": _p("M12 3l7.5 3v5.6c0 4.5-3.1 8.2-7.5 9.4-4.4-1.2-7.5-4.9-7.5-9.4V6z") + _p("M8.8 12.2l2.2 2.2 4.3-4.4"),
     "download": _p("M12 4v11M7.5 10.5L12 15l4.5-4.5") + _p("M5 19.5h14"),
+    "power": _p("M12 3.5v8") + _p("M7.2 6.4a7.5 7.5 0 1 0 9.6 0"),
 }
 
 
@@ -140,7 +142,7 @@ class G:
     ERROR, FLAG, OPEN, FOLDER, NEXT = "error", "flag", "open", "folder", "next"
     DOC, COPY, TREE, SYNC, TIMER = "doc", "copy", "tree", "sync", "timer"
     DONE, INFO, CLOCK, SPEED, DRIVE, FILTER = "done", "info", "clock", "speed", "drive", "filter"
-    SHIELD, DOWNLOAD = "shield", "download"
+    SHIELD, DOWNLOAD, POWER = "shield", "download", "power"
 
 
 # ── formato (es-ES) ──────────────────────────────────────────────────────────
@@ -321,6 +323,8 @@ QLabel#fieldLabel { color: %(muted)s; font-size: 12px; font-weight: 600; }
 QLabel#barLabel { color: %(muted)s; font-size: 12px; font-weight: 600; }
 QLabel#barValue { font-family: "%(display)s"; font-size: 13px; font-weight: 600; }
 QLabel#pill { border-radius: 12px; padding: 4px 12px; font-size: 12px; font-weight: 700; }
+QFrame#awake { border-radius: 12px; }
+QFrame#awake QLabel { background: transparent; font-size: 12px; font-weight: 700; }
 
 QFrame#card { background: %(card)s; border: 1px solid %(line)s; border-radius: 14px; }
 QFrame#tile { background: %(card)s; border: 1px solid %(line)s; border-radius: 12px; }
@@ -464,27 +468,45 @@ def dark_palette() -> QPalette:
 
 # ── integración con el sistema ───────────────────────────────────────────────
 
-_caffeinate: subprocess.Popen | None = None
+class App(QApplication):
+    """Deja que la ventana decida si se puede salir cuando lo pide el sistema."""
+    quit_guard = None  # función que devuelve True si se puede salir
+
+    def event(self, e):
+        if e.type() == QEvent.Type.Quit and self.quit_guard is not None and not self.quit_guard():
+            e.ignore()  # en macOS, cancela también el cierre de sesión o el apagado
+            return True
+        return super().event(e)
 
 
-def keep_awake(on: bool) -> None:
-    """Impide que el equipo entre en suspensión mientras copia."""
-    global _caffeinate
-    if IS_WIN:
-        ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
-        try:
-            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if on else 0))
-        except OSError:
-            pass
-    elif IS_MAC:
-        if on and _caffeinate is None:
-            try:
-                _caffeinate = subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
-            except OSError:
-                _caffeinate = None
-        elif not on and _caffeinate is not None:
-            _caffeinate.terminate()
-            _caffeinate = None
+# Pausa larga: pasado este tiempo en pausa el equipo vuelve a poder suspenderse.
+PAUSE_GRACE = 20 * 60
+
+if IS_WIN:
+    from ctypes import wintypes
+
+    class PowerEvents(QAbstractNativeEventFilter):
+        """Avisos de suspensión y reanudación de Windows (WM_POWERBROADCAST).
+
+        Llegan una vez por cada ventana de nivel superior de la app: los manejadores
+        tienen que poder llamarse varias veces seguidas.
+        """
+        WM_POWERBROADCAST, PBT_APMSUSPEND = 0x0218, 0x0004
+        PBT_APMRESUMESUSPEND, PBT_APMRESUMEAUTOMATIC = 0x0007, 0x0012
+
+        def __init__(self, on_suspend, on_resume):
+            super().__init__()
+            self.on_suspend, self.on_resume = on_suspend, on_resume
+
+        def nativeEventFilter(self, event_type, message):  # noqa: N802
+            if bytes(event_type) == b"windows_generic_MSG" and message:
+                msg = wintypes.MSG.from_address(int(message))
+                if msg.message == self.WM_POWERBROADCAST:
+                    if msg.wParam == self.PBT_APMSUSPEND:
+                        self.on_suspend()
+                    elif msg.wParam in (self.PBT_APMRESUMESUSPEND, self.PBT_APMRESUMEAUTOMATIC):
+                        self.on_resume()
+            return False, 0
 
 
 class Taskbar:
@@ -1728,6 +1750,12 @@ class MainWindow(QMainWindow):
         self._copy_requested = False
         self._err_seen = 0
         self._last_log = ""
+        self.guard = keepawake.Guard()
+        self._guard_logged = False
+        self._awake_refresh = 0.0
+        self._sleeping = False
+        self._sleep_paused = False
+        self._disk_lost_seen = False
 
         self._load_settings()
         self._build()
@@ -1740,6 +1768,16 @@ class MainWindow(QMainWindow):
 
         self.watcher = DiskWatcher(self)
         self.watcher.arrived.connect(self._on_drive_arrived)
+
+        # apagar, reiniciar o cerrar sesión con una copia en marcha
+        app = QApplication.instance()
+        app.commitDataRequest.connect(self._on_session_end_query)
+        app.aboutToQuit.connect(self._on_about_to_quit)
+        if isinstance(app, App):
+            app.quit_guard = self._allow_quit
+        if IS_WIN:
+            self._power_events = PowerEvents(self._on_system_suspend, self._on_system_resume)
+            app.installNativeEventFilter(self._power_events)
         if self.watch_box.isChecked() or tray_mode:
             self._ensure_tray()
         # al arrancar con la sesión la ventana no debe abrirse sola aunque la app pase a primer plano
@@ -1835,7 +1873,7 @@ class MainWindow(QMainWindow):
         self._quitting = True
         if self.tray:
             self.tray.hide()
-        keep_awake(False)
+        self._guard_stop()
         QApplication.quit()
 
     # ── construcción ─────────────────────────────────────────────────────
@@ -1880,6 +1918,18 @@ class MainWindow(QMainWindow):
         col.addWidget(sub)
         h.addLayout(col)
         h.addStretch(1)
+        self.awake_chip = QFrame()
+        self.awake_chip.setObjectName("awake")
+        ah = QHBoxLayout(self.awake_chip)
+        ah.setContentsMargins(10, 4, 12, 4)
+        ah.setSpacing(6)
+        self.awake_icon = QLabel()
+        self.awake_text = QLabel()
+        ah.addWidget(self.awake_icon)
+        ah.addWidget(self.awake_text)
+        self.awake_chip.hide()
+        h.addWidget(self.awake_chip)
+        h.addSpacing(8)
         self.pill = QLabel()
         self.pill.setObjectName("pill")
         h.addWidget(self.pill)
@@ -1919,6 +1969,28 @@ class MainWindow(QMainWindow):
             self.connect_combo.addItem(text, key)
         disk.body.addWidget(self.connect_combo)
         lay.addWidget(disk)
+
+        power = Card("Energía", G.POWER)
+        self.awake_box = QCheckBox("Mantener despiertos el equipo y el disco\nmientras analiza o sincroniza")
+        self.awake_box.toggled.connect(lambda _on: (self._save_settings(), self._refresh_awake()))
+        power.body.addWidget(self.awake_box)
+        if IS_MAC:
+            how = ("El Mac no reposa por inactividad ni duerme los discos (la pantalla sí puede apagarse), y "
+                   "cerrar la app, la sesión o apagar pide confirmación. Si se duerme igualmente, la copia "
+                   "espera al disco y sigue sola.")
+        else:
+            how = ("El equipo no se suspende por inactividad (la pantalla sí puede apagarse), el disco USB no "
+                   "se duerme y Windows avisa si intentas apagar o reiniciar. Si se suspende igualmente (tapa, "
+                   "botón), la copia se pausa y sigue sola al volver.")
+        power_hint = QLabel(how)
+        power_hint.setObjectName("faint")
+        power_hint.setWordWrap(True)
+        power.body.addWidget(power_hint)
+        self.awake_status = QLabel("")
+        self.awake_status.setObjectName("faint")
+        self.awake_status.setWordWrap(True)
+        power.body.addWidget(self.awake_status)
+        lay.addWidget(power)
 
         integ = Card("Integridad", G.SHIELD)
         self.verify_box = QCheckBox("Verificar cada archivo copiado\n(relee el disco y compara su SHA-256)")
@@ -2351,6 +2423,7 @@ class MainWindow(QMainWindow):
             "verify": st.value("verify", "true") == "true",
             "scrub": int(st.value("scrub", 300)),
             "auto_update": st.value("auto_update", "true") == "true",
+            "awake": st.value("awake", "true") == "true",
         }
         self.disk_id = st.value("disk_id", "") or ""
         self.dst_rel = st.value("dst_rel", "") or ""
@@ -2378,6 +2451,7 @@ class MainWindow(QMainWindow):
         st.setValue("verify", "true" if self.verify_box.isChecked() else "false")
         st.setValue("scrub", self.scrub_combo.currentData())
         st.setValue("auto_update", "true" if self.update_box.isChecked() else "false")
+        st.setValue("awake", "true" if self.awake_box.isChecked() else "false")
         st.setValue("update_skip", self.update_skip)
         st.setValue("update_checked", self.update_checked)
         st.setValue("disk_id", self.disk_id)
@@ -2401,6 +2475,10 @@ class MainWindow(QMainWindow):
         self.update_box.blockSignals(True)
         self.update_box.setChecked(self._cfg["auto_update"])
         self.update_box.blockSignals(False)
+        self.awake_box.blockSignals(True)
+        self.awake_box.setChecked(self._cfg["awake"])
+        self.awake_box.blockSignals(False)
+        self._refresh_awake()
         self.watch_box.blockSignals(True)
         self.watch_box.setChecked(self._cfg["watch"])
         self.watch_box.blockSignals(False)
@@ -2810,11 +2888,13 @@ class MainWindow(QMainWindow):
         self._finalized = False
         self._copy_seen = False
         self._copy_requested = copy
+        self._guard_logged = False
+        self._sleep_paused = False
+        self._disk_lost_seen = False
         self._save_settings()
-        if copy:
-            keep_awake(True)
         self.job_thread = threading.Thread(target=job.run, args=(copy,), name="backup", daemon=True)
         self.job_thread.start()
+        self._sync_guard(job)
         self._set_state("copying" if reuse else "scanning")
         if show_progress:
             self.seg_buttons[PAGE_PROGRESS].click()
@@ -2862,6 +2942,7 @@ class MainWindow(QMainWindow):
         job = self.job
         if not job or self._state not in RUNNING:
             return
+        self._sleep_paused = False
         now = time.perf_counter()
         if job.paused:
             job.resume()
@@ -2915,6 +2996,8 @@ class MainWindow(QMainWindow):
         elif phase == "copying":
             self._render_copy(job, now)
         self._drain_errors(job)
+        self._watch_disk(job)
+        self._sync_guard(job)
         self._last_tick = now
         # al reutilizar un análisis la fase sigue en «ready» hasta que arranca el hilo de copia
         terminal = ("done", "cancelled", "failed") if self._copy_requested else ("ready", "cancelled", "failed")
@@ -3039,7 +3122,8 @@ class MainWindow(QMainWindow):
         if final:
             caption = "COMPLETADO" if job.phase == "done" else "CANCELADO"
         else:
-            caption = "EN PAUSA" if paused else "COMPROBANDO" if s.step == "verificando" else "SINCRONIZANDO"
+            caption = ("ESPERANDO AL DISCO" if s.disk_lost_at else "EN PAUSA" if paused
+                       else "COMPROBANDO" if s.step == "verificando" else "SINCRONIZANDO")
         self.ring.set_text(pct(frac), f"{fmt_bytes(s.bytes_done)} de {fmt_bytes(s.plan_bytes)}", caption)
         self.bar_bytes.setValue(int(frac * 10000))
         self.bar_bytes_val.setText(f"{fmt_bytes(s.bytes_done)}  /  {fmt_bytes(s.plan_bytes)}   ·   {pct(frac)}")
@@ -3052,9 +3136,10 @@ class MainWindow(QMainWindow):
         if final:
             self.t_left.set("00:00:00", "terminado", C["ok"] if job.phase == "done" else None)
             self.t_eta.set(datetime.now().strftime("%H:%M:%S"), "hora de fin real")
-        elif paused:
-            self.t_left.set("—", "en pausa")
-            self.t_eta.set("—", "en pausa")
+        elif paused or s.disk_lost_at:
+            why = "esperando al disco" if s.disk_lost_at else "en pausa"
+            self.t_left.set("—", why)
+            self.t_eta.set("—", why)
         elif eta is None:
             self.t_left.set("…", "midiendo velocidad")
             self.t_eta.set("…", "")
@@ -3137,7 +3222,7 @@ class MainWindow(QMainWindow):
 
     # ── fin ──────────────────────────────────────────────────────────────
     def _finish(self, job: engine.BackupJob, phase: str):
-        keep_awake(False)
+        self._guard_stop()
         s = job.stats
         if self._pause_at is not None:
             self._paused_total += time.perf_counter() - self._pause_at
@@ -3364,7 +3449,7 @@ class MainWindow(QMainWindow):
                 extra = " La sincronización sigue en marcha." if self._state in RUNNING else ""
                 self._notify(APP_NAME, "Sigo en la bandeja vigilando tu disco de copia." + extra)
             return
-        if self.job and self._state in RUNNING:
+        if self.job and self._state in RUNNING and not self.job.cancelled:
             ans = QMessageBox.question(self, APP_NAME, "Hay una operación en curso. ¿Cancelarla y salir?\n\n"
                                        "Lo ya copiado se conserva.")
             if ans != QMessageBox.StandardButton.Yes:
@@ -3374,11 +3459,187 @@ class MainWindow(QMainWindow):
             self.job.cancel()
             if self.job_thread:
                 self.job_thread.join(timeout=15)
-        keep_awake(False)
+        self._guard_stop()
         if self.tray:
             self.tray.hide()
         event.accept()
+        self._quitting = True
         QApplication.quit()
+
+    # ── energía: equipo y disco despiertos, apagado retenido ─────────────
+    def _guard_wanted(self, job: engine.BackupJob) -> bool:
+        if not self.awake_box.isChecked() or job.phase not in ("scanning", "copying") or job.cancelled:
+            return False
+        # en una pausa larga se deja que el equipo se suspenda; al reanudar se vuelve a pedir
+        return not (job.paused and self._pause_at is not None
+                    and time.perf_counter() - self._pause_at > PAUSE_GRACE)
+
+    def _sync_guard(self, job: engine.BackupJob):
+        want = self._guard_wanted(job)
+        if want and not self.guard.active:
+            self._guard_start(job)
+        elif not want and self.guard.active:
+            if job.paused and job.phase in ("scanning", "copying"):
+                self._log(f"Pausa de más de {PAUSE_GRACE // 60} min: el equipo ya puede suspenderse. Al reanudar "
+                          "se vuelve a mantener despierto.", C["warn"])
+            self._guard_stop()
+        now = time.perf_counter()
+        if now - self._awake_refresh >= 1.0:
+            self._refresh_awake()
+
+    def _guard_start(self, job: engine.BackupJob):
+        s = job.stats
+
+        def activity():
+            # cambia mientras la copia escribe en el disco; en el análisis el latido va solo
+            if job.phase != "copying" or job.paused:
+                return None
+            return s.bytes_done, s.files_done, s.moves_done, s.deletes_done, s.scrub_files
+
+        root = job.meta_root if engine.volume_present(job.dst) else None
+        self.guard.start(f"{APP_NAME}: copia de seguridad en curso ({job.src} → {job.dst})", root, activity)
+        if IS_WIN:
+            keepawake.block_shutdown(int(self.winId()),
+                                     f"Copia de seguridad en curso ({job.src} → {job.dst}). Si apagas ahora se "
+                                     "interrumpe; lo ya copiado se conserva.")
+        if not self._guard_logged:
+            self._guard_logged = True
+            parts = [f"el equipo no se suspende ({self.guard.method or 'no disponible'})"]
+            if root:
+                parts.append(f"latido al disco {engine.vol_name(root)} si pasa "
+                             f"{keepawake.BEAT_SECONDS:.0f} s sin escribir")
+            parts.append("apagar o reiniciar pide confirmación" if IS_WIN
+                         else "cerrar sesión o apagar pide confirmación")
+            self._log("Mientras dure: " + "  ·  ".join(parts), C["muted"])
+            if self.guard.error:
+                self._log(f"⚠ No se pudo impedir la suspensión: {self.guard.error}", C["warn"])
+        self._refresh_awake()
+
+    def _guard_stop(self):
+        if self.guard.active:
+            self.guard.stop()
+        if IS_WIN:
+            keepawake.unblock_shutdown(int(self.winId()))
+        self._refresh_awake()
+
+    def _refresh_awake(self):
+        self._awake_refresh = time.perf_counter()
+        st = self.guard.status()
+        job = self.job
+        lost = bool(job and job.stats.disk_lost_at and self._state in RUNNING)
+        if not st["active"] and not lost:
+            self.awake_chip.hide()
+            if self.awake_box.isChecked():
+                self.awake_status.setText("Se activa al analizar o sincronizar y se desactiva al terminar.")
+            else:
+                self.awake_status.setText("Desactivado: el equipo y el disco se suspenden con normalidad "
+                                          "aunque haya una copia en curso.")
+            return
+        if lost:
+            color, text = C["warn"], "Esperando al disco"
+        elif st["disk_error"]:
+            color, text = C["warn"], "Sin suspensión · disco sin respuesta"
+        else:
+            color, text = C["ok"], "Sin suspensión" + (" · disco activo" if st["disk"] else "")
+        self.awake_icon.setPixmap(glyph_pixmap(G.POWER, color, 13))
+        self.awake_text.setText(text)
+        self.awake_text.setStyleSheet(f"color:{color};")
+        self.awake_chip.setStyleSheet(f"QFrame#awake {{ background:{rgba(color, 26)}; "
+                                      f"border:1px solid {rgba(color, 80)}; }}")
+        lines = [f"Equipo: no se suspende por inactividad ({st['method'] or 'no disponible'})."]
+        beat = ""
+        if lost:
+            beat = "esperando a que vuelva el disco de copia"
+        elif st["disk"]:
+            beat = (f"sin respuesta del disco: {st['disk_error']}" if st["disk_error"]
+                    else f"último latido hace {fmt_human(time.time() - st['last_beat'])}" if st["last_beat"]
+                    else "la copia mantiene el disco activo")
+            lines.append(f"Disco de copia ({engine.vol_name(st['root'])}): {beat}.")
+        lines.append("Apagar o reiniciar: Windows pide confirmación." if IS_WIN
+                     else "Cerrar sesión o apagar: pide confirmación.")
+        tip = "\n".join(lines)
+        self.awake_chip.setToolTip(tip)
+        since = f"Activo desde las {datetime.fromtimestamp(self.guard.since):%H:%M:%S}" if st["active"] else ""
+        self.awake_status.setText("  ·  ".join(x for x in (since, beat) if x))
+        self.awake_chip.show()
+
+    def _watch_disk(self, job: engine.BackupJob):
+        """Avisa cuando el disco de copia desaparece a mitad y cuando vuelve."""
+        s = job.stats
+        if s.disk_lost_at and not self._disk_lost_seen:
+            self._disk_lost_seen = True
+            self._log(f"El disco de copia no responde o se ha desconectado ({job.dst}). La copia espera a que "
+                      "vuelva y repite el archivo que estaba a medias: no se pierde nada.", C["warn"])
+            self._notify(APP_NAME, "El disco de copia se ha desconectado. Vuelve a conectarlo y la copia seguirá.")
+            self._refresh_awake()
+        elif not s.disk_lost_at and self._disk_lost_seen:
+            self._disk_lost_seen = False
+            self._log(f"Disco de nuevo disponible: sigue la copia (en total {fmt_human(s.disk_wait_s)} "
+                      "esperando).", C["ok"])
+            self._refresh_awake()
+
+    def _on_session_end_query(self, manager):
+        """Windows pregunta si puede apagar, reiniciar o cerrar la sesión."""
+        if self.guard.active and self.job and self._state in RUNNING:
+            manager.cancel()
+            self._log("Apagado, reinicio o cierre de sesión retenido: hay una copia en curso.", C["warn"])
+
+    def _on_about_to_quit(self):
+        # también al apagar de todas formas: se para la copia de forma ordenada (sin archivos a medias)
+        self._quitting = True
+        if self.job and self._state in RUNNING:
+            self.job.cancel()
+            if self.job_thread:
+                self.job_thread.join(timeout=4)
+        self._guard_stop()
+
+    def _allow_quit(self) -> bool:
+        """Petición de salir que no viene de la app. En macOS: Cmd+Q, «Salir» del Dock, cerrar sesión o apagar."""
+        if not self._quitting:
+            if IS_MAC and self.job and self._state in RUNNING and not self.job.cancelled:
+                self._show_window()
+                ans = QMessageBox.question(
+                    self, APP_NAME, "Hay una sincronización en curso. ¿Cancelarla y salir?\n\nLo ya copiado se "
+                    "conserva. Si ibas a apagar o cerrar sesión, elige No y espera a que termine.")
+                if ans != QMessageBox.StandardButton.Yes:
+                    return False
+                self.job.cancel()
+                if self.job_thread:
+                    self.job_thread.join(timeout=15)
+            self._quitting = True
+        return True
+
+    def _on_system_suspend(self):
+        job = self.job
+        if self._sleeping or not job or self._state not in RUNNING:
+            return
+        self._sleeping = True
+        if not job.paused:
+            job.pause()
+            self._pause_at = time.perf_counter()
+            self._sleep_paused = True
+        self._log("El equipo se va a suspender: copia en pausa. Seguirá sola al volver.", C["warn"])
+
+    def _on_system_resume(self):
+        if not self._sleeping:
+            return
+        self._sleeping = False
+        self._log("Equipo reanudado")
+        if self._sleep_paused:
+            deadline = time.monotonic() + 180
+            QTimer.singleShot(1500, lambda: self._resume_after_sleep(deadline))
+
+    def _resume_after_sleep(self, deadline: float):
+        job = self.job
+        if not self._sleep_paused or not job or self._state not in RUNNING:
+            self._sleep_paused = False
+            return
+        if not engine.volume_present(job.dst) and time.monotonic() < deadline:
+            # el disco USB tarda unos segundos en volver tras la suspensión
+            QTimer.singleShot(1000, lambda: self._resume_after_sleep(deadline))
+            return
+        if job.paused:
+            self._toggle_pause()  # si el disco no ha vuelto, la copia lo esperará por su cuenta
 
 
 _crash_file = None
@@ -3427,7 +3688,7 @@ def selftest() -> int:
         report.flush()
 
     try:
-        app = QApplication(sys.argv)
+        app = App(sys.argv)
         pick_fonts()
         app.setStyleSheet(build_qss(write_assets()))
         say(f"{APP_NAME} {APP_VERSION} · {sys.platform} · Python {sys.version.split()[0]}")
@@ -3480,6 +3741,59 @@ def selftest() -> int:
                     b = os.path.join(dst, os.path.relpath(a, src))
                     assert open(a, "rb").read() == open(b, "rb").read(), f"distinto: {b}"
             say("  espejo exacto: sí")
+
+            # el disco desaparece a mitad de la copia y vuelve: se espera y no falla nada
+            class Flaky(engine.BackupJob):
+                calls = 0
+                offline_until = 0.0
+
+                def _dst_online(self):
+                    return time.monotonic() >= self.offline_until
+
+                def _copy_file(self, *a, **kw):
+                    with self._lock:
+                        self.calls += 1
+                        if self.calls == 6:
+                            self.offline_until = time.monotonic() + 1.5
+                    if not self._dst_online():
+                        raise OSError(2, "disco desconectado (simulado)")
+                    return super()._copy_file(*a, **kw)
+
+            settle, engine.DISK_SETTLE = engine.DISK_SETTLE, 0.2
+            src2, dst2 = os.path.join(tmp, "src2"), os.path.join(tmp, "dst2")
+            for i in range(30):
+                os.makedirs(src2, exist_ok=True)
+                with open(os.path.join(src2, f"g{i}.bin"), "wb") as fh:
+                    fh.write(os.urandom(3000 + i))
+            job = Flaky(src2, dst2, [], [], threads=4, meta_root=meta, scrub_seconds=0)
+            job.run()
+            engine.DISK_SETTLE = settle
+            s = job.stats
+            say(f"  disco desconectado a mitad: {job.phase} copiados={s.files_done} errores={s.errors} "
+                f"esperas={s.disk_waits} ({s.disk_wait_s:.1f} s)")
+            assert job.phase == "done" and s.files_done == 30 and s.errors == 0 and s.disk_waits >= 1, \
+                "espera al disco"
+
+            # equipo despierto + latido del disco
+            beat_s, keepawake.BEAT_SECONDS = keepawake.BEAT_SECONDS, 1.0
+            guard = keepawake.Guard()
+            guard.start(f"{APP_NAME} selftest", meta)
+            try:
+                time.sleep(2.6)
+                st = guard.status()
+                beat_file = os.path.join(meta, ".devbackup", keepawake.BEAT_FILE)
+                say(f"  sin suspensión: {st['method'] or '—'} · latidos={st['beats']} {st['disk_error']}")
+                assert st["beats"] >= 1 and os.path.exists(beat_file), "latido del disco"
+                if IS_WIN or IS_MAC:
+                    assert st["system"] and not st["error"], f"retención de energía: {st['error']}"
+                if IS_MAC:
+                    out = subprocess.run(["pmset", "-g", "assertions"], capture_output=True, text=True).stdout
+                    assert f"{APP_NAME} selftest" in out, "la aserción no aparece en pmset"
+                    say("  pmset -g assertions: aparece la aserción")
+            finally:
+                guard.stop()
+                keepawake.BEAT_SECONDS = beat_s
+            assert not guard.active
         win = MainWindow()
         win._refresh_disk_status()
         win.close()
@@ -3516,7 +3830,7 @@ def main() -> int:
             ctypes.windll.kernel32.SetErrorMode(0x0001)  # sin diálogos de «inserte un disco» al mirar unidades
         except Exception:  # noqa: BLE001
             pass
-    app = QApplication(sys.argv)
+    app = App(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setQuitOnLastWindowClosed(False)
     if send_to_running("tray" if tray_mode else "show"):

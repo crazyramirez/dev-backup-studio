@@ -73,6 +73,8 @@ ROOT_SKIP = {META_DIR, "system volume information", "$recycle.bin", ".spotlight-
              ".trashes", ".temporaryitems", ".documentrevisions-v100"}
 INDEX_SCHEMA = "2"
 SCRUB_THREADS = 4
+# cuando vuelve un disco que había desaparecido, margen para que termine de montarse
+DISK_SETTLE = 3.0
 
 MODE_MIRROR = "mirror"
 MODE_UPDATE = "update"
@@ -551,6 +553,10 @@ class Stats:
     scrub_total: int = 0       # archivos en el índice
     scrub_covered: int = 0     # de ellos, comprobados alguna vez
     scrub_start: float = 0.0
+    # disco de copia que desaparece a mitad (suspensión, cable, reinicio del USB)
+    disk_waits: int = 0        # veces que se ha esperado a que volviera
+    disk_wait_s: float = 0.0   # tiempo total esperando
+    disk_lost_at: float = 0.0  # perf_counter desde que falta; 0 = conectado
     # tiempos (perf_counter)
     scan_start: float = 0.0
     scan_end: float = 0.0
@@ -610,6 +616,7 @@ class BackupJob:
         self._resume.set()
         self._big = threading.Semaphore(1)
         self._next = 0
+        self._disk_waiters = 0
 
     def _reset_plan(self) -> None:
         # (ruta origen, tamaño, fecha_ns, «n» nuevo | «c» cambiado, estado anterior en destino)
@@ -971,11 +978,16 @@ class BackupJob:
         for d in self.dirs:
             if self._cancel.is_set():
                 break
-            try:
-                os.makedirs(lp(d), exist_ok=True)
-                s.dirs_created += 1
-            except OSError as exc:
-                self._error(d, exc)
+            while True:
+                try:
+                    os.makedirs(lp(d), exist_ok=True)
+                    s.dirs_created += 1
+                except OSError as exc:
+                    if self._await_disk():
+                        continue
+                    if not self._cancel.is_set():
+                        self._error(d, exc)
+                break
 
         s.step = "moviendo"
         for k, (old, item) in enumerate(self.moves):
@@ -984,8 +996,14 @@ class BackupJob:
             self._wait_if_paused()
             new = self._dst_for(item[0])
             try:
-                os.makedirs(lp(os.path.dirname(new)), exist_ok=True)
-                os.replace(lp(old), lp(new))
+                try:
+                    os.makedirs(lp(os.path.dirname(new)), exist_ok=True)
+                    os.replace(lp(old), lp(new))
+                except OSError:
+                    if not self._await_disk():
+                        raise
+                    os.makedirs(lp(os.path.dirname(new)), exist_ok=True)
+                    os.replace(lp(old), lp(new))
                 self._move_ok[k] = 1
                 s.moves_done += 1
             except OSError:
@@ -1058,6 +1076,38 @@ class BackupJob:
             if self._cancel.is_set():
                 return
 
+    def _dst_online(self) -> bool:
+        return volume_present(self.dst) and os.path.isdir(lp(self.dst))
+
+    def _await_disk(self) -> bool:
+        """Tras un error: si es que el disco de copia ha desaparecido, espera a que vuelva.
+
+        Pasa al suspender el equipo, al moverse el cable o cuando el USB se reinicia. En vez de
+        dar por fallidos todos los archivos que quedan, los hilos esperan y repiten el archivo.
+        Devuelve True si el disco ha vuelto; False si no se había ido o se cancela.
+        """
+        if self._dst_online():
+            return False
+        s = self.stats
+        with self._lock:
+            self._disk_waiters += 1
+            if self._disk_waiters == 1:
+                s.disk_lost_at = time.perf_counter()
+                s.disk_waits += 1
+        try:
+            while not self._cancel.is_set():
+                if self._dst_online():
+                    self._cancel.wait(DISK_SETTLE)  # que termine de montarse
+                    return not self._cancel.is_set()
+                self._cancel.wait(1.0)
+            return False
+        finally:
+            with self._lock:
+                self._disk_waiters -= 1
+                if not self._disk_waiters and s.disk_lost_at:
+                    s.disk_wait_s += time.perf_counter() - s.disk_lost_at
+                    s.disk_lost_at = 0.0
+
     def _copy_worker(self) -> None:
         tid = threading.get_ident()
         slot = [None, 0, 0]  # [ruta, tamaño, transferido]
@@ -1091,29 +1141,42 @@ class BackupJob:
                 big = size >= BIG_FILE
                 if big:
                     self._big.acquire()
+                cancelled = False
                 try:
-                    digest = self._copy_file(src, dst, kind, callback, buf, slot, rb)
-                except _Cancelled:
-                    with lock:
-                        stats.bytes_done -= slot[2]
-                    break
-                except OSError as exc:
-                    with lock:
-                        stats.bytes_done -= slot[2]
-                        stats.files_failed += 1
-                        stats.bytes_failed += size
-                    self._error(src, exc)
-                else:
-                    self._copy_ok[i] = 1
-                    self._copy_hash[i] = digest
-                    with lock:
-                        # cuadra con el tamaño del plan aunque el archivo traiga flujos alternativos
-                        stats.bytes_done += size - slot[2]
-                        stats.files_done += 1
+                    while True:
+                        try:
+                            digest = self._copy_file(src, dst, kind, callback, buf, slot, rb)
+                        except _Cancelled:
+                            with lock:
+                                stats.bytes_done -= slot[2]
+                            cancelled = True
+                        except OSError as exc:
+                            with lock:
+                                stats.bytes_done -= slot[2]
+                            slot[2] = 0
+                            if self._await_disk():
+                                continue  # el disco ha vuelto: se repite este archivo
+                            if self._cancel.is_set():
+                                cancelled = True  # se canceló esperando al disco: queda pendiente
+                            else:
+                                with lock:
+                                    stats.files_failed += 1
+                                    stats.bytes_failed += size
+                                self._error(src, exc)
+                        else:
+                            self._copy_ok[i] = 1
+                            self._copy_hash[i] = digest
+                            with lock:
+                                # cuadra con el tamaño del plan aunque el archivo traiga flujos alternativos
+                                stats.bytes_done += size - slot[2]
+                                stats.files_done += 1
+                        break
                 finally:
                     if big:
                         self._big.release()
                     self.active.pop(tid, None)
+                if cancelled:
+                    break
         finally:
             if rb:
                 rb.free()
@@ -1128,19 +1191,28 @@ class BackupJob:
             if i is None:
                 break
             path = self.deletes[i][0]
-            try:
-                self._archive(path)
-                self._delete_ok[i] = 1
-                with self._lock:
-                    self.stats.deletes_done += 1
-            except FileNotFoundError:
-                self._delete_ok[i] = 1
-                with self._lock:
-                    self.stats.deletes_done += 1
-            except OSError as exc:
-                with self._lock:
-                    self.stats.other_failed += 1
-                self._error(path, exc)
+            while True:
+                try:
+                    self._archive(path)
+                except OSError as exc:
+                    # sin el disco, «no existe» no quiere decir que ya esté borrado
+                    if self._await_disk():
+                        continue
+                    if self._cancel.is_set():
+                        pass  # se canceló esperando al disco: queda pendiente
+                    elif isinstance(exc, FileNotFoundError):
+                        self._delete_ok[i] = 1
+                        with self._lock:
+                            self.stats.deletes_done += 1
+                    else:
+                        with self._lock:
+                            self.stats.other_failed += 1
+                        self._error(path, exc)
+                else:
+                    self._delete_ok[i] = 1
+                    with self._lock:
+                        self.stats.deletes_done += 1
+                break
 
     def _archive(self, dst_path: str) -> None:
         target = self._version_path(dst_path)
@@ -1172,8 +1244,6 @@ class BackupJob:
                 raise
             if expected == written:
                 digest = expected
-                with self._lock:
-                    self.stats.verified_copies += 1
                 break
             _remove_quiet(ltmp)
             with self._lock:
@@ -1204,6 +1274,10 @@ class BackupJob:
         except OSError:
             _remove_quiet(ltmp)
             raise
+        if digest is not None:
+            # se cuenta al quedar en su sitio: si el disco se va antes, el archivo se repite
+            with self._lock:
+                self.stats.verified_copies += 1
         return digest
 
     def _copy_win(self, lsrc: str, ltmp: str, callback, slot) -> None:
@@ -1383,6 +1457,8 @@ class BackupJob:
             try:
                 on_disk = file_digest(dst, rb, uncached=True, stop=self._cancel)
             except FileNotFoundError:
+                if not self._dst_online():
+                    raise  # no falta el archivo, falta el disco: abajo se espera y se repite
                 digest = self._copy_file(src, dst, "n", callback, buf, slot, rb)
                 with self._lock:
                     self.stats.scrub_repaired += 1
@@ -1413,7 +1489,11 @@ class BackupJob:
         except _Cancelled:
             return None
         except OSError as exc:
-            self._error(dst, exc, "revisión de integridad")
+            if self._await_disk():
+                self.active.pop(tid, None)
+                return self._scrub_one(rel_dir, name, size, mtime, stored, rb, callback, buf, slot, tid)
+            if not self._cancel.is_set():
+                self._error(dst, exc, "revisión de integridad")
             return None
         finally:
             self.active.pop(tid, None)
