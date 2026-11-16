@@ -46,10 +46,11 @@ from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QChe
 
 import engine
 import keepawake
+import reminders
 import updater
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.6.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -139,6 +140,9 @@ ICONS = {
             + _p("M12 17.1v.1"),
     "spark": _p("M11 3.5l1.8 4.9 4.9 1.8-4.9 1.8L11 16.9l-1.8-4.9-4.9-1.8 4.9-1.8z")
              + _p("M18 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"),
+    "bell": _p("M6.2 10a5.8 5.8 0 1 1 11.6 0c0 4.6 1.9 6.3 1.9 6.3H4.3S6.2 14.6 6.2 10z")
+            + _p("M10.1 19.6a2.1 2.1 0 0 0 3.8 0"),
+    "more": '<circle cx="5.5" cy="12" r=".6"/><circle cx="12" cy="12" r=".6"/><circle cx="18.5" cy="12" r=".6"/>',
 }
 
 
@@ -150,7 +154,7 @@ class G:
     DOC, COPY, TREE, SYNC, TIMER = "doc", "copy", "tree", "sync", "timer"
     DONE, INFO, CLOCK, SPEED, DRIVE, FILTER = "done", "info", "clock", "speed", "drive", "filter"
     SHIELD, DOWNLOAD, POWER = "shield", "download", "power"
-    ARROW, BACK, HELP, SPARK = "arrow", "back", "help", "spark"
+    ARROW, BACK, HELP, SPARK, BELL, MORE = "arrow", "back", "help", "spark", "bell", "more"
 
 
 # ── formato (es-ES) ──────────────────────────────────────────────────────────
@@ -410,6 +414,27 @@ QPushButton#tourSkip { background: transparent; border: none; color: %(muted)s; 
 QPushButton#tourSkip:hover { color: %(text)s; }
 QPushButton#tourBack { padding: 0 18px; border-radius: 12px; }
 QPushButton#tourBack:focus { border-color: %(accent)s; }
+QFrame#remind {
+    border-radius: 14px; border: 1px solid rgba(251,191,36,85);
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 rgba(251,191,36,26), stop:1 rgba(124,108,255,12));
+}
+QLabel#remBadge { background: rgba(251,191,36,30); border: 1px solid rgba(251,191,36,60); border-radius: 12px; }
+QPushButton#remGo {
+    border: none; color: #ffffff; padding: 8px 16px; border-radius: 10px;
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #7C6CFF, stop:1 #4F8BFF);
+}
+QPushButton#remGo:hover { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #8E80FF, stop:1 #64A0FF); }
+QPushButton#remLater { padding: 8px 14px; border-radius: 10px; background: rgba(255,255,255,8); }
+QPushButton#remClose, QPushButton#remMore { background: transparent; border: none; border-radius: 8px; padding: 0; }
+QPushButton#remClose:hover, QPushButton#remMore:hover { background: %(hover)s; }
+QFrame#remRow { background: %(panel)s; border: 1px solid %(line)s; border-radius: 11px; }
+QFrame#remRow:hover { border-color: %(line2)s; background: #12161E; }
+QLabel#remTitle { font-weight: 700; font-size: 13px; }
+QLabel#remSub { font-size: 11px; }
+QLabel#remTag {
+    color: %(accent2)s; font-size: 9px; font-weight: 800; padding: 2px 6px;
+    border: 1px solid rgba(45,212,238,70); border-radius: 6px;
+}
 
 QProgressBar { background: %(panel)s; border: none; border-radius: 4px; }
 QProgressBar::chunk { border-radius: 4px; background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %(accent)s, stop:1 %(accent2)s); }
@@ -1766,10 +1791,11 @@ def tour_steps() -> list[dict]:
                  "comprueba.",
          "chips": [(G.SEARCH, "Revisa antes de copiar"), (G.SHIELD, "Cada archivo verificado"),
                    (G.CLOCK, "Lo borrado va a versiones")]},
-        {"image": "5-conecta", "glyph": G.DRIVE, "title": "Conecta el disco y listo",
-         "text": f"Desde {tray} vigila el disco: al enchufarlo te enseña los cambios y sincroniza con un clic.",
-         "chips": [(G.SYNC, "Vigila en segundo plano"), (G.POWER, "Sin suspensión al copiar"),
-                   (G.DONE, "Resumen al terminar")]},
+        {"image": "5-conecta", "glyph": G.BELL, "title": "Conecta el disco y listo",
+         "text": f"Desde {tray} vigila el disco y te recuerda copiar si llevas días con cambios sin guardar. "
+                 "Al enchufarlo, sincronizas con un clic.",
+         "chips": [(G.SYNC, "Vigila en segundo plano"), (G.BELL, "Te recuerda copiar"),
+                   (G.POWER, "Sin suspensión al copiar")]},
     ]
 
 
@@ -2450,6 +2476,198 @@ class TourOverlay(QWidget):
         p.setOpacity(1.0)
 
 
+# ── recordatorios de copia ───────────────────────────────────────────────────
+
+REMIND_OPTIONS = [(1, "1 día"), (2, "2 días"), (3, "3 días"), (7, "1 semana"), (14, "2 semanas")]
+
+
+def days_text(days: int) -> str:
+    return dict(REMIND_OPTIONS).get(days) or f"{days} días"
+
+
+def short_changes(p: dict | None) -> str:
+    """«37 archivos sin copiar» para las listas; «» si no se ha mirado o no hay nada."""
+    if not p or p.get("missing"):
+        return ""
+    files, dirs = p.get("files", 0), p.get("dirs", 0)
+    if files:
+        return f"{fmt_int(files)} archivo{'s' if files != 1 else ''} sin copiar"
+    return "borrados o movidos sin copiar" if dirs else ""
+
+
+class ChangeChecker(QObject):
+    """Mira en segundo plano qué ha cambiado en el origen de cada copia desde la última vez."""
+    finished = pyqtSignal(object, bool)  # {id: resultado}, a petición del usuario
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.busy = False
+        self._cancel = threading.Event()
+
+    def check(self, items: list[dict], manual: bool) -> bool:
+        if self.busy or not items:
+            return False
+        self.busy = True
+        self._cancel = threading.Event()
+        cancel = self._cancel
+        jobs = []
+        for it in items:
+            since = reminders.parse_time(it.get("last_ok"))
+            if since is not None:
+                jobs.append((it["id"], it["src"], since.timestamp(), it.get("patterns", []), it.get("excluded", [])))
+
+        def run():
+            results = {}
+            for pid, src, since, patterns, excluded in jobs:
+                if cancel.is_set():
+                    break
+                try:
+                    results[pid] = engine.changes_since(src, since, patterns, excluded, cancel=cancel)
+                except Exception:  # noqa: BLE001 - un origen raro no debe tumbar los avisos
+                    results[pid] = {"missing": True, "complete": True}
+            self.finished.emit(results, manual)
+
+        threading.Thread(target=run, name="recordatorios", daemon=True).start()
+        return True
+
+    def cancel(self) -> None:
+        self._cancel.set()
+
+
+class ReminderRow(QFrame):
+    """Una copia habitual en la tarjeta de recordatorios: origen → disco, estado y menú."""
+    menu_requested = pyqtSignal(str, QPoint)
+
+    def __init__(self, it: dict, status: str, color: str, current: bool):
+        super().__init__()
+        self.pid = it["id"]
+        self.setObjectName("remRow")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(12, 9, 6, 9)
+        lay.setSpacing(10)
+        dot = QLabel()
+        dot.setFixedSize(8, 8)
+        dot.setStyleSheet(f"background: {color}; border-radius: 4px;")
+        lay.addWidget(dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        col = QVBoxLayout()
+        col.setSpacing(1)
+        dest = it.get("label") or reminders.short_name(it.get("dst", ""))
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        title = ElideLabel(f"{reminders.short_name(it['src'])}  →  {dest}", Qt.TextElideMode.ElideRight)
+        title.setObjectName("remTitle")
+        head.addWidget(title, 1)
+        if current:
+            tag = QLabel("EN USO")
+            tag.setObjectName("remTag")
+            tag.setToolTip("Es el origen y el destino que tienes elegidos ahora")
+            head.addWidget(tag, 0, Qt.AlignmentFlag.AlignVCenter)
+        sub = ElideLabel(status, Qt.TextElideMode.ElideRight)
+        sub.setObjectName("remSub")
+        sub.setStyleSheet(f"color: {color};")
+        col.addLayout(head)
+        col.addWidget(sub)
+        lay.addLayout(col, 1)
+        self.more = QPushButton()
+        self.more.setObjectName("remMore")
+        self.more.setIcon(glyph_icon(G.MORE, C["muted"], 16))
+        self.more.setFixedSize(30, 30)
+        self.more.setToolTip("Opciones de esta copia")
+        self.more.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.more.clicked.connect(
+            lambda: self.menu_requested.emit(self.pid, self.more.mapToGlobal(QPoint(0, self.more.height()))))
+        lay.addWidget(self.more, 0, Qt.AlignmentFlag.AlignVCenter)
+        copies = it.get("copies", 0)
+        self.setToolTip(f"{it['src']}  →  {it.get('dst', '')}\n"
+                        f"{copies} copia{'s' if copies != 1 else ''} completa{'s' if copies != 1 else ''}"
+                        f"  ·  última {it.get('last_ok', '').replace('T', ' ')}")
+
+    def mousePressEvent(self, e):  # noqa: N802
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.menu_requested.emit(self.pid, e.globalPosition().toPoint())
+
+
+class ReminderBar(QFrame):
+    """Aviso en la ventana: hay cambios sin copiar. Se despliega con una animación corta."""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("remind")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(14, 12, 12, 12)
+        lay.setSpacing(14)
+        badge = QLabel()
+        badge.setObjectName("remBadge")
+        badge.setFixedSize(42, 42)
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge.setPixmap(glyph_pixmap(G.BELL, C["warn"], 20))
+        lay.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
+        col = QVBoxLayout()
+        col.setSpacing(2)
+        self.title = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.title.setObjectName("bannerTitle")
+        self.text = QLabel()
+        self.text.setObjectName("bannerText")
+        self.text.setWordWrap(True)
+        col.addWidget(self.title)
+        col.addWidget(self.text)
+        lay.addLayout(col, 1)
+        self.go = QPushButton("  Sincronizar ahora")
+        self.go.setObjectName("remGo")
+        self.go.setIcon(glyph_icon(G.PLAY, "#FFFFFF", 13))
+        self.later = QPushButton("Recordar mañana")
+        self.later.setObjectName("remLater")
+        self.close_btn = QPushButton()
+        self.close_btn.setObjectName("remClose")
+        self.close_btn.setIcon(glyph_icon(G.CLOSE, C["muted"], 13))
+        self.close_btn.setFixedSize(30, 30)
+        for b in (self.go, self.later, self.close_btn):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            lay.addWidget(b, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._anim = QVariantAnimation(self)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._anim.valueChanged.connect(lambda v: self.setMaximumHeight(int(v)))
+        self._anim.finished.connect(self._anim_done)
+        self._closing = False
+        self.hide()
+
+    def reveal(self) -> None:
+        if self.isVisible() and not self._closing:
+            return
+        self._closing = False
+        if not ui_animations():
+            self.setMaximumHeight(16777215)
+            self.show()
+            return
+        self.setMaximumHeight(0)
+        self.show()
+        self._anim.stop()
+        self._anim.setStartValue(0)
+        self._anim.setEndValue(max(60, self.sizeHint().height()))
+        self._anim.setDuration(280)
+        self._anim.start()
+
+    def conceal(self) -> None:
+        if not self.isVisible() or self._closing:
+            return
+        if not ui_animations():
+            self.hide()
+            return
+        self._closing = True
+        self._anim.stop()
+        self._anim.setStartValue(self.height())
+        self._anim.setEndValue(0)
+        self._anim.setDuration(200)
+        self._anim.start()
+
+    def _anim_done(self) -> None:
+        if self._closing:
+            self._closing = False
+            self.hide()
+        self.setMaximumHeight(16777215)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, tray_mode: bool = False, updated: bool = False):
         super().__init__()
@@ -2491,6 +2709,8 @@ class MainWindow(QMainWindow):
         self._disk_lost_seen = False
         self.tour: TourOverlay | None = None
         self._tour_pending = True
+        self.registry = reminders.Registry()
+        self._bar_target: str | None = None
 
         self._load_settings()
         self._build()
@@ -2504,6 +2724,17 @@ class MainWindow(QMainWindow):
         self.watcher = DiskWatcher(self)
         self.watcher.arrived.connect(self._on_drive_arrived)
         QShortcut(QKeySequence(QKeySequence.StandardKey.HelpContents), self, activated=self.toggle_tour)
+
+        # recordatorios: cada media hora se mira qué copias toca revisar (solo se recorre el origen si toca)
+        self.rem_checker = ChangeChecker(self)
+        self.rem_checker.finished.connect(self._on_changes_checked)
+        self._remind_timer = QTimer(self)
+        self._remind_timer.setInterval(30 * 60 * 1000)
+        self._remind_timer.timeout.connect(self._reminder_tick)
+        self._remind_timer.start()
+        QTimer.singleShot(150_000, self._reminder_tick)  # sin prisa al arrancar con la sesión
+        self.watcher.arrived.connect(lambda _root: QTimer.singleShot(3000, self._refresh_reminders))
+        self._refresh_reminders()
 
         # apagar, reiniciar o cerrar sesión con una copia en marcha
         app = QApplication.instance()
@@ -2715,6 +2946,59 @@ class MainWindow(QMainWindow):
         disk.body.addWidget(self.connect_combo)
         lay.addWidget(disk)
 
+        rem = Card("Recordatorios", G.BELL)
+        self.remind_box = QCheckBox("Recordarme hacer copia\nsi hay cambios sin copiar")
+        self.remind_box.toggled.connect(self._on_remind_toggled)
+        rem.body.addWidget(self.remind_box)
+        rrow = QHBoxLayout()
+        rl = QLabel("Avisar después de")
+        rl.setObjectName("fieldLabel")
+        self.remind_combo = QComboBox()
+        for days, text in REMIND_OPTIONS:
+            self.remind_combo.addItem(text, days)
+        self.remind_combo.setFixedWidth(130)
+        self.remind_combo.currentIndexChanged.connect(self._on_remind_days_changed)
+        rrow.addWidget(rl)
+        rrow.addStretch(1)
+        rrow.addWidget(self.remind_combo)
+        rem.body.addLayout(rrow)
+        rhint = QLabel("Solo avisa si has cambiado algo desde la última copia, y como mucho una vez por periodo.")
+        rhint.setObjectName("faint")
+        rhint.setWordWrap(True)
+        rem.body.addWidget(rhint)
+        where = "con Windows" if IS_WIN else "al iniciar sesión"
+        link = f'<a href="#" style="color:{C["accent2"]}; text-decoration:none">Iniciarla {where} en segundo plano</a>'
+        self.remind_tray_hint = QLabel(f"Con la app cerrada no puede avisarte. {link}")
+        self.remind_tray_hint.setObjectName("faint")
+        self.remind_tray_hint.setWordWrap(True)
+        self.remind_tray_hint.linkActivated.connect(lambda _l: self.watch_box.setChecked(True))
+        rem.body.addWidget(self.remind_tray_hint)
+        cl = QLabel("Copias habituales")
+        cl.setObjectName("fieldLabel")
+        rem.body.addWidget(cl)
+        rows = QWidget()
+        self.remind_rows = QVBoxLayout(rows)
+        self.remind_rows.setContentsMargins(0, 0, 0, 0)
+        self.remind_rows.setSpacing(6)
+        rem.body.addWidget(rows)
+        self.remind_empty = QLabel("Aún no hay ninguna: cada sincronización completa se añade aquí sola, con "
+                                   "su origen y su disco.")
+        self.remind_empty.setObjectName("faint")
+        self.remind_empty.setWordWrap(True)
+        rem.body.addWidget(self.remind_empty)
+        brow = QHBoxLayout()
+        self.remind_status = QLabel("")
+        self.remind_status.setObjectName("faint")
+        self.btn_remind_check = QPushButton("Comprobar ahora")
+        self.btn_remind_check.setObjectName("link")
+        self.btn_remind_check.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_remind_check.setToolTip("Mira ya si hay cambios sin copiar en todas las copias habituales")
+        self.btn_remind_check.clicked.connect(lambda: self._reminder_tick(manual=True))
+        brow.addWidget(self.remind_status, 1)
+        brow.addWidget(self.btn_remind_check)
+        rem.body.addLayout(brow)
+        lay.addWidget(rem)
+
         power = Card("Energía", G.POWER)
         self.awake_box = QCheckBox("Mantener despiertos el equipo y el disco\nmientras analiza o sincroniza")
         self.awake_box.toggled.connect(lambda _on: (self._save_settings(), self._refresh_awake()))
@@ -2879,6 +3163,11 @@ class MainWindow(QMainWindow):
         top.addWidget(seg)
         top.addStretch(1)
         col.addLayout(top)
+        self.remind_bar = ReminderBar()
+        self.remind_bar.go.clicked.connect(self._remind_go)
+        self.remind_bar.later.clicked.connect(self._remind_later)
+        self.remind_bar.close_btn.clicked.connect(self._remind_dismiss)
+        col.addWidget(self.remind_bar)
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self._build_tree_page())
@@ -3194,6 +3483,8 @@ class MainWindow(QMainWindow):
             "scrub": int(st.value("scrub", 300)),
             "auto_update": st.value("auto_update", "true") == "true",
             "awake": st.value("awake", "true") == "true",
+            "remind": st.value("remind", "true") == "true",
+            "remind_days": int(st.value("remind_days", 3)),
         }
         self.disk_id = st.value("disk_id", "") or ""
         self.dst_rel = st.value("dst_rel", "") or ""
@@ -3208,6 +3499,11 @@ class MainWindow(QMainWindow):
         geo = st.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)
+        if st.contains("copias"):
+            self.registry = reminders.Registry(js("copias", []))
+        else:
+            self.registry = self._seed_registry()  # copias hechas antes de existir los recordatorios
+            st.setValue("copias", json.dumps(self.registry.to_list(), ensure_ascii=False))
 
     def _save_settings(self):
         st = self.settings
@@ -3222,6 +3518,8 @@ class MainWindow(QMainWindow):
         st.setValue("scrub", self.scrub_combo.currentData())
         st.setValue("auto_update", "true" if self.update_box.isChecked() else "false")
         st.setValue("awake", "true" if self.awake_box.isChecked() else "false")
+        st.setValue("remind", "true" if self.remind_box.isChecked() else "false")
+        st.setValue("remind_days", self.remind_combo.currentData())
         st.setValue("update_skip", self.update_skip)
         st.setValue("update_checked", self.update_checked)
         st.setValue("disk_id", self.disk_id)
@@ -3252,6 +3550,12 @@ class MainWindow(QMainWindow):
         self.watch_box.blockSignals(True)
         self.watch_box.setChecked(self._cfg["watch"])
         self.watch_box.blockSignals(False)
+        for w in (self.remind_box, self.remind_combo):
+            w.blockSignals(True)
+        self.remind_box.setChecked(self._cfg["remind"])
+        self.remind_combo.setCurrentIndex(max(0, self.remind_combo.findData(self._cfg["remind_days"])))
+        for w in (self.remind_box, self.remind_combo):
+            w.blockSignals(False)
         self._rebuild_chips()
         self._load_tree()
         self._adopt_disk()
@@ -3337,6 +3641,7 @@ class MainWindow(QMainWindow):
         elif self.tray:
             self.tray.hide()
         self._save_settings()
+        self._refresh_reminders()
 
     def _ensure_tray(self):
         if self.tray is None:
@@ -3350,6 +3655,7 @@ class MainWindow(QMainWindow):
             self._tray_menu = menu
             self.tray.setContextMenu(menu)
             self.tray.activated.connect(self._on_tray_activated)
+            self.tray.messageClicked.connect(self._show_window)
         self.tray.setToolTip(f"{APP_NAME} · vigilando el disco de copia")
         self.tray.show()
 
@@ -3603,6 +3909,11 @@ class MainWindow(QMainWindow):
             self.tray.setToolTip(f"{APP_NAME} · {text.lower()}")
         if not running:
             self.setWindowTitle(APP_NAME)
+        if hasattr(self, "remind_bar"):
+            if running:
+                self.remind_bar.conceal()
+            else:
+                self._refresh_remind_bar()
 
     def _show_idle_banner(self):
         dst = self.dst_card.path() or "el destino"
@@ -3633,6 +3944,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, APP_NAME, problem)
             return False
         self.excl_map[self._excl_key()] = self.tree.excluded
+        self.rem_checker.cancel()
         if not self.disk_id or engine.read_disk_id(engine.volume_root(dst)) != self.disk_id:
             self._register_disk(dst)
         job = engine.BackupJob(src, dst, self._active_rules(), self.tree.excluded,
@@ -4109,6 +4421,8 @@ class MainWindow(QMainWindow):
         self.bar_bytes_val.setText(f"0 B  /  {fmt_bytes(s.plan_bytes)}")
         self.bar_files_val.setText(f"0  /  {fmt_int(s.ops_total)}")
         self._load_changes(job)
+        if not s.has_changes and job.phase == "ready":
+            self._record_pair(job, copied=False)  # el destino ya era igual que el origen
 
     def _finish_copy(self, job: engine.BackupJob, phase: str):
         s = job.stats
@@ -4122,6 +4436,8 @@ class MainWindow(QMainWindow):
             self.ring.set_text("100 %", f"{fmt_bytes(s.bytes_done)} copiados",
                                "COMPLETADO" if not s.errors else "CON INCIDENCIAS")
         self._last_log = self._write_log(job, phase)
+        if phase == "done":
+            self._record_pair(job, copied=True)
         self._show_summary(job, phase, total, scan, copy, avg)
         parts = [f"{fmt_int(s.files_done)} copiados ({fmt_bytes(s.bytes_done)})",
                  f"{fmt_int(s.moves_done)} movidos", f"{fmt_int(s.versions_saved)} versiones guardadas",
@@ -4304,6 +4620,300 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         if self.tour is not None and self.tour.active:
             self.tour.setGeometry(self.rect())
+
+    # ── recordatorios de copia ───────────────────────────────────────────
+    def _remind_days(self) -> int:
+        return int(self.remind_combo.currentData() or 3) if self.remind_box.isChecked() else 0
+
+    def _save_registry(self):
+        self.settings.setValue("copias", json.dumps(self.registry.to_list(), ensure_ascii=False))
+        self.settings.sync()
+
+    def _seed_registry(self) -> reminders.Registry:
+        """La primera vez, las copias completas de los registros pasan a ser copias habituales."""
+        cfg_dst = os.path.normcase(os.path.normpath(self._cfg["dst"])) if self._cfg["dst"] else ""
+
+        def resolve(dst: str) -> tuple[str, str, str]:
+            root = engine.volume_root(dst)
+            found = engine.read_disk_id(root) if engine.volume_present(dst) else None
+            if found:
+                return found, engine.rel_to_volume(dst), engine.volume_info(root)[0] or engine.vol_name(root)
+            if self.disk_id and os.path.normcase(os.path.normpath(dst)) == cfg_dst:
+                return self.disk_id, self.dst_rel or engine.rel_to_volume(dst), ""
+            return "", "", ""
+
+        try:
+            reg = reminders.seed_from_logs(LOG_DIR, resolve)
+        except Exception:  # noqa: BLE001 - un registro raro no debe impedir arrancar
+            return reminders.Registry()
+        for it in reg.items.values():
+            it["excluded"] = sorted(self.excl_map.get(os.path.normcase(it["src"]), set()))
+        return reg
+
+    def _disk_roots(self) -> dict[str, str]:
+        """Marca de disco → raíz, de los discos conectados ahora."""
+        roots: dict[str, str] = {}
+        for root in sorted(engine.mounted_volumes()):
+            found = engine.read_disk_id(root)
+            if found and found not in roots:
+                roots[found] = root
+        return roots
+
+    def _pair_dest(self, it: dict, roots: dict | None = None) -> str | None:
+        """Dónde está ahora el destino de una copia, o None si su disco no está conectado."""
+        if it.get("disk_id"):
+            root = (self._disk_roots() if roots is None else roots).get(it["disk_id"])
+            if root is None:
+                return None
+            return os.path.join(root, it["dst_rel"]) if it.get("dst_rel") else root
+        return it["dst"] if it.get("dst") and os.path.isdir(it["dst"]) else None
+
+    def _is_current_pair(self, it: dict) -> bool:
+        if os.path.normcase(self.src_card.path()) != os.path.normcase(it["src"]):
+            return False
+        if it.get("disk_id"):
+            return it["disk_id"] == self.disk_id and \
+                os.path.normcase(it.get("dst_rel", "")) == os.path.normcase(self.dst_rel)
+        return os.path.normcase(self.dst_card.path()) == os.path.normcase(it.get("dst", ""))
+
+    @staticmethod
+    def _pair_label(it: dict) -> str:
+        return it.get("label") or reminders.short_name(it.get("dst", ""))
+
+    def _nb_label(self, it: dict) -> str:
+        return self._pair_label(it).replace(" ", " ")  # «Disco USB» no se parte entre dos líneas
+
+    def _record_pair(self, job: engine.BackupJob, copied: bool):
+        """Copia completa (o análisis que encontró el destino al día): ya no hay nada pendiente."""
+        root = engine.volume_root(job.dst)
+        disk_id = engine.read_disk_id(root) or ""
+        label = engine.volume_info(root)[0] or engine.vol_name(root)
+        self.registry.record(job.src, job.dst, disk_id, engine.rel_to_volume(job.dst) if disk_id else "", label,
+                             job.scan_started_at or datetime.now(), job.patterns, job.excluded, copied=copied,
+                             only_existing=not copied)
+        self._save_registry()
+        self._refresh_reminders()
+
+    def _pair_status(self, it: dict) -> tuple[str, str]:
+        p = it.get("pending") or {}
+        ago = f"última copia {fmt_ago(it.get('last_ok'))}"
+        if not it.get("remind", True):
+            return f"{ago}  ·  sin aviso", C["faint"]
+        if p.get("missing"):
+            return f"origen no disponible  ·  {ago}", C["faint"]
+        changes = short_changes(p)
+        if changes:
+            return f"{changes}  ·  {ago}", C["warn"] if it.get("alert") else C["accent2"]
+        if p.get("checked"):
+            return f"al día  ·  {ago}", C["ok"]
+        return ago, C["muted"]
+
+    def _refresh_reminders(self):
+        if not hasattr(self, "remind_rows"):
+            return
+        enabled = self.remind_box.isChecked()
+        self.remind_combo.setEnabled(enabled)
+        while self.remind_rows.count():
+            w = self.remind_rows.takeAt(0).widget()
+            if w is not None:
+                w.hide()  # deleteLater llega en la siguiente vuelta del bucle: que no se pinte mientras
+                w.deleteLater()
+        items = sorted(self.registry.to_list(), key=lambda it: not it.get("alert"))
+        for it in items:
+            status, color = self._pair_status(it)
+            row = ReminderRow(it, status, color, self._is_current_pair(it))
+            row.menu_requested.connect(self._reminder_menu)
+            self.remind_rows.addWidget(row)
+        self.remind_empty.setVisible(not items)
+        self.remind_tray_hint.setVisible(enabled and not self.watch_box.isChecked())
+        checked = max(((it.get("pending") or {}).get("checked", "") for it in items), default="")
+        if self.rem_checker.busy:
+            self.remind_status.setText("Comprobando cambios…")
+        else:
+            self.remind_status.setText(f"Comprobado {fmt_ago(checked)}" if checked else "")
+        self.btn_remind_check.setEnabled(bool(items) and not self.rem_checker.busy)
+        self._refresh_remind_bar()
+
+    def _refresh_remind_bar(self):
+        alerts = self.registry.alerts() if self.remind_box.isChecked() else []
+        if self.tray:
+            tip = f"{APP_NAME} · {PILL[self._state][0].lower()}"
+            if alerts:
+                tip += f" · {len(alerts)} copia{'s' if len(alerts) != 1 else ''} con cambios sin copiar"
+            self.tray.setToolTip(tip)
+        if not alerts or self._state in RUNNING:
+            self._bar_target = None
+            self.remind_bar.conceal()
+            return
+        roots = self._disk_roots()
+        ready = [it for it in alerts if self._pair_dest(it, roots)]
+        it = alerts[0]
+        if len(alerts) == 1:
+            title = f"Tienes cambios sin copiar en {reminders.short_name(it['src'])}"
+            what = reminders.changes_text(it.get("pending") or {}, fmt_int, fmt_bytes)
+            text = (f"{what[:1].upper()}{what[1:]} desde tu última copia en {self._nb_label(it)}, "
+                    f"{fmt_ago(it.get('last_ok'))}.")
+        else:
+            title = f"Tienes cambios sin copiar en {len(alerts)} copias"
+            text = "  ·  ".join(f"{reminders.short_name(a['src'])} → {self._nb_label(a)}: "
+                                f"{short_changes(a.get('pending')) or 'con cambios'}" for a in alerts[:3])
+        if ready:
+            target = ready[0]
+            self._bar_target = target["id"]
+            text += f"  {self._nb_label(target)} está conectado."
+            self.remind_bar.go.setText("  Sincronizar ahora" if len(alerts) == 1
+                                       else f"  Sincronizar {reminders.short_name(target['src'])}")
+            self.remind_bar.go.show()
+        else:
+            self._bar_target = None
+            text += f"  Conecta {self._nb_label(it)} para copiarlos." if len(alerts) == 1 \
+                else "  Conecta el disco de copia para guardarlos."
+            self.remind_bar.go.hide()
+        self.remind_bar.title.setText(title)
+        self.remind_bar.text.setText(text)
+        self.remind_bar.close_btn.setToolTip(f"Ocultar el aviso: vuelve dentro de {days_text(self._remind_days())} "
+                                             "si sigue sin copia")
+        self.remind_bar.reveal()
+
+    def _reminder_tick(self, manual: bool = False):
+        if self.rem_checker.busy or self._state in RUNNING:
+            return
+        if manual:
+            items = self.registry.to_list()
+        elif self.remind_box.isChecked():
+            items = self.registry.due(datetime.now(), self._remind_days())
+        else:
+            items = []
+        if items and self.rem_checker.check(items, manual):
+            self._refresh_reminders()
+        elif not manual and hasattr(self, "remind_bar"):
+            self._refresh_remind_bar()  # «hace 4 días» → «hace 5 días», disco conectado o no
+
+    def _on_changes_checked(self, results: dict, manual: bool):
+        self.rem_checker.busy = False
+        now = datetime.now()
+        fresh = []
+        for pid, result in results.items():
+            if self.registry.apply_check(pid, result, now, self._remind_days(), self.remind_box.isChecked()) == "new":
+                fresh.append(self.registry.get(pid))
+        self._save_registry()
+        self._refresh_reminders()
+        if fresh and not manual:
+            self._notify_reminder(fresh)
+
+    def _notify_reminder(self, items: list[dict]):
+        """Notificación del sistema, solo si no estás mirando ya la ventana (ahí basta el aviso)."""
+        if self.isVisible() and not self.isMinimized() and self.isActiveWindow():
+            return
+        if len(items) == 1:
+            it = items[0]
+            p = it.get("pending") or {}
+            label = self._pair_label(it)
+            what = reminders.changes_text(p, fmt_int, fmt_bytes)
+            body = (f"{what[:1].upper()}{what[1:]} en {reminders.short_name(it['src'])} desde tu última copia "
+                    f"({fmt_ago(it.get('last_ok'))}). ")
+            body += f"{label} está conectado: pulsa para sincronizar." if self._pair_dest(it) \
+                else f"Conecta {label} para copiarlos."
+        else:
+            body = "  ·  ".join(f"{reminders.short_name(it['src'])}: {short_changes(it.get('pending'))}"
+                                for it in items[:3]) + ". Pulsa para verlos."
+        if self.tray and self.tray.isVisible():
+            self.tray.showMessage("Tienes cambios sin copiar", body, app_icon(), 20000)
+        else:
+            QApplication.alert(self, 0)
+
+    def _on_remind_toggled(self, on: bool):
+        self._save_settings()
+        self._refresh_reminders()
+        if on:
+            QTimer.singleShot(1500, self._reminder_tick)
+
+    def _on_remind_days_changed(self):
+        self._save_settings()
+        self._refresh_reminders()
+        QTimer.singleShot(1500, self._reminder_tick)
+
+    def _remind_go(self):
+        if self._bar_target:
+            self._sync_pair(self._bar_target)
+
+    def _remind_later(self):
+        until = datetime.now() + timedelta(days=1)
+        for it in self.registry.alerts():
+            self.registry.snooze(it["id"], until)
+        self._save_registry()
+        self._refresh_reminders()
+
+    def _remind_dismiss(self):
+        for it in self.registry.alerts():
+            self.registry.dismiss(it["id"])
+        self._save_registry()
+        self._refresh_reminders()
+
+    def _sync_pair(self, pid: str, start: bool = True):
+        """Pone esa copia como origen y destino actuales y, si se pide, la sincroniza."""
+        it = self.registry.get(pid)
+        if it is None or self._state in RUNNING:
+            return
+        dest = self._pair_dest(it)
+        if start and dest is None:
+            QMessageBox.information(self, APP_NAME, f"Conecta {self._pair_label(it)} para copiar "
+                                                    f"{reminders.short_name(it['src'])}.")
+            return
+        self.excl_map[self._excl_key()] = self.tree.excluded
+        if os.path.normcase(self.src_card.path()) != os.path.normcase(it["src"]):
+            self.src_card.set_path(it["src"])
+            self._on_src_changed()
+        target = dest or it.get("dst", "")
+        if target and os.path.normcase(self.dst_card.path()) != os.path.normcase(target):
+            self.dst_card.set_path(target)
+            self._on_dst_changed()
+        self._save_settings()
+        if start:
+            self._start(copy=True)
+        else:
+            self._refresh_reminders()
+
+    def _reminder_menu(self, pid: str, pos: QPoint):
+        it = self.registry.get(pid)
+        if it is None:
+            return
+        dest = self._pair_dest(it)
+        busy = self._state in RUNNING
+        menu = QMenu(self)
+        a_sync = menu.addAction(glyph_icon(G.PLAY, C["text"], 14),
+                                "Sincronizar ahora" if dest else f"Sincronizar  (conecta {self._pair_label(it)})")
+        a_sync.setEnabled(dest is not None and not busy)
+        a_use = None
+        if not self._is_current_pair(it):
+            a_use = menu.addAction(glyph_icon(G.SYNC, C["text"], 14), "Usar esta copia")
+            a_use.setEnabled(not busy)
+        a_check = menu.addAction(glyph_icon(G.SEARCH, C["text"], 14), "Comprobar cambios ahora")
+        a_check.setEnabled(not busy and not self.rem_checker.busy)
+        menu.addSeparator()
+        a_remind = menu.addAction(glyph_icon(G.BELL, C["text"], 14), "Avisarme de esta copia")
+        a_remind.setCheckable(True)
+        a_remind.setChecked(it.get("remind", True))
+        a_forget = menu.addAction(glyph_icon(G.CLOSE, C["text"], 14), "Quitar de la lista")
+        a_forget.setToolTip("Vuelve a aparecer si la sincronizas otra vez")
+        chosen = menu.exec(pos)
+        if chosen is None:
+            return
+        if chosen is a_sync:
+            self._sync_pair(pid)
+        elif chosen is a_use:
+            self._sync_pair(pid, start=False)
+        elif chosen is a_check:
+            if self.rem_checker.check([it], manual=True):
+                self._refresh_reminders()
+        elif chosen is a_remind:
+            self.registry.set_remind(pid, a_remind.isChecked())
+            self._save_registry()
+            self._refresh_reminders()
+        elif chosen is a_forget:
+            self.registry.remove(pid)
+            self._save_registry()
+            self._refresh_reminders()
 
     # ── guía rápida ──────────────────────────────────────────────────────
     def show_tour(self, animate: bool | None = None):
@@ -4536,6 +5146,7 @@ class MainWindow(QMainWindow):
             return
         self._sleeping = False
         self._log("Equipo reanudado")
+        QTimer.singleShot(120_000, self._reminder_tick)
         if self._sleep_paused:
             deadline = time.monotonic() + 180
             QTimer.singleShot(1500, lambda: self._resume_after_sleep(deadline))
@@ -4710,6 +5321,31 @@ def selftest() -> int:
                 guard.stop()
                 keepawake.BEAT_SECONDS = beat_s
             assert not guard.active
+
+            # recordatorios: cambios desde la última copia sin abrir archivos, y un solo aviso por periodo
+            rsrc = os.path.join(tmp, "rsrc")
+            os.makedirs(os.path.join(rsrc, "p", "node_modules"))
+            for i in range(5):
+                with open(os.path.join(rsrc, "p", f"a{i}.txt"), "w") as fh:
+                    fh.write("x")
+            time.sleep(1.1)
+            since = time.time()
+            time.sleep(1.1)
+            for name, text in (("a0.txt", "cambio"), ("nuevo.txt", "nuevo"), (os.path.join("node_modules", "x.js"), "-")):
+                with open(os.path.join(rsrc, "p", name), "w") as fh:
+                    fh.write(text)
+            res = engine.changes_since(rsrc, since, ["node_modules"], [])
+            assert res["files"] == 2 and not res["missing"], f"cambios pendientes: {res}"
+            assert engine.changes_since(os.path.join(tmp, "no-existe"), since)["missing"]
+            reg = reminders.Registry()
+            now = datetime.now()
+            pair = reg.record(rsrc, dst, "disco", "copia", "USB", now - timedelta(days=4), ["node_modules"], [])
+            assert reg.due(now, 3) and not reg.due(now, 7), "periodo del recordatorio"
+            assert reg.apply_check(pair["id"], res, now, 3) == "new", "aviso"
+            assert reg.apply_check(pair["id"], res, now, 3) == "alert" and not reg.due(now, 3), "aviso repetido"
+            reg.record(rsrc, dst, "disco", "copia", "USB", now, ["node_modules"], [])
+            assert not reg.alerts(), "la copia no quitó el aviso"
+            say(f"  recordatorios: {res['files']} cambios de {res['scanned']} archivos, un aviso por periodo")
         win = MainWindow()
         win._refresh_disk_status()
         say("  interfaz: construida")

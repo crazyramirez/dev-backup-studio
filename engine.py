@@ -320,6 +320,84 @@ def file_digest(path: str, rb: ReadBuffer, uncached: bool = False, stop: threadi
     return h.digest()
 
 
+# ── cambios pendientes de copiar (recordatorios) ────────────────────────────
+
+def _touched(st: os.stat_result) -> float:
+    """Última vez que se escribió o se creó el archivo. Un archivo copiado conserva su fecha de
+    modificación antigua, pero su fecha de creación es la de la copia."""
+    t = st.st_mtime
+    birth = getattr(st, "st_birthtime", None)
+    if birth:
+        t = max(t, birth)
+    elif IS_WIN:
+        t = max(t, st.st_ctime)  # en Windows (Python < 3.12) st_ctime es la fecha de creación
+    return t
+
+
+def changes_since(src: str, since: float, patterns=(), excluded=(), cancel: threading.Event | None = None,
+                  limit: int = 0) -> dict:
+    """Lo que ha cambiado en el origen después de `since` (segundos desde 1970) sin abrir ningún archivo.
+
+    Cuenta los archivos nuevos o modificados y las carpetas cuya fecha cambió, que es donde se notan
+    los borrados, renombrados y movidos. Respeta las mismas exclusiones que la copia. Con `limit` > 0
+    para en cuanto encuentra ese número de cambios.
+    """
+    out = {"files": 0, "bytes": 0, "dirs": 0, "scanned": 0, "newest": 0.0, "latest": "",
+           "missing": False, "complete": True}
+    try:
+        root_st = os.stat(lp(src))
+    except OSError:
+        out["missing"] = True
+        return out
+    if not stat.S_ISDIR(root_st.st_mode):
+        out["missing"] = True
+        return out
+    if _touched(root_st) > since:
+        out["dirs"] += 1
+    pats = sorted({p.strip().lower() for p in patterns if p.strip()})
+    excl = {norm_rel(p) for p in excluded}
+    stack = [""]
+    while stack:
+        if cancel is not None and cancel.is_set():
+            out["complete"] = False
+            break
+        rel = stack.pop()
+        try:
+            with os.scandir(lp(os.path.join(src, rel) if rel else src)) as it:
+                entries = list(it)
+        except OSError:
+            continue
+        for entry in entries:
+            name = entry.name
+            try:
+                if is_link(entry):
+                    continue
+                if entry.is_dir(follow_symlinks=False):
+                    child = os.path.join(rel, name) if rel else name
+                    if ((not rel and name.lower() in ROOT_SKIP) or match_rule(name, pats)
+                            or norm_rel(child) in excl):
+                        continue
+                    stack.append(child)
+                    if _touched(entry.stat(follow_symlinks=False)) > since:
+                        out["dirs"] += 1
+                elif entry.is_file(follow_symlinks=False) and not name.endswith(TMP_SUFFIX):
+                    out["scanned"] += 1
+                    st = entry.stat(follow_symlinks=False)
+                    t = _touched(st)
+                    if t > since:
+                        out["files"] += 1
+                        out["bytes"] += st.st_size
+                        if t > out["newest"]:
+                            out["newest"] = t
+                            out["latest"] = os.path.join(rel, name) if rel else name
+            except OSError:
+                continue
+        if limit and out["files"] + out["dirs"] >= limit:
+            out["complete"] = False
+            break
+    return out
+
+
 # ── identidad del disco e historial ─────────────────────────────────────────
 
 def read_disk_id(root: str) -> str | None:
@@ -616,6 +694,7 @@ class BackupJob:
         self.pruned: list[tuple[str, str]] = []
         self.active: dict[int, list] = {}  # hilo -> [ruta, tamaño, transferido]
         self.summary: dict = {}
+        self.scan_started_at: datetime | None = None
         self._reset_plan()
 
         self._lock = threading.Lock()
@@ -745,6 +824,8 @@ class BackupJob:
         s = self.stats
         self.phase = "scanning"
         s.scan_start = time.perf_counter()
+        # lo que cambie en el origen a partir de aquí ya no entra en esta copia (recordatorios)
+        self.scan_started_at = datetime.now()
         self._open_index()
         stack = [""]
         while stack:

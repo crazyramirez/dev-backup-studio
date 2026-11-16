@@ -59,6 +59,10 @@ primera vez:
   «Copia de seguridad en curso», y en macOS lo pide la propia app. Si el equipo se suspende igualmente
   o el disco se desconecta, la copia espera y sigue sola sin dar nada por fallido. Se desactiva en
   *Energía*.
+- **Te recuerda copiar.** Apunta cada copia que haces (origen y disco) y, si pasan los días que elijas
+  con cambios sin copiar, te avisa una vez por periodo: «Tienes cambios sin copiar en DEV · 37 archivos
+  desde tu última copia, hace 4 días». Comprueba sin abrir archivos; si no has tocado nada, no avisa.
+  Con el disco conectado, se sincroniza desde el propio aviso.
 - **Guía rápida.** La primera vez enseña en cinco pasos, con capturas de la propia app, cómo dejarla
   lista. Se vuelve a abrir con el botón *Guía*, con F1 (⌘? en macOS) o desde el icono de la bandeja.
 - **Se actualiza sola, preguntando.** Comprueba en GitHub si hay una versión nueva (como mucho una vez
@@ -95,8 +99,8 @@ cambiado. Cada 7 días, o si cambia la configuración, se lee el destino entero.
 - **En el disco de copia**: carpeta oculta `.devbackup/` en la raíz con la marca del disco
   (`disco.json`), el historial de copias, las versiones y `latido`, el archivo diminuto que mantiene
   despierto el disco.
-- **En el equipo**: ajustes, índices y registros en `%APPDATA%\DEV Backup Studio` (Windows) o
-  `~/Library/Application Support/DEV Backup Studio` (macOS).
+- **En el equipo**: ajustes (con las copias habituales de los recordatorios), índices y registros en
+  `%APPDATA%\DEV Backup Studio` (Windows) o `~/Library/Application Support/DEV Backup Studio` (macOS).
 
 ## Ejecutar desde el código
 
@@ -120,8 +124,8 @@ sección en `CHANGELOG.md`, de donde salen las notas de la versión), GitHub Act
 4. publica la versión con el instalador y el `.dmg`.
 
 ```bash
-git tag v1.5.0
-git push origin v1.5.0
+git tag v1.6.0
+git push origin v1.6.0
 ```
 
 Las ilustraciones de la guía rápida (`assets/tour/`) y `docs/guia.png` se generan con capturas reales

@@ -99,7 +99,17 @@ def capture() -> None:
         else real_info(root)
 
     import backup_studio as bs
+    from datetime import datetime, timedelta
+
     from PyQt6.QtCore import QPoint, QRect, Qt, QTimer
+
+    offset = [timedelta(0)]
+
+    class Clock(datetime):  # reloj de la app adelantable, para que salte el recordatorio
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz) + offset[0]
+    bs.datetime = Clock
     from PyQt6.QtGui import QFont, QPixmap
 
     _rmtree(WORK)
@@ -261,6 +271,25 @@ def capture() -> None:
     after(200, wait_state("done", "cancelled", "failed"))
     after(800, lambda: (win.seg_buttons[bs.PAGE_PROGRESS].click(), None)[1])
     after(500, lambda: grab("summary", win.summary_card))
+
+    def remind_due():
+        for i in range(6):
+            with open(os.path.join(src, "Tienda Online", "src", "pages", f"pedido_{i}.tsx"), "w") as fh:
+                fh.write("export default {}\n" * 40)
+        offset[0] = timedelta(days=4, hours=2)
+        win.seg_buttons[bs.PAGE_TREE].click()
+        win._reminder_tick()
+
+    def remind_grab():
+        if win.rem_checker.busy or not win.remind_bar.isVisible() or win.remind_bar._anim.state().name == "Running":
+            return False
+        bar, card = win.remind_bar, win.remind_box.parentWidget()
+        grab("remind_bar", bar, rects={"go": rect_in(bar.go, bar)})
+        grab("remind_card", card)
+        return None
+
+    after(300, remind_due)
+    after(900, remind_grab)
 
     def tour_open():
         win.settings.setValue("tour", 0)
@@ -500,13 +529,18 @@ def compose() -> None:
                         radius=12, strong=True)
     save(img, p, "4-sincroniza", [foot_at("scan", 4), foot_at("start", 4)])
 
-    # 5 · conectar el disco: vigilancia + diálogo al enchufarlo
+    # 5 · conectar el disco y recordatorios: el aviso arriba, la tarjeta y el diálogo al enchufar el disco
     img, p = canvas()
-    _r, disk_at = panel(p, "disk", 30, 34, scale=0.96)
+    bar = meta["remind_bar"]
+    bsc = 0.84
+    _r, bar_at = panel(p, "remind_bar", (W - bar["w"] * bsc) / 2, 20, scale=bsc, radius=12, strong=True)
+    card = meta["remind_card"]
+    csc = 0.72
+    panel(p, "remind_card", 30, 104, scale=csc, crop=(0, 0, card["w"], min(card["h"], 380)))
     dlg = meta["dialog"]
-    dsc = 0.76
-    _r, dlg_at = panel(p, "dialog", W - dlg["w"] * dsc - 28, H - dlg["h"] * dsc - 30, scale=dsc, strong=True)
-    save(img, p, "5-conecta", [disk_at("watch", 6), dlg_at("sync", 5)])
+    dsc = 0.66
+    _r, dlg_at = panel(p, "dialog", W - dlg["w"] * dsc - 28, H - dlg["h"] * dsc - 18, scale=dsc, strong=True)
+    save(img, p, "5-conecta", [bar_at("go", 4), dlg_at("sync", 4)])
 
     with open(os.path.join(OUT, "tour.json"), "w", encoding="utf-8") as fh:
         json.dump({"size": [W, H], "spots": spots}, fh, indent=1, ensure_ascii=False)

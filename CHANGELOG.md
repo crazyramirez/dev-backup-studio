@@ -1,5 +1,20 @@
 # Novedades
 
+## 1.6.0
+
+- **Recordatorios de copia.** Si llevas días sin copiar y has cambiado algo desde la última copia, la
+  app te lo recuerda: «Tienes cambios sin copiar en DEV · 37 archivos nuevos o modificados desde tu
+  última copia en BACKUP_4, hace 4 días». Si no has tocado nada, no dice nada.
+- **Copias habituales.** Cada sincronización completa queda apuntada con su origen y su disco (aunque
+  cambie de letra), así que se vigilan a la vez todas las que haces: carpetas distintas, discos
+  distintos. Las copias hechas con versiones anteriores se recuperan de los registros.
+- Eliges cada cuánto (1 día, 2, 3, 1 semana o 2 semanas) o lo desactivas, en general o copia a copia.
+- **Sin agobiar.** Comprueba en segundo plano, sin abrir archivos y solo cuando toca; avisa una vez por
+  periodo; con la ventana delante basta un aviso dentro de la app, y si no, una notificación del
+  sistema. *Recordar mañana* lo aplaza un día y cerrarlo lo deja hasta el siguiente periodo.
+- Si el disco está conectado, *Sincronizar ahora* desde el propio aviso; si no, te dice cuál conectar.
+  Desde la lista se puede cambiar a otra copia habitual, comprobarla al momento o quitarla.
+
 ## 1.5.0
 
 - **Guía rápida.** La primera vez que abres la app aparece un visor de cinco pasos con capturas reales:
