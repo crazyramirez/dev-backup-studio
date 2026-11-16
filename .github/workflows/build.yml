@@ -32,6 +32,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller pillow
 
+      - name: Traducciones completas
+        run: python -X utf8 tools/i18n_extract.py --check
+
       - name: Versión
         id: version
         shell: bash
@@ -50,7 +53,7 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --windowed --name "DEV Backup Studio" \
             --icon assets/icon.ico --version-file build/version_info.txt \
-            --add-data "assets/tour:assets/tour" backup_studio.py
+            --add-data "assets/tour:assets/tour" --add-data "locales:locales" backup_studio.py
 
       - name: Autoprueba de la app (Windows)
         if: runner.os == 'Windows'
@@ -99,7 +102,7 @@ jobs:
           version="${{ steps.version.outputs.version }}"
           pyinstaller --noconfirm --clean --windowed --name "DEV Backup Studio" \
             --icon assets/icon.png --osx-bundle-identifier com.crazyramirez.devbackupstudio \
-            --add-data "assets/tour:assets/tour" backup_studio.py
+            --add-data "assets/tour:assets/tour" --add-data "locales:locales" backup_studio.py
           plist="dist/DEV Backup Studio.app/Contents/Info.plist"
           plutil -replace CFBundleShortVersionString -string "$version" "$plist"
           plutil -replace CFBundleVersion -string "$version" "$plist"

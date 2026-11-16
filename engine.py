@@ -49,6 +49,8 @@ import sys
 import threading
 import time
 import uuid
+
+from i18n import N_, _, _n
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -81,9 +83,9 @@ DISK_SETTLE = 3.0
 
 MODE_MIRROR = "mirror"
 MODE_UPDATE = "update"
-MODES = {
-    MODE_MIRROR: "Sincronizar (espejo con versiones)",
-    MODE_UPDATE: "Solo añadir y actualizar",
+MODES = {  # se traducen al enseñarlos: _(MODES[modo])
+    MODE_MIRROR: N_("Sincronizar (espejo con versiones)"),
+    MODE_UPDATE: N_("Solo añadir y actualizar"),
 }
 LEGACY_MODES = {"same_size": MODE_MIRROR, "always": MODE_MIRROR, "newer": MODE_MIRROR}
 
@@ -778,33 +780,35 @@ class BackupJob:
         s = self.stats
         s.fast = False
         if not self.index_path:
-            self.index_note = "Lectura completa del destino"
+            self.index_note = _("Lectura completa del destino")
             return
         last_full = 0.0
         if self.force_full:
-            self.index_note = "Revisión completa del destino (pedida a mano)"
+            self.index_note = _("Revisión completa del destino (pedida a mano)")
         elif not os.path.exists(self.index_path):
-            self.index_note = "Revisión completa del destino (primera vez con este disco)"
+            self.index_note = _("Revisión completa del destino (primera vez con este disco)")
         elif not os.path.isdir(lp(self.dst)):
-            self.index_note = "Revisión completa del destino (la carpeta no existe)"
+            self.index_note = _("Revisión completa del destino (la carpeta no existe)")
         else:
             try:
                 reader = IndexReader(self.index_path)
                 last_full = float(reader.meta.get("last_full", 0))
                 if reader.meta.get("signature") != self._index_signature():
-                    self.index_note = "Revisión completa del destino (cambió la configuración)"
+                    self.index_note = _("Revisión completa del destino (cambió la configuración)")
                     reader.close()
                 elif time.time() - last_full > FULL_CHECK_DAYS * 86400:
-                    self.index_note = f"Revisión completa del destino (la última fue hace más de {FULL_CHECK_DAYS} días)"
+                    self.index_note = _("Revisión completa del destino (la última fue hace más de {days} "
+                                        "días)").format(days=FULL_CHECK_DAYS)
                     reader.close()
                 else:
                     self._reader = reader
                     s.fast = True
                     days = (time.time() - last_full) / 86400
-                    self.index_note = (f"Análisis rápido con el índice de la última copia · revisión completa "
-                                       f"hace {days:.0f} día{'s' if round(days) != 1 else ''}")
+                    self.index_note = _n("Análisis rápido con el índice de la última copia · revisión completa "
+                                         "hace {n} día", "Análisis rápido con el índice de la última copia · "
+                                         "revisión completa hace {n} días", round(days)).format(n=round(days))
             except (sqlite3.Error, ValueError):
-                self.index_note = "Revisión completa del destino (índice dañado)"
+                self.index_note = _("Revisión completa del destino (índice dañado)")
         self._last_full = last_full if s.fast else time.time()
         try:
             self._writer = IndexWriter(self.index_path)
@@ -865,13 +869,13 @@ class BackupJob:
                         rule = match_rule(name, self.patterns)
                         if not rel and name.lower() in ROOT_SKIP:
                             # papelera, puntos de restauración, índices de Spotlight…: no son datos tuyos
-                            self.pruned.append((child, "carpeta del sistema"))
+                            self.pruned.append((child, _("carpeta del sistema")))
                         elif rule:
                             s.excluded_rule += 1
-                            self.pruned.append((child, f"regla «{rule}»"))
+                            self.pruned.append((child, _("regla «{rule}»").format(rule=rule)))
                         elif norm_rel(child) in self.excluded:
                             s.excluded_manual += 1
-                            self.pruned.append((child, "excluida a mano"))
+                            self.pruned.append((child, _("excluida a mano")))
                         else:
                             subdirs.append(child)
                     elif entry.is_file(follow_symlinks=False):
@@ -918,7 +922,7 @@ class BackupJob:
         return True
 
     def _same(self, size: int, mtime: int, have: tuple) -> bool:
-        _, dsize, dmtime = have
+        _key, dsize, dmtime = have
         if dsize != size:
             return False
         diff = abs(dmtime - mtime)
@@ -1350,8 +1354,8 @@ class BackupJob:
                 self.stats.bytes_done -= slot[2]
             slot[2] = 0
             if attempt == 2:
-                raise OSError(0, "la copia no coincide con el original tras dos intentos "
-                                 "(¿el archivo cambia mientras se copia o el disco da errores?)")
+                raise OSError(0, _("la copia no coincide con el original tras dos intentos "
+                                   "(¿el archivo cambia mientras se copia o el disco da errores?)"))
             with self._lock:
                 self.stats.verify_retries += 1
         if kind == "c":
@@ -1360,7 +1364,7 @@ class BackupJob:
             except FileNotFoundError:
                 pass
             except OSError as exc:
-                self._error(dst, exc, "no se pudo guardar la versión anterior; se sobrescribe")
+                self._error(dst, exc, _("no se pudo guardar la versión anterior; se sobrescribe"))
                 _make_writable(ldst)
         try:
             os.replace(ltmp, ldst)
@@ -1577,8 +1581,8 @@ class BackupJob:
                 digest = self._copy_file(src, dst, "n", callback, buf, slot, rb)
                 with self._lock:
                     self.stats.scrub_repaired += 1
-                self._error(dst, OSError(0, "faltaba en el destino (¿borrado a mano?); copiado de nuevo "
-                                            "desde el original"))
+                self._error(dst, OSError(0, _("faltaba en el destino (¿borrado a mano?); copiado de nuevo "
+                                              "desde el original")))
                 return digest or file_digest(src, rb, stop=self._cancel)
             original = file_digest(src, rb, stop=self._scrub_stop)
             with self._lock:
@@ -1590,16 +1594,16 @@ class BackupJob:
                 # el destino está como se copió; el que ha cambiado es el original
                 with self._lock:
                     self.stats.scrub_alerts += 1
-                self._error(src, OSError(0, "el original ha cambiado sin cambiar su fecha ni su tamaño "
-                                            "(¿daño en el disco de origen?). La copia buena sigue en el "
-                                            "destino y no se ha tocado"))
+                self._error(src, OSError(0, _("el original ha cambiado sin cambiar su fecha ni su tamaño "
+                                              "(¿daño en el disco de origen?). La copia buena sigue en el "
+                                              "destino y no se ha tocado")))
                 return stored
             # el destino no coincide con el original: se repara (lo dañado pasa a versiones)
             digest = self._copy_file(src, dst, "c", callback, buf, slot, rb)
             with self._lock:
                 self.stats.scrub_repaired += 1
-            self._error(dst, OSError(0, "contenido dañado en el destino; reparado desde el original "
-                                        "(la versión dañada está en versiones)"))
+            self._error(dst, OSError(0, _("contenido dañado en el destino; reparado desde el original "
+                                          "(la versión dañada está en versiones)")))
             return digest or original
         except _Cancelled:
             return None
@@ -1608,7 +1612,7 @@ class BackupJob:
                 self.active.pop(tid, None)
                 return self._scrub_one(rel_dir, name, size, mtime, stored, rb, callback, buf, slot, tid)
             if not self._cancel.is_set():
-                self._error(dst, exc, "revisión de integridad")
+                self._error(dst, exc, _("revisión de integridad"))
             return None
         finally:
             self.active.pop(tid, None)
@@ -1639,7 +1643,7 @@ class BackupJob:
         msg = getattr(exc, "strerror", None) or str(exc)
         winerr = getattr(exc, "winerror", None)
         if winerr:
-            msg = f"{msg} (código {winerr})"
+            msg = _("{msg} (código {code})").format(msg=msg, code=winerr)
         if context:
             msg = f"{context}: {msg}"
         with self._lock:

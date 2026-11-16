@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 from datetime import datetime, timedelta
+
+import i18n
+from i18n import _, _n
 
 RECHECK = timedelta(hours=6)  # sin cambios u origen desconectado: volver a mirar al cabo de 6 h
 MAX_COPIES = 24
-OK_RESULTS = {"Al día", "Completado"}  # «Resultado» de los registros de copias terminadas
+OK_RESULTS = {"Al día", "Completado"}  # «Resultado» de los registros de copias terminadas (en español)
 
 
 def pair_id(src: str, disk_id: str, dst_rel: str, dst: str) -> str:
@@ -59,13 +61,16 @@ def has_changes(result: dict | None) -> bool:
 def changes_text(result: dict, fmt_int=str, fmt_bytes=lambda n: f"{n} B") -> str:
     """«37 archivos nuevos o modificados (1,2 GB)» o, si solo cambiaron carpetas, borrados y movidos."""
     files, dirs = result.get("files", 0), result.get("dirs", 0)
-    more = "" if result.get("complete", True) else "más de "
     if files:
-        noun = "archivo nuevo o modificado" if files == 1 and not more else "archivos nuevos o modificados"
-        return f"{more}{fmt_int(files)} {noun} ({fmt_bytes(result.get('bytes', 0))})"
+        size = fmt_bytes(result.get("bytes", 0))
+        if not result.get("complete", True):
+            return _("más de {n} archivos nuevos o modificados ({size})").format(n=fmt_int(files), size=size)
+        return _n("{n} archivo nuevo o modificado ({size})", "{n} archivos nuevos o modificados ({size})",
+                  files).format(n=fmt_int(files), size=size)
     if dirs:
-        return f"archivos borrados, movidos o renombrados en {fmt_int(dirs)} carpeta{'s' if dirs != 1 else ''}"
-    return "sin cambios"
+        return _n("archivos borrados, movidos o renombrados en {n} carpeta",
+                  "archivos borrados, movidos o renombrados en {n} carpetas", dirs).format(n=fmt_int(dirs))
+    return _("sin cambios")
 
 
 class Registry:
@@ -226,27 +231,36 @@ class Registry:
 
 # ── copias anteriores a los recordatorios: se recuperan de los registros ─────
 
-_LINE = re.compile(r"^(Inicio|Resultado|Origen|Destino|Reglas):\s+(.*)$")
+_KEYS = ("Inicio", "Resultado", "Origen", "Destino", "Reglas")
+
+
+def _labels() -> dict[str, str]:
+    """Etiqueta del registro en cualquier idioma de la app → clave en español."""
+    return {t.strip(): key for key in _KEYS for t in i18n.all_translations(key)}
 
 
 def parse_log(path: str) -> dict | None:
-    """Cabecera de un registro de copia («copia_*.log»): inicio, resultado, origen, destino y reglas."""
+    """Cabecera de un registro de copia («copia_*.log»): inicio, resultado, origen, destino y reglas.
+    Vale para registros escritos en cualquiera de los idiomas de la app."""
+    labels = _labels()
     found: dict[str, str] = {}
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
-            for _ in range(14):
-                m = _LINE.match(fh.readline().rstrip("\n"))
-                if m:
-                    found[m[1]] = m[2].strip()
+            for _i in range(16):
+                label, sep, value = fh.readline().rstrip("\n").partition(":")
+                key = labels.get(label.strip())
+                if sep and key and key not in found:
+                    found[key] = value.strip()
     except OSError:
         return None
     started = parse_time(found.get("Inicio", "").replace(" ", "T"))
     if not started or not found.get("Origen") or not found.get("Destino"):
         return None
     rules = found.get("Reglas", "")
-    return {"inicio": started, "ok": found.get("Resultado") in OK_RESULTS, "origen": found["Origen"],
-            "destino": found["Destino"],
-            "reglas": [] if rules in ("", "ninguna") else [r.strip() for r in rules.split(",") if r.strip()]}
+    ok = found.get("Resultado") in OK_RESULTS | i18n.all_translations("Al día")
+    return {"inicio": started, "ok": ok, "origen": found["Origen"], "destino": found["Destino"],
+            "reglas": [] if rules in {""} | i18n.all_translations("ninguna")
+            else [r.strip() for r in rules.split(",") if r.strip()]}
 
 
 def seed_from_logs(log_dir: str, resolve) -> Registry:

@@ -25,6 +25,8 @@ import sys
 import tempfile
 import threading
 import urllib.request
+
+from i18n import _
 from dataclasses import dataclass
 
 REPO = "crazyramirez/dev-backup-studio"
@@ -117,7 +119,7 @@ def download(rel: Release, current: str, progress=None, stop: threading.Event | 
         total = int(resp.headers.get("Content-Length") or rel.asset_size or 0)
         while True:
             if stop is not None and stop.is_set():
-                raise InterruptedError("descarga cancelada")
+                raise InterruptedError(_("descarga cancelada"))
             chunk = resp.read(256 * 1024)
             if not chunk:
                 break
@@ -128,7 +130,7 @@ def download(rel: Release, current: str, progress=None, stop: threading.Event | 
                 progress(done, total)
     if rel.sha256 and h.hexdigest() != rel.sha256:
         os.remove(part)
-        raise ValueError("el archivo descargado no coincide con el SHA-256 publicado en GitHub")
+        raise ValueError(_("el archivo descargado no coincide con el SHA-256 publicado en GitHub"))
     os.replace(part, target)
     return target
 
@@ -172,4 +174,4 @@ open {q_dmg}
             fh.write(script)
         subprocess.Popen(["/bin/sh", script_path], start_new_session=True, close_fds=True)
         return
-    raise OSError("actualización automática no disponible en este sistema")
+    raise OSError(_("actualización automática no disponible en este sistema"))

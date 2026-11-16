@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from PyQt6.QtCore import (QAbstractNativeEventFilter, QAbstractTableModel, QByteArray, QEasingCurve, QEvent,
-                          QModelIndex, QObject, QPoint, QPointF, QRect, QRectF, QSettings, QSize, Qt, QTimer,
+                          QLibraryInfo, QModelIndex, QObject, QPoint, QPointF, QProcess, QRect, QRectF, QSettings, QSize, Qt, QTimer, QTranslator,
                           QUrl, QVariantAnimation, pyqtSignal)
 from PyQt6.QtGui import (QBrush, QColor, QConicalGradient, QDesktopServices, QFont,
                          QFontDatabase, QFontMetricsF, QIcon, QImage, QKeySequence, QLinearGradient,
@@ -45,12 +45,14 @@ from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QApplication, Q
                              QWidget)
 
 import engine
+import i18n
 import keepawake
 import reminders
 import updater
+from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.8.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -71,6 +73,19 @@ def _data_dir() -> str:
 DATA_DIR = _data_dir()
 LOG_DIR = os.path.join(DATA_DIR, "logs")
 
+
+def _language_setting() -> str:
+    """Idioma guardado en los ajustes: «auto» (el del sistema) o un código (es, en, fr, it, zh, ja)."""
+    try:
+        value = QSettings(os.path.join(DATA_DIR, "settings.ini"), QSettings.Format.IniFormat).value("language", "auto")
+    except Exception:  # noqa: BLE001
+        value = "auto"
+    return value if value in i18n.LANGS else "auto"
+
+
+LANGUAGE = _language_setting()
+i18n.set_language(i18n.resolve(LANGUAGE))  # antes de las constantes con textos traducidos
+
 DEFAULT_SRC = r"D:\DEV" if IS_WIN else os.path.expanduser("~/DEV")
 DEFAULT_DST = r"E:\DEV" if IS_WIN else ""
 PRESET_RULES = ["node_modules", "__pycache__", ".venv", "venv", ".next", ".nuxt", ".turbo",
@@ -83,7 +98,7 @@ DEFAULT_RULES = {"node_modules"}
 FILE_COST = 1024 * 1024
 SIDEBAR_W = 428
 TILE_MIN = 146  # ancho mínimo de una casilla de datos (Progreso, resumen)
-DEFAULT_FOLDED = ["modo", "integridad", "energia", "actualizaciones"]  # tarjetas plegadas al empezar
+DEFAULT_FOLDED = ["modo", "integridad", "energia", "idioma", "actualizaciones"]  # tarjetas plegadas al empezar
 DEFAULT_THREADS = 16
 
 C = {
@@ -149,6 +164,8 @@ ICONS = {
     "chevdown": _p("M7 10l5 5 5-5"),
     "chevright": _p("M10 7l5 5-5 5"),
     "arrowdown": _p("M12 5v14M6.5 13.5L12 19l5.5-5.5"),
+    "globe": '<circle cx="12" cy="12" r="9"/>' + _p("M3.2 12h17.6")
+             + _p("M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z"),
 }
 
 
@@ -160,17 +177,18 @@ class G:
     DOC, COPY, TREE, SYNC, TIMER = "doc", "copy", "tree", "sync", "timer"
     DONE, INFO, CLOCK, SPEED, DRIVE, FILTER = "done", "info", "clock", "speed", "drive", "filter"
     SHIELD, DOWNLOAD, POWER = "shield", "download", "power"
-    ARROW, BACK, HELP, SPARK, BELL, MORE = "arrow", "back", "help", "spark", "bell", "more"
+    ARROW, BACK, HELP, SPARK, BELL, MORE, GLOBE = "arrow", "back", "help", "spark", "bell", "more", "globe"
 
 
 # ── formato (es-ES) ──────────────────────────────────────────────────────────
 
 def fmt_int(n) -> str:
-    return f"{int(n):,}".replace(",", ".")
+    return f"{int(n):,}".replace(",", i18n.numbers()[0])
 
 
 def fmt_dec(x: float, d: int = 1) -> str:
-    return f"{x:,.{d}f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+    thousands, decimal, _pct = i18n.numbers()
+    return f"{x:,.{d}f}".replace(",", "\x00").replace(".", decimal).replace("\x00", thousands)
 
 
 def fmt_bytes(n) -> str:
@@ -195,7 +213,7 @@ def fmt_clock(sec: float, ms: bool = False) -> str:
     if ms:
         whole = int(s)
         millis = min(999, int(round((s - whole) * 1000)))
-        return f"{int(h):02d}:{int(m):02d}:{whole:02d},{millis:03d}"
+        return f"{int(h):02d}:{int(m):02d}:{whole:02d}{i18n.numbers()[1]}{millis:03d}"
     return f"{int(h):02d}:{int(m):02d}:{int(s):02d}"
 
 
@@ -211,7 +229,7 @@ def fmt_human(sec: float) -> str:
 
 
 def pct(x: float) -> str:
-    return f"{fmt_dec(x * 100, 1)} %"
+    return f"{fmt_dec(x * 100, 1)}{i18n.numbers()[2]}%"
 
 
 def rgba(color: str, alpha: int) -> str:
@@ -234,6 +252,10 @@ def pick_fonts() -> None:
         display=pick("Segoe UI Variable Display", "Segoe UI", "SF Pro Display", "Inter", system),
         mono=pick("Cascadia Mono", "Cascadia Code", "SF Mono", "Menlo", "Consolas", fixed),
     )
+    cjk = {"zh": ("Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC"),
+           "ja": ("Yu Gothic UI", "Meiryo UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP")}
+    if i18n.current() in cjk:  # letra pensada para los caracteres chinos o japoneses
+        FONT["ui"] = FONT["display"] = pick(*cjk[i18n.current()], FONT["ui"])
 
 
 def _render_svg(svg: str, painter: QPainter, rect: QRectF) -> None:
@@ -526,6 +548,22 @@ def dark_palette() -> QPalette:
 
 # ── integración con el sistema ───────────────────────────────────────────────
 
+def install_qt_translations(app: QApplication) -> bool:
+    """Botones y diálogos estándar de Qt (Sí/No, Cancelar…) en el idioma de la app."""
+    lang = i18n.current()
+    if lang == "en":
+        return True
+    name = {"zh": "zh_CN"}.get(lang, lang)
+    translator = QTranslator(app)
+    for folder in (QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath),
+                   os.path.join(getattr(sys, "_MEIPASS", APP_DIR), "PyQt6", "Qt6", "translations")):
+        if translator.load(f"qtbase_{name}", folder):
+            app.installTranslator(translator)
+            app._qt_translator = translator  # que no lo recoja el recolector de basura
+            return True
+    return False
+
+
 class App(QApplication):
     """Deja que la ventana decida si se puede salir cuando lo pide el sistema."""
     quit_guard = None  # función que devuelve True si se puede salir
@@ -759,13 +797,42 @@ class Tile(QFrame):
         lay.addWidget(self.value)
         lay.addWidget(self.sub)
         self._color = None
+        self._px = self.VALUE_PX
+
+    VALUE_PX = 23  # tamaño de la cifra (QSS QLabel#tileValue)
 
     def set(self, value: str, sub: str = "", color: str | None = None) -> None:
         self.value.setText(value)
         self.sub.setText(sub)
         if color != self._color:
             self._color = color
-            self.value.setStyleSheet(f"color:{color};" if color else "")
+            self._style()
+        self._fit()
+
+    def resizeEvent(self, e):  # noqa: N802
+        super().resizeEvent(e)
+        self._fit()
+
+    def _fit(self) -> None:
+        """La cifra se encoge lo justo para caber (letras más anchas, como la china, o cifras largas)."""
+        avail = self.width() - 32
+        if avail <= 0:
+            return
+        f = QFont(FONT["display"])
+        f.setWeight(QFont.Weight.DemiBold)
+        px = self.VALUE_PX
+        while px > 15:
+            f.setPixelSize(px)
+            if QFontMetricsF(f).horizontalAdvance(self.value.text()) <= avail:
+                break
+            px -= 1
+        if px != self._px:
+            self._px = px
+            self._style()
+
+    def _style(self) -> None:
+        css = "" if self._px == self.VALUE_PX else f"font-size:{self._px}px;"
+        self.value.setStyleSheet(css + (f"color:{self._color};" if self._color else ""))
 
 
 class Banner(QFrame):
@@ -828,7 +895,7 @@ class Ring(QWidget):
         self._target = 0.0
         self._spin = 0.0
         self._busy = False
-        self.big, self.small, self.caption = "0 %", "", "PREPARADO"
+        self.big, self.small, self.caption = pct(0), "", _("PREPARADO")
         self._anim = QVariantAnimation(self)
         self._anim.setDuration(500)
         self._anim.setEasingCurve(QEasingCurve(QEasingCurve.Type.OutCubic))
@@ -874,7 +941,7 @@ class Ring(QWidget):
             self.big, self.small, self.caption = big, small, caption
             self.update()
 
-    def paintEvent(self, _):  # noqa: N802
+    def paintEvent(self, _e):  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         side = min(self.width(), self.height()) - 30
@@ -953,7 +1020,7 @@ class SpeedChart(QWidget):
         self.data.clear()
         self.update()
 
-    def paintEvent(self, _):  # noqa: N802
+    def paintEvent(self, _e):  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -987,7 +1054,7 @@ class SpeedChart(QWidget):
             f.setPixelSize(12)
             p.setFont(f)
             p.setPen(QColor(C["faint"]))
-            p.drawText(area, Qt.AlignmentFlag.AlignCenter, "La gráfica aparece al empezar la copia")
+            p.drawText(area, Qt.AlignmentFlag.AlignCenter, _("La gráfica aparece al empezar la copia"))
             return
 
         # al principio la gráfica ocupa todo el ancho; a partir de 30 s se desplaza
@@ -1022,7 +1089,7 @@ class SpeedChart(QWidget):
         f.setPixelSize(11)
         p.setFont(f)
         p.setPen(QColor(C["muted"]))
-        p.drawText(QRectF(area.left() + 4, py - 17, 200, 15), Qt.AlignmentFlag.AlignLeft, f"pico {fmt_speed(peak)}")
+        p.drawText(QRectF(area.left() + 4, py - 17, 200, 15), Qt.AlignmentFlag.AlignLeft, _("pico {speed}").format(speed=fmt_speed(peak)))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(C["accent2"]))
         p.drawEllipse(pts[-1], 3.5, 3.5)
@@ -1039,7 +1106,7 @@ class ActiveRow(QWidget):
         tag = QLabel(f"{index}")
         tag.setObjectName("faint")
         tag.setFixedWidth(14)
-        self.name = ElideLabel("en espera…")
+        self.name = ElideLabel(_("en espera…"))
         self.name.setObjectName("mono")
         self.size = QLabel("")
         self.size.setObjectName("faint")
@@ -1052,7 +1119,7 @@ class ActiveRow(QWidget):
 
     def show_slot(self, slot, root: str) -> None:
         if not slot or not slot[0]:
-            self.name.setText("en espera…")
+            self.name.setText(_("en espera…"))
             self.size.setText("")
             self.bar.setValue(0)
             return
@@ -1071,7 +1138,7 @@ class FolderTree(QTreeWidget):
 
     def __init__(self):
         super().__init__()
-        self.setHeaderLabels(["CARPETA", "ESTADO"])
+        self.setHeaderLabels([_("CARPETA"), _("ESTADO")])
         self.setUniformRowHeights(True)
         self.setAnimated(True)
         self.setIndentation(20)
@@ -1151,11 +1218,11 @@ class FolderTree(QTreeWidget):
             if rule:
                 item.setFlags(base)
                 item.setCheckState(0, Qt.CheckState.Unchecked)
-                status, color = f"Regla «{rule}»", C["warn"]
+                status, color = _("Regla «{rule}»").format(rule=rule), C["warn"]
             else:
                 item.setFlags(base | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(0, Qt.CheckState.Unchecked if manual else Qt.CheckState.Checked)
-                status, color = ("Excluida", C["err"]) if manual else ("", C["text"])
+                status, color = (_("Excluida"), C["err"]) if manual else ("", C["text"])
             off = bool(rule or manual)
             item.setIcon(0, self._icon_off if off else self._icon_on)
             item.setForeground(0, QColor(C["faint"] if off else C["text"]))
@@ -1221,11 +1288,11 @@ class Toggle(QAbstractButton):
         self._pos = float(v)
         self.update()
 
-    def enterEvent(self, _):  # noqa: N802
+    def enterEvent(self, _e):  # noqa: N802
         self._hover = True
         self.update()
 
-    def leaveEvent(self, _):  # noqa: N802
+    def leaveEvent(self, _e):  # noqa: N802
         self._hover = False
         self.update()
 
@@ -1237,7 +1304,7 @@ class Toggle(QAbstractButton):
         self._kbd = False
         super().focusOutEvent(e)
 
-    def paintEvent(self, _):  # noqa: N802
+    def paintEvent(self, _e):  # noqa: N802
         if self._anim.state() != QVariantAnimation.State.Running:
             self._pos = 1.0 if self.isChecked() else 0.0  # también tras setChecked con las señales bloqueadas
         p = QPainter(self)
@@ -1351,7 +1418,7 @@ class Section(QFrame):
         self._anim.finished.connect(self._anim_done)
         if collapsible:
             self.head.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.head.setToolTip("Plegar o desplegar")
+            self.head.setToolTip(_("Plegar o desplegar"))
         self._chevron()
 
     def _chevron(self):
@@ -1397,7 +1464,7 @@ class FlowConnector(QWidget):
         super().__init__()
         self.setFixedHeight(30)
 
-    def paintEvent(self, _):  # noqa: N802
+    def paintEvent(self, _e):  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         cy = self.height() / 2
@@ -1470,7 +1537,7 @@ class PathCard(Card):
         self.btn.setIcon(glyph_icon(G.OPEN, C["text"], 16))
         self.btn.setIconSize(QSize(16, 16))
         self.btn.setFixedSize(38, 36)
-        self.btn.setToolTip("Elegir carpeta…")
+        self.btn.setToolTip(_("Elegir carpeta…"))
         self.btn.setCursor(Qt.CursorShape.PointingHandCursor)
         row.addWidget(self.edit, 1)
         row.addWidget(self.btn)
@@ -1508,7 +1575,7 @@ class PathCard(Card):
     def refresh(self) -> None:
         path = self.path()
         if not path:
-            self.info.setText("Sin carpeta")
+            self.info.setText(_("Sin carpeta"))
             self.disk.setValue(0)
             return
         root = engine.volume_root(path)
@@ -1517,38 +1584,38 @@ class PathCard(Card):
                 raise OSError
             du = shutil.disk_usage(root)
         except OSError:
-            self.info.setText("Unidad no conectada")
+            self.info.setText(_("Unidad no conectada"))
             self.disk.setValue(0)
             return
         self.disk.setValue(int(du.used / du.total * 10000) if du.total else 0)
-        note = "" if os.path.isdir(path) else "  ·  se creará"
-        self.info.setText(f"{engine.vol_name(root)}  ·  {fmt_bytes(du.free)} libres de {fmt_bytes(du.total)}{note}")
+        note = "" if os.path.isdir(path) else ("  ·  " + _("se creará"))
+        self.info.setText(_("{root}  ·  {free} libres de {total}{note}").format(root=engine.vol_name(root), free=fmt_bytes(du.free), total=fmt_bytes(du.total), note=note))
 
 
 # ── ventana principal ────────────────────────────────────────────────────────
 
 PILL = {
-    "idle": ("Listo", C["muted"]), "ready": ("Análisis listo", C["accent2"]),
-    "scanning": ("Analizando", C["accent2"]), "copying": ("Sincronizando", C["accent"]),
-    "paused": ("En pausa", C["warn"]), "done": ("Al día", C["ok"]),
-    "cancelled": ("Cancelado", C["warn"]), "failed": ("Error", C["err"]),
+    "idle": (_("Listo"), C["muted"]), "ready": (_("Análisis listo"), C["accent2"]),
+    "scanning": (_("Analizando"), C["accent2"]), "copying": (_("Sincronizando"), C["accent"]),
+    "paused": (_("En pausa"), C["warn"]), "done": (_("Al día"), C["ok"]),
+    "cancelled": (_("Cancelado"), C["warn"]), "failed": (_("Error"), C["err"]),
 }
 RUNNING = ("scanning", "copying", "paused")
 PAGE_TREE, PAGE_CHANGES, PAGE_PROGRESS, PAGE_ISSUES = range(4)
 
-KEEP_OPTIONS = [(30, "30 días"), (90, "90 días"), (365, "1 año"), (0, "Siempre")]
-CONNECT_ACTIONS = {"ask": "Preguntar si sincronizar", "auto": "Sincronizar sin preguntar", "none": "Solo avisar"}
-KIND_INFO = {"n": ("Nuevo", C["ok"]), "c": ("Modificado", C["accent2"]),
-             "m": ("Movido", C["accent"]), "d": ("A versiones", C["warn"])}
+KEEP_OPTIONS = [(30, _("30 días")), (90, _("90 días")), (365, _("1 año")), (0, _("Siempre"))]
+CONNECT_ACTIONS = {"ask": _("Preguntar si sincronizar"), "auto": _("Sincronizar sin preguntar"), "none": _("Solo avisar")}
+KIND_INFO = {"n": (_("Nuevo"), C["ok"]), "c": (_("Modificado"), C["accent2"]),
+             "m": (_("Movido"), C["accent"]), "d": (_("A versiones"), C["warn"])}
 MODE_HINTS = {
-    engine.MODE_MIRROR: "El destino queda idéntico al origen. Lo modificado o borrado no se pierde: la versión "
-                        "anterior se guarda en .devbackup/versiones del disco de copia.",
-    engine.MODE_UPDATE: "Copia lo nuevo y lo modificado pero nunca quita nada del destino, aunque lo borres en "
-                        "el origen.",
+    engine.MODE_MIRROR: _("El destino queda idéntico al origen. Lo modificado o borrado no se pierde: la versión "
+                        "anterior se guarda en .devbackup/versiones del disco de copia."),
+    engine.MODE_UPDATE: _("Copia lo nuevo y lo modificado pero nunca quita nada del destino, aunque lo borres en "
+                        "el origen."),
 }
 
-SCRUB_OPTIONS = [(0, "Desactivada"), (120, "2 min"), (300, "5 min"), (900, "15 min"), (3600, "1 hora"),
-                 (-1, "Hasta revisar todo")]
+SCRUB_OPTIONS = [(0, _("Desactivada")), (120, _("2 min")), (300, _("5 min")), (900, _("15 min")), (3600, _("1 hora")),
+                 (-1, _("Hasta revisar todo"))]
 
 INSTANCE = "DevBackupStudio-" + getpass.getuser()
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -1558,19 +1625,19 @@ LAUNCH_AGENT = os.path.expanduser("~/Library/LaunchAgents/com.crazyramirez.devba
 
 def fmt_ago(iso: str | None) -> str:
     if not iso:
-        return "nunca"
+        return _("nunca")
     try:
         sec = (datetime.now() - datetime.fromisoformat(iso)).total_seconds()
     except ValueError:
-        return "nunca"
+        return _("nunca")
     if sec < 90:
-        return "hace un momento"
+        return _("hace un momento")
     if sec < 3600:
-        return f"hace {int(sec // 60)} min"
+        return _("hace {sec} min").format(sec=int(sec // 60))
     if sec < 86400:
-        return f"hace {int(sec // 3600)} h"
+        return _("hace {sec} h").format(sec=int(sec // 3600))
     days = int(sec // 86400)
-    return "ayer" if days == 1 else f"hace {days} días"
+    return _("ayer") if days == 1 else _n("hace {n} día", "hace {n} días", days).format(n=days)
 
 
 def autostart_command() -> list[str]:
@@ -1655,7 +1722,7 @@ class DiskWatcher(QObject):
 
 
 class ChangesModel(QAbstractTableModel):
-    HEAD = ["TIPO", "RUTA", "TAMAÑO"]
+    HEAD = [_("TIPO"), _("RUTA"), _("TAMAÑO")]
 
     def __init__(self):
         super().__init__()
@@ -1687,7 +1754,7 @@ class ChangesModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.TextAlignmentRole and col == 2:
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         if role == Qt.ItemDataRole.ToolTipRole and col == 1:
-            return f"{path}\nantes en: {extra}" if extra else path
+            return _("{path}\nantes en: {extra}").format(path=path, extra=extra) if extra else path
         return None
 
     def load(self, rows: list[tuple]) -> None:
@@ -1708,7 +1775,7 @@ def change_rows(job: engine.BackupJob) -> list[tuple]:
     cut, dcut = len(job.src), len(job.dst)
     rows = [(c[3], c[0][cut:].lstrip("\\/"), c[1], "") for c in job.copies]
     rows += [("m", item[0][cut:].lstrip("\\/"), item[1], old[dcut:].lstrip("\\/")) for old, item in job.moves]
-    rows += [("d", p[dcut:].lstrip("\\/"), size, "") for p, size, _ in job.deletes]
+    rows += [("d", p[dcut:].lstrip("\\/"), size, "") for p, size, _m in job.deletes]
     return rows
 
 
@@ -1746,20 +1813,19 @@ class ConnectDialog(QDialog):
         head.addWidget(logo, 0, Qt.AlignmentFlag.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(3)
-        self.title = QLabel("Tu disco de copia está conectado")
+        self.title = QLabel(_("Tu disco de copia está conectado"))
         self.title.setObjectName("h1")
-        label = engine.volume_info(self.root)[0] or "Disco de copia"
+        label = engine.volume_info(self.root)[0] or _("Disco de copia")
         last = engine.last_history(self.root)
         where = f" ({engine.vol_name(root)})" if IS_WIN else ""
-        sub = QLabel(f"{label}{where}  ·  última copia {fmt_ago(last and last.get('fin'))}  ·  "
-                     f"{win.integrity_text()}")
+        sub = QLabel(_("{label}{where}  ·  última copia {v}  ·  {integrity_text}").format(label=label, where=where, v=fmt_ago(last and last.get('fin')), integrity_text=win.integrity_text()))
         sub.setObjectName("muted")
         col.addWidget(self.title)
         col.addWidget(sub)
         head.addLayout(col, 1)
         lay.addLayout(head)
 
-        self.status = QLabel(f"Buscando cambios en {win.src_card.path()}…")
+        self.status = QLabel(_("Buscando cambios en {path}…").format(path=win.src_card.path()))
         self.status.setObjectName("muted")
         lay.addWidget(self.status)
         self.busy = thin_bar(4)
@@ -1768,10 +1834,10 @@ class ConnectDialog(QDialog):
 
         grid = QGridLayout()
         grid.setSpacing(10)
-        self.t_new = Tile("Nuevos", G.ADD, C["ok"])
-        self.t_chg = Tile("Modificados", G.SYNC, C["accent2"])
-        self.t_mov = Tile("Movidos", G.NEXT, C["accent"])
-        self.t_del = Tile("A versiones", G.FLAG, C["warn"])
+        self.t_new = Tile(_("Nuevos"), G.ADD, C["ok"])
+        self.t_chg = Tile(_("Modificados"), G.SYNC, C["accent2"])
+        self.t_mov = Tile(_("Movidos"), G.NEXT, C["accent"])
+        self.t_del = Tile(_("A versiones"), G.FLAG, C["warn"])
         for i, t in enumerate((self.t_new, self.t_chg, self.t_mov, self.t_del)):
             t.setMinimumWidth(130)
             grid.addWidget(t, 0, i)
@@ -1785,10 +1851,10 @@ class ConnectDialog(QDialog):
         buttons = QHBoxLayout()
         buttons.setSpacing(10)
         buttons.addStretch(1)
-        self.b_later = QPushButton("Ahora no")
-        self.b_view = QPushButton("  Ver cambios")
+        self.b_later = QPushButton(_("Ahora no"))
+        self.b_view = QPushButton(("  " + _("Ver cambios")))
         self.b_view.setIcon(glyph_icon(G.TREE, C["text"], 14))
-        self.b_sync = QPushButton("  Sincronizar ahora")
+        self.b_sync = QPushButton(("  " + _("Sincronizar ahora")))
         self.b_sync.setObjectName("primary")
         self.b_sync.setIcon(glyph_icon(G.PLAY, "#FFFFFF", 14))
         self.b_sync.setEnabled(False)
@@ -1813,8 +1879,8 @@ class ConnectDialog(QDialog):
     def _fill(self, s: engine.Stats):
         self.t_new.set(fmt_int(s.new_files), fmt_bytes(s.new_bytes))
         self.t_chg.set(fmt_int(s.changed_files), fmt_bytes(s.changed_bytes))
-        self.t_mov.set(fmt_int(s.moved_files), fmt_bytes(s.moved_bytes) + " sin recopiar")
-        self.t_del.set(fmt_int(s.del_files), "borrados del origen")
+        self.t_mov.set(fmt_int(s.moved_files), fmt_bytes(s.moved_bytes) + (" " + _("sin recopiar")))
+        self.t_del.set(fmt_int(s.del_files), _("borrados del origen"))
 
     def _poll(self):
         job = self.win.job
@@ -1823,34 +1889,33 @@ class ConnectDialog(QDialog):
         s = job.stats
         if job.phase == "scanning":
             self._fill(s)
-            self.status.setText(f"Buscando cambios…  {fmt_int(s.files_found)} archivos revisados")
+            self.status.setText(_("Buscando cambios…  {files_found} archivos revisados").format(files_found=fmt_int(s.files_found)))
         elif job.phase == "ready":
             self._timer.stop()
             self.busy.hide()
             self._fill(s)
             note = job.index_note
             if not s.has_changes:
-                self.title.setText("Todo está al día")
-                self.status.setText(f"No hay nada que copiar desde la última vez  ·  "
-                                    f"{fmt_int(s.files_found)} archivos revisados en "
-                                    f"{fmt_clock(s.scan_end - s.scan_start, ms=True)}")
+                self.title.setText(_("Todo está al día"))
+                self.status.setText(_("No hay nada que copiar desde la última vez  ·  {files_found} archivos revisados en "
+                                      "{scan_end}").format(files_found=fmt_int(s.files_found), scan_end=fmt_clock(s.scan_end - s.scan_start, ms=True)))
                 self.b_view.hide()
                 if self.win.scrub_seconds():
                     # sin cambios, el botón principal sirve para avanzar la revisión de integridad
-                    self.b_sync.setText("  Comprobar integridad")
+                    self.b_sync.setText(("  " + _("Comprobar integridad")))
                     self.b_sync.setIcon(glyph_icon(G.SHIELD, "#FFFFFF", 14))
                     self.b_sync.setEnabled(True)
                     self.b_sync.setDefault(True)
-                    self.b_later.setText("Cerrar")
+                    self.b_later.setText(_("Cerrar"))
                 else:
                     self.b_sync.hide()
-                    self.b_later.setText("Cerrar")
+                    self.b_later.setText(_("Cerrar"))
             else:
-                self.status.setText(f"{fmt_int(s.ops_total)} cambios listos  ·  {fmt_bytes(s.plan_bytes)} por "
-                                    f"copiar  ·  {fmt_int(s.skip_files)} archivos sin cambios")
+                self.status.setText(_("{ops_total} cambios listos  ·  {plan_bytes} por copiar  ·  {skip_files} archivos sin "
+                                      "cambios").format(ops_total=fmt_int(s.ops_total), plan_bytes=fmt_bytes(s.plan_bytes), skip_files=fmt_int(s.skip_files)))
                 eta = estimate_seconds(self.root, s)
                 if eta is not None:
-                    note += f"  ·  tiempo previsto ≈ {fmt_human(max(1, eta))}"
+                    note += ("  ·  " + _("tiempo previsto ≈ {v}").format(v=fmt_human(max(1, eta))))
                 self.b_sync.setEnabled(True)
                 self.b_view.setEnabled(True)
                 self.b_sync.setDefault(True)
@@ -1859,8 +1924,8 @@ class ConnectDialog(QDialog):
         elif job.phase in ("cancelled", "failed"):
             self._timer.stop()
             self.busy.hide()
-            self.status.setText("No se pudo completar el análisis. " + (job.fatal or ""))
-            self.b_later.setText("Cerrar")
+            self.status.setText((_("No se pudo completar el análisis.") + " ") + (job.fatal or ""))
+            self.b_later.setText(_("Cerrar"))
 
     def _view(self):
         self.accept()
@@ -1917,18 +1982,18 @@ class UpdateDialog(QDialog):
         head.addWidget(logo, 0, Qt.AlignmentFlag.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(3)
-        title = QLabel(f"Hay una versión nueva: {rel.version}")
+        title = QLabel(_("Hay una versión nueva: {version}").format(version=rel.version))
         title.setObjectName("h1")
         when = ""
         if rel.published:
             try:
                 # GitHub da la hora en UTC; fmt_ago compara con la hora local
                 local = datetime.fromisoformat(rel.published.replace("Z", "+00:00")).astimezone()
-                when = f"  ·  publicada {fmt_ago(local.replace(tzinfo=None).isoformat())}"
+                when = ("  ·  " + _("publicada {isoformat}").format(isoformat=fmt_ago(local.replace(tzinfo=None).isoformat())))
             except ValueError:
                 pass
         size = f"  ·  {fmt_bytes(rel.asset_size)}" if rel.asset_size else ""
-        sub = QLabel(f"Tienes la {CURRENT_VERSION}{when}{size}")
+        sub = QLabel(_("Tienes la {current_version}{when}{size}").format(current_version=CURRENT_VERSION, when=when, size=size))
         sub.setObjectName("muted")
         col.addWidget(title)
         col.addWidget(sub)
@@ -1937,7 +2002,7 @@ class UpdateDialog(QDialog):
 
         notes = QTextBrowser()
         notes.setOpenExternalLinks(True)
-        notes.setMarkdown(rel.notes.strip() or "Sin notas de versión.")
+        notes.setMarkdown(rel.notes.strip() or _("Sin notas de versión."))
         lay.addWidget(notes, 1)
 
         self.status = QLabel("")
@@ -1950,11 +2015,11 @@ class UpdateDialog(QDialog):
 
         buttons = QHBoxLayout()
         buttons.setSpacing(10)
-        self.b_skip = QPushButton("Omitir esta versión")
+        self.b_skip = QPushButton(_("Omitir esta versión"))
         self.b_skip.setObjectName("link")
         buttons.addWidget(self.b_skip)
         buttons.addStretch(1)
-        self.b_later = QPushButton("Más tarde")
+        self.b_later = QPushButton(_("Más tarde"))
         self.b_go = QPushButton()
         self.b_go.setObjectName("primary")
         for b in (self.b_skip, self.b_later, self.b_go):
@@ -1964,18 +2029,18 @@ class UpdateDialog(QDialog):
         lay.addLayout(buttons)
 
         if updater.can_self_update() and rel.asset_url:
-            self.b_go.setText("  Actualizar ahora")
+            self.b_go.setText(("  " + _("Actualizar ahora")))
             self.b_go.setIcon(glyph_icon(G.DOWNLOAD, "#FFFFFF", 14))
             self.b_go.clicked.connect(self._update)
-            how = ("se descarga el instalador, se comprueba su SHA-256 y se instala; la app se cierra y vuelve a "
-                   "abrirse sola.")
-            self.status.setText(f"Al actualizar {how} Tus ajustes y copias no se tocan.")
+            how = (_("se descarga el instalador, se comprueba su SHA-256 y se instala; la app se cierra y vuelve a "
+                   "abrirse sola."))
+            self.status.setText(_("Al actualizar {how} Tus ajustes y copias no se tocan.").format(how=how))
         else:
-            self.b_go.setText("  Ver en GitHub")
+            self.b_go.setText(("  " + _("Ver en GitHub")))
             self.b_go.setIcon(glyph_icon(G.OPEN, "#FFFFFF", 14))
             self.b_go.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(rel.page)))
-            self.status.setText("Esta copia se ejecuta desde el código: actualízala con «git pull»."
-                                if not FROZEN else "No hay instalador para este sistema en esta versión.")
+            self.status.setText(_("Esta copia se ejecuta desde el código: actualízala con «git pull».")
+                                if not FROZEN else _("No hay instalador para este sistema en esta versión."))
         self.b_later.clicked.connect(self.reject)
         self.b_skip.clicked.connect(self._skip)
         self.progressed.connect(self._on_progress)
@@ -1989,7 +2054,7 @@ class UpdateDialog(QDialog):
     def _sync_busy(self):
         if self.win._state in RUNNING and updater.can_self_update():
             self.b_go.setEnabled(False)
-            self.status.setText("Hay una sincronización en marcha: podrás actualizar en cuanto termine.")
+            self.status.setText(_("Hay una sincronización en marcha: podrás actualizar en cuanto termine."))
 
     def _skip(self):
         self.win.update_skip = self.rel.version
@@ -2003,10 +2068,10 @@ class UpdateDialog(QDialog):
             return
         self.b_go.setEnabled(False)
         self.b_skip.setEnabled(False)
-        self.b_later.setText("Cancelar")
+        self.b_later.setText(_("Cancelar"))
         self.bar.show()
         self.bar.setRange(0, 0)
-        self.status.setText(f"Descargando {self.rel.asset_name}…")
+        self.status.setText(_("Descargando {asset_name}…").format(asset_name=self.rel.asset_name))
 
         def work():
             try:
@@ -2020,25 +2085,25 @@ class UpdateDialog(QDialog):
         if total:
             self.bar.setRange(0, 10000)
             self.bar.setValue(int(done / total * 10000))
-            self.status.setText(f"Descargando {self.rel.asset_name}…  {fmt_bytes(done)} de {fmt_bytes(total)}")
+            self.status.setText(_("Descargando {asset_name}…  {done} de {total}").format(asset_name=self.rel.asset_name, done=fmt_bytes(done), total=fmt_bytes(total)))
 
     def _on_downloaded(self, path: str, error: str):
         if error:
             if self._stop.is_set():
                 return
             self.bar.hide()
-            self.status.setText(f"No se pudo descargar la actualización: {error}")
+            self.status.setText(_("No se pudo descargar la actualización: {error}").format(error=error))
             self.b_go.setEnabled(True)
             self.b_skip.setEnabled(True)
-            self.b_later.setText("Más tarde")
+            self.b_later.setText(_("Más tarde"))
             return
         self.bar.setRange(0, 10000)
         self.bar.setValue(10000)
-        self.status.setText("Descarga comprobada con SHA-256. Instalando: la app se cerrará y volverá a abrirse…")
+        self.status.setText(_("Descarga comprobada con SHA-256. Instalando: la app se cerrará y volverá a abrirse…"))
         try:
             updater.launch_install(path)
         except OSError as exc:
-            self.status.setText(f"No se pudo lanzar el instalador: {exc}")
+            self.status.setText(_("No se pudo lanzar el instalador: {exc}").format(exc=exc))
             return
         QTimer.singleShot(600, self.win.quit_for_update)
 
@@ -2055,45 +2120,55 @@ TOUR_DIR = os.path.join(getattr(sys, "_MEIPASS", APP_DIR), "assets", "tour")
 
 def tour_steps() -> list[dict]:
     """Pasos de la guía. Las ilustraciones salen de tools/make_tour.py (capturas reales de la app)."""
-    tray = "la barra de menús" if IS_MAC else "la bandeja"
+    tray = _("la barra de menús") if IS_MAC else _("la bandeja")
     return [
-        {"image": "1-bienvenida", "glyph": G.SPARK, "eyebrow": "Guía rápida",
-         "title": "Tus proyectos, siempre a salvo",
-         "text": "Copia tu carpeta de proyectos a un disco externo en cuatro pasos: rápido, comprobado y con "
-                 "historial de versiones.",
-         "chips": [(G.SHIELD, "Verificado con SHA-256"), (G.CLOCK, "Versiones de lo que cambias"),
-                   (G.NEXT, "Detecta movidos")]},
-        {"image": "2-origen-destino", "glyph": G.FOLDER, "title": "Elige origen y destino",
-         "text": "El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo.",
-         "chips": [(G.FOLDER, "Una carpeta o un disco entero"), (G.DRIVE, "Lo reconoce aunque cambie de letra")]},
-        {"image": "3-que-copiar", "glyph": G.FILTER, "title": "Decide qué se copia",
-         "text": "Desmarca carpetas en el árbol o exclúyelas por nombre, en cualquier nivel de cada proyecto.",
-         "chips": [(G.FILTER, "node_modules, .venv, dist…"), (G.TREE, "Se recuerda para la próxima")]},
-        {"image": "4-sincroniza", "glyph": G.PLAY, "title": "Analiza y sincroniza",
-         "text": "Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia y lo "
-                 "comprueba.",
-         "chips": [(G.SEARCH, "Revisa antes de copiar"), (G.SHIELD, "Cada archivo verificado"),
-                   (G.CLOCK, "Lo borrado va a versiones")]},
-        {"image": "5-conecta", "glyph": G.BELL, "title": "Conecta el disco y listo",
-         "text": f"Desde {tray} vigila el disco y te recuerda copiar si llevas días con cambios sin guardar. "
-                 "Al enchufarlo, sincronizas con un clic.",
-         "chips": [(G.SYNC, "Vigila en segundo plano"), (G.BELL, "Te recuerda copiar"),
-                   (G.POWER, "Sin suspensión al copiar")]},
+        {"image": "1-bienvenida", "glyph": G.SPARK, "eyebrow": _("Guía rápida"),
+         "title": _("Tus proyectos, siempre a salvo"),
+         "text": _("Copia tu carpeta de proyectos a un disco externo en cuatro pasos: rápido, comprobado y con "
+                 "historial de versiones."),
+         "chips": [(G.SHIELD, _("Verificado con SHA-256")), (G.CLOCK, _("Versiones de lo que cambias")),
+                   (G.NEXT, _("Detecta movidos"))]},
+        {"image": "2-origen-destino", "glyph": G.FOLDER, "title": _("Elige origen y destino"),
+         "text": _("El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo."),
+         "chips": [(G.FOLDER, _("Una carpeta o un disco entero")), (G.DRIVE, _("Lo reconoce aunque cambie de letra"))]},
+        {"image": "3-que-copiar", "glyph": G.FILTER, "title": _("Decide qué se copia"),
+         "text": _("Desmarca carpetas en el árbol o exclúyelas por nombre, en cualquier nivel de cada proyecto."),
+         "chips": [(G.FILTER, _("node_modules, .venv, dist…")), (G.TREE, _("Se recuerda para la próxima"))]},
+        {"image": "4-sincroniza", "glyph": G.PLAY, "title": _("Analiza y sincroniza"),
+         "text": _("Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia y lo "
+                 "comprueba."),
+         "chips": [(G.SEARCH, _("Revisa antes de copiar")), (G.SHIELD, _("Cada archivo verificado")),
+                   (G.CLOCK, _("Lo borrado va a versiones"))]},
+        {"image": "5-conecta", "glyph": G.BELL, "title": _("Conecta el disco y listo"),
+         "text": _("Desde {tray} vigila el disco y te recuerda copiar si llevas días con cambios sin guardar. "
+                   "Al enchufarlo, sincronizas con un clic.").format(tray=tray),
+         "chips": [(G.SYNC, _("Vigila en segundo plano")), (G.BELL, _("Te recuerda copiar")),
+                   (G.POWER, _("Sin suspensión al copiar"))]},
     ]
 
 
-def tour_assets() -> tuple[dict[str, QPixmap], dict[str, list], tuple[float, float]]:
-    """Ilustraciones de assets/tour y zonas que se destacan en cada una (tour.json)."""
+def tour_folder(lang: str | None = None) -> str:
+    """assets/tour/<idioma>: las capturas de la guía están hechas con la app en cada idioma."""
+    for code in (lang or i18n.current(), i18n.SOURCE):
+        folder = os.path.join(TOUR_DIR, code)
+        if os.path.isfile(os.path.join(folder, "tour.json")):
+            return folder
+    return TOUR_DIR
+
+
+def tour_assets(lang: str | None = None) -> tuple[dict[str, QPixmap], dict[str, list], tuple[float, float]]:
+    """Ilustraciones de la guía en el idioma de la app y zonas que se destacan en cada una (tour.json)."""
+    folder = tour_folder(lang)
     spots: dict[str, list] = {}
     size = (920.0, 400.0)
     try:
-        with open(os.path.join(TOUR_DIR, "tour.json"), encoding="utf-8") as fh:
+        with open(os.path.join(folder, "tour.json"), encoding="utf-8") as fh:
             data = json.load(fh)
         spots = data.get("spots", {})
         size = (float(data["size"][0]), float(data["size"][1]))
     except (OSError, ValueError, TypeError, KeyError, IndexError):
         pass
-    images = {s["image"]: QPixmap(os.path.join(TOUR_DIR, s["image"] + ".jpg")) for s in tour_steps()}
+    images = {s["image"]: QPixmap(os.path.join(folder, s["image"] + ".jpg")) for s in tour_steps()}
     return images, spots, size
 
 
@@ -2211,7 +2286,7 @@ class TourDots(QWidget):
             x += w + self.GAP
         return out
 
-    def paintEvent(self, _):  # noqa: N802
+    def paintEvent(self, _e):  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(Qt.PenStyle.NoPen)
@@ -2241,7 +2316,7 @@ class TourDots(QWidget):
             self.hover = i
             self.update()
 
-    def leaveEvent(self, _):  # noqa: N802
+    def leaveEvent(self, _e):  # noqa: N802
         self.hover = -1
         self.update()
 
@@ -2264,18 +2339,18 @@ class TourCard(QWidget):
         self.pulse = 0.0
         self.ill_h = 380.0
         self.text_h = 140.0
-        self.setAccessibleName("Guía rápida")
+        self.setAccessibleName(_("Guía rápida"))
 
         self.close_btn = QPushButton(self)
         self.close_btn.setObjectName("tourClose")
         self.close_btn.setIcon(glyph_icon(G.CLOSE, C["text"], 14))
         self.close_btn.setFixedSize(34, 34)
-        self.close_btn.setToolTip("Cerrar la guía  (Esc)")
-        self.close_btn.setAccessibleName("Cerrar la guía")
-        self.skip_btn = QPushButton("Saltar la guía", self)
+        self.close_btn.setToolTip(_("Cerrar la guía  (Esc)"))
+        self.close_btn.setAccessibleName(_("Cerrar la guía"))
+        self.skip_btn = QPushButton(_("Saltar la guía"), self)
         self.skip_btn.setObjectName("tourSkip")
         self.dots = TourDots(len(self.steps), self)
-        self.back_btn = QPushButton("  Atrás", self)
+        self.back_btn = QPushButton(("  " + _("Atrás")), self)
         self.back_btn.setObjectName("tourBack")
         self.back_btn.setIcon(glyph_icon(G.BACK, C["text"], 14))
         self.next_btn = QPushButton(self)
@@ -2356,7 +2431,7 @@ class TourCard(QWidget):
         last = self.idx == self.last
         self.back_btn.setVisible(self.idx > 0)
         self.skip_btn.setVisible(not last)
-        self.next_btn.setText("Empezar  " if last else "Siguiente  ")
+        self.next_btn.setText((_("Empezar") + "  ") if last else (_("Siguiente") + "  "))
         self.next_btn.setIcon(glyph_icon(G.CHECK if last else G.ARROW, "#FFFFFF", 15))
         self.dots.set_step(self.idx, self.prev)
         st = self.steps[self.idx]
@@ -2366,7 +2441,7 @@ class TourCard(QWidget):
             self.next_btn.setFocus()
 
     def _eyebrow(self, i: int) -> str:
-        return self.steps[i].get("eyebrow") or f"Paso {i} de {self.last}"
+        return self.steps[i].get("eyebrow") or _("Paso {i} de {last}").format(i=i, last=self.last)
 
     # ── geometría ──
     def fit(self, avail_w: int, avail_h: int) -> None:
@@ -2414,7 +2489,7 @@ class TourCard(QWidget):
         new = _ease((self.p - (0.1 + k * 0.05)) / 0.5)
         return 1 - out, -self.dir * 16 * out, new, self.dir * 28 * (1 - new)
 
-    def paintEvent(self, _):  # noqa: N802
+    def paintEvent(self, _e):  # noqa: N802
         p = QPainter(self)
         p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
                          | QPainter.RenderHint.TextAntialiasing)
@@ -2593,7 +2668,7 @@ class TourCard(QWidget):
         cy = self.height() - self.FOOT_H / 2
         x = 30.0
         text_f, key_f = _font(12), _font(11, QFont.Weight.Bold)
-        for kind, label in (("t", "Vuelve a verla con"), ("k", "Guía"), ("t", "o"), ("k", help_key())):
+        for kind, label in (("t", _("Vuelve a verla con")), ("k", _("Guía")), ("t", _("o")), ("k", help_key())):
             if kind == "t":
                 fm = QFontMetricsF(text_f)
                 p.setFont(text_f)
@@ -2630,7 +2705,7 @@ class TourOverlay(QWidget):
         self.snap_blur: QPixmap | None = None
         self._shadow: QPixmap | None = None
         self._card_y = 0
-        self.setAccessibleName("Guía rápida")
+        self.setAccessibleName(_("Guía rápida"))
         self.card = TourCard(self)
         self.fade = QVariantAnimation(self)
         self.fade.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -2725,13 +2800,13 @@ class TourOverlay(QWidget):
         self.card.move((self.width() - self.card.width()) // 2, int(self._card_y + 18 * (1 - self.t)))
         self._shadow = None
 
-    def resizeEvent(self, _):  # noqa: N802
+    def resizeEvent(self, _e):  # noqa: N802
         self._layout()
 
     def mousePressEvent(self, e):  # noqa: N802
         e.accept()  # los clics fuera de la tarjeta no llegan a la ventana
 
-    def paintEvent(self, _):  # noqa: N802
+    def paintEvent(self, _e):  # noqa: N802
         p = QPainter(self)
         p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
         if self.snap is not None:
@@ -2761,11 +2836,11 @@ class TourOverlay(QWidget):
 
 # ── recordatorios de copia ───────────────────────────────────────────────────
 
-REMIND_OPTIONS = [(1, "1 día"), (2, "2 días"), (3, "3 días"), (7, "1 semana"), (14, "2 semanas")]
+REMIND_OPTIONS = [(1, _("1 día")), (2, _("2 días")), (3, _("3 días")), (7, _("1 semana")), (14, _("2 semanas"))]
 
 
 def days_text(days: int) -> str:
-    return dict(REMIND_OPTIONS).get(days) or f"{days} días"
+    return dict(REMIND_OPTIONS).get(days) or _("{days} días").format(days=days)
 
 
 def short_changes(p: dict | None) -> str:
@@ -2774,8 +2849,8 @@ def short_changes(p: dict | None) -> str:
         return ""
     files, dirs = p.get("files", 0), p.get("dirs", 0)
     if files:
-        return f"{fmt_int(files)} archivo{'s' if files != 1 else ''} sin copiar"
-    return "borrados o movidos sin copiar" if dirs else ""
+        return _n("{n} archivo sin copiar", "{n} archivos sin copiar", files).format(n=fmt_int(files))
+    return _("borrados o movidos sin copiar") if dirs else ""
 
 
 class ChangeChecker(QObject):
@@ -2842,9 +2917,9 @@ class ReminderRow(QFrame):
         title.setObjectName("remTitle")
         head.addWidget(title, 1)
         if current:
-            tag = QLabel("EN USO")
+            tag = QLabel(_("EN USO"))
             tag.setObjectName("remTag")
-            tag.setToolTip("Es el origen y el destino que tienes elegidos ahora")
+            tag.setToolTip(_("Es el origen y el destino que tienes elegidos ahora"))
             head.addWidget(tag, 0, Qt.AlignmentFlag.AlignVCenter)
         sub = ElideLabel(status, Qt.TextElideMode.ElideRight)
         sub.setObjectName("remSub")
@@ -2856,15 +2931,15 @@ class ReminderRow(QFrame):
         self.more.setObjectName("remMore")
         self.more.setIcon(glyph_icon(G.MORE, C["muted"], 16))
         self.more.setFixedSize(30, 30)
-        self.more.setToolTip("Opciones de esta copia")
+        self.more.setToolTip(_("Opciones de esta copia"))
         self.more.setCursor(Qt.CursorShape.PointingHandCursor)
         self.more.clicked.connect(
             lambda: self.menu_requested.emit(self.pid, self.more.mapToGlobal(QPoint(0, self.more.height()))))
         lay.addWidget(self.more, 0, Qt.AlignmentFlag.AlignVCenter)
         copies = it.get("copies", 0)
         self.setToolTip(f"{it['src']}  →  {it.get('dst', '')}\n"
-                        f"{copies} copia{'s' if copies != 1 else ''} completa{'s' if copies != 1 else ''}"
-                        f"  ·  última {it.get('last_ok', '').replace('T', ' ')}")
+                        + _n("{n} copia completa", "{n} copias completas", copies).format(n=copies)
+                        + "  ·  " + _("última {when}").format(when=it.get("last_ok", "").replace("T", " ")))
 
     def mousePressEvent(self, e):  # noqa: N802
         if e.button() == Qt.MouseButton.LeftButton:
@@ -2896,10 +2971,10 @@ class ReminderBar(QFrame):
         col.addWidget(self.title)
         col.addWidget(self.text)
         lay.addLayout(col, 1)
-        self.go = QPushButton("  Sincronizar ahora")
+        self.go = QPushButton(("  " + _("Sincronizar ahora")))
         self.go.setObjectName("remGo")
         self.go.setIcon(glyph_icon(G.PLAY, "#FFFFFF", 13))
-        self.later = QPushButton("Recordar mañana")
+        self.later = QPushButton(_("Recordar mañana"))
         self.later.setObjectName("remLater")
         self.close_btn = QPushButton()
         self.close_btn.setObjectName("remClose")
@@ -3049,8 +3124,8 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(15000, lambda: self._check_updates(manual=False))
         self._refresh_update_status()
         if updated:
-            self._log(f"Actualizado a la versión {APP_VERSION}", C["ok"])
-            QTimer.singleShot(1500, lambda: self._notify(APP_NAME, f"Actualizado a la versión {APP_VERSION}."))
+            self._log(_("Actualizado a la versión {app_version}").format(app_version=APP_VERSION), C["ok"])
+            QTimer.singleShot(1500, lambda: self._notify(APP_NAME, _("Actualizado a la versión {app_version}.").format(app_version=APP_VERSION)))
 
     # ── actualizaciones ──────────────────────────────────────────────────
     def _on_update_toggled(self, on: bool):
@@ -3070,15 +3145,15 @@ class MainWindow(QMainWindow):
             if last and (datetime.now() - last).total_seconds() < 20 * 3600:
                 return
         self.btn_update.setEnabled(False)
-        self.update_status.setText("Consultando GitHub…")
+        self.update_status.setText(_("Consultando GitHub…"))
         self.checker.check(manual)
 
     def _on_update_result(self, rel, error: str, manual: bool):
         self.btn_update.setEnabled(True)
         if rel is None:
-            self.update_status.setText(f"No se pudo consultar GitHub: {error}")
+            self.update_status.setText(_("No se pudo consultar GitHub: {error}").format(error=error))
             if manual:
-                QMessageBox.warning(self, APP_NAME, f"No se pudo consultar si hay versiones nuevas.\n\n{error}")
+                QMessageBox.warning(self, APP_NAME, _("No se pudo consultar si hay versiones nuevas.\n\n{error}").format(error=error))
             return
         self.update_checked = datetime.now().isoformat(timespec="seconds")
         self._save_settings()
@@ -3087,7 +3162,7 @@ class MainWindow(QMainWindow):
             self._pending_release = rel
             self._offer_update()
         elif manual:
-            QMessageBox.information(self, APP_NAME, f"Tienes la última versión ({CURRENT_VERSION}).")
+            QMessageBox.information(self, APP_NAME, _("Tienes la última versión ({current_version}).").format(current_version=CURRENT_VERSION))
         self._refresh_update_status(rel)
 
     def _offer_update(self):
@@ -3096,9 +3171,9 @@ class MainWindow(QMainWindow):
             return
         if self._state in RUNNING:
             # se ofrece al terminar la sincronización (ver _finish)
-            self._notify("Versión nueva disponible", f"{APP_NAME} {rel.version}: te preguntaré al terminar la copia.")
+            self._notify(_("Versión nueva disponible"), _("{app_name} {version}: te preguntaré al terminar la copia.").format(app_name=APP_NAME, version=rel.version))
             return
-        self._notify("Versión nueva disponible", f"{APP_NAME} {rel.version} está lista para instalar.")
+        self._notify(_("Versión nueva disponible"), _("{app_name} {version} está lista para instalar.").format(app_name=APP_NAME, version=rel.version))
         self._show_window()
         self.update_dialog = UpdateDialog(self, rel)
         self.update_dialog.open()
@@ -3107,14 +3182,14 @@ class MainWindow(QMainWindow):
     def _refresh_update_status(self, rel: updater.Release | None = None):
         if not hasattr(self, "update_status"):
             return
-        parts = [f"Versión instalada: {CURRENT_VERSION}"]
+        parts = [_("Versión instalada: {current_version}").format(current_version=CURRENT_VERSION)]
         if rel is not None and updater.is_newer(rel.version, CURRENT_VERSION):
-            skipped = "  (omitida)" if rel.version == self.update_skip else ""
-            parts.append(f"nueva disponible: {rel.version}{skipped}")
+            skipped = ("  " + _("(omitida)")) if rel.version == self.update_skip else ""
+            parts.append(_("nueva disponible: {version}{skipped}").format(version=rel.version, skipped=skipped))
         elif self.update_checked:
-            parts.append(f"al día · comprobado {fmt_ago(self.update_checked)}")
+            parts.append(_("al día · comprobado {update_checked}").format(update_checked=fmt_ago(self.update_checked)))
         if not self.update_box.isChecked():
-            parts.append("búsqueda automática desactivada")
+            parts.append(_("búsqueda automática desactivada"))
         self.update_status.setText("  ·  ".join(parts))
         self._refresh_summaries()
 
@@ -3163,7 +3238,7 @@ class MainWindow(QMainWindow):
         trow.addWidget(title)
         trow.addWidget(version, 0, Qt.AlignmentFlag.AlignBottom)
         trow.addStretch(1)
-        sub = QLabel("Sincronización de proyectos  ·  detecta cambios, movidos y borrados  ·  guarda versiones")
+        sub = QLabel(_("Sincronización de proyectos  ·  detecta cambios, movidos y borrados  ·  guarda versiones"))
         sub.setObjectName("muted")
         col.addLayout(trow)
         col.addWidget(sub)
@@ -3183,11 +3258,11 @@ class MainWindow(QMainWindow):
         h.addSpacing(8)
         self.pill = QLabel()
         self.pill.setObjectName("pill")
-        self.btn_help = QPushButton("  Guía")
+        self.btn_help = QPushButton(("  " + _("Guía")))
         self.btn_help.setObjectName("help")
         self.btn_help.setIcon(glyph_icon(G.HELP, C["accent2"], 15))
         self.btn_help.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_help.setToolTip(f"Guía rápida  ({help_key()})")
+        self.btn_help.setToolTip(_("Guía rápida  ({help_key})").format(help_key=help_key()))
         self.btn_help.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)  # alto de la píldora
         self.btn_help.clicked.connect(lambda: self.show_tour())
         h.addWidget(self.btn_help)
@@ -3226,11 +3301,11 @@ class MainWindow(QMainWindow):
             return SettingRow(title, subtitle, combo, tip)
 
         # ── copia: origen → destino ──
-        group("Copia", first=True)
+        group(_("Copia"), first=True)
         pair = Card(margins=(18, 16, 18, 16))
         pair.body.setSpacing(0)
-        self.src_card = PathCard("Origen", G.FOLDER, "Carpeta de origen", frameless=True)
-        self.dst_card = PathCard("Destino", G.DRIVE, "Carpeta de destino", frameless=True)
+        self.src_card = PathCard(_("Origen"), G.FOLDER, _("Carpeta de origen"), frameless=True)
+        self.dst_card = PathCard(_("Destino"), G.DRIVE, _("Carpeta de destino"), frameless=True)
         self.src_card.changed.connect(self._on_src_changed)
         self.dst_card.changed.connect(self._on_dst_changed)
         pair.body.addWidget(self.src_card)
@@ -3240,28 +3315,28 @@ class MainWindow(QMainWindow):
         lay.addWidget(pair)
 
         # ── qué se copia ──
-        group("Qué se copia")
-        rules = section("reglas", "Excluir carpetas", G.FILTER)
-        hint = QLabel("Se omiten en cualquier nivel de cada proyecto, en origen y destino. Admite comodines "
-                      "(*.egg-info).")
+        group(_("Qué se copia"))
+        rules = section("reglas", _("Excluir carpetas"), G.FILTER)
+        hint = QLabel(_("Se omiten en cualquier nivel de cada proyecto, en origen y destino. Admite comodines "
+                      "(*.egg-info)."))
         hint.setObjectName("faint")
         hint.setWordWrap(True)
         rules.body.addWidget(hint)
         self.chips_box = QWidget()
-        self.chips_box.setToolTip("Clic para activar o desactivar una regla · clic derecho en una regla propia "
-                                  "para quitarla")
+        self.chips_box.setToolTip(_("Clic para activar o desactivar una regla · clic derecho en una regla propia "
+                                  "para quitarla"))
         self.flow = FlowLayout(self.chips_box, 8)
         rules.body.addWidget(self.chips_box)
         add_row = QHBoxLayout()
         add_row.setSpacing(8)
         self.rule_edit = QLineEdit()
-        self.rule_edit.setPlaceholderText("Añadir regla…  (p. ej. Library)")
+        self.rule_edit.setPlaceholderText(_("Añadir regla…  (p. ej. Library)"))
         self.rule_edit.returnPressed.connect(self._add_rule)
         add_btn = QPushButton()
         add_btn.setObjectName("icon")
         add_btn.setIcon(glyph_icon(G.ADD, C["text"], 14))
         add_btn.setFixedSize(38, 36)
-        add_btn.setToolTip("Añadir regla")
+        add_btn.setToolTip(_("Añadir regla"))
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.clicked.connect(self._add_rule)
         add_row.addWidget(self.rule_edit, 1)
@@ -3270,11 +3345,11 @@ class MainWindow(QMainWindow):
         self.card_rules = rules
 
         # ── cómo se copia ──
-        group("Cómo se copia")
-        opts = section("modo", "Modo y versiones", G.GEAR)
+        group(_("Cómo se copia"))
+        opts = section("modo", _("Modo y versiones"), G.GEAR)
         self.mode_combo = QComboBox()
         for key, text in engine.MODES.items():
-            self.mode_combo.addItem(text, key)
+            self.mode_combo.addItem(_(text), key)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         opts.body.addWidget(self.mode_combo)
         self.mode_hint = QLabel()
@@ -3284,83 +3359,84 @@ class MainWindow(QMainWindow):
         self.keep_combo = QComboBox()
         for days, text in KEEP_OPTIONS:
             self.keep_combo.addItem(text, days)
-        opts.body.addWidget(combo_row("Conservar versiones", "De lo que modificas o borras", self.keep_combo))
+        opts.body.addWidget(combo_row(_("Conservar versiones"), _("De lo que modificas o borras"), self.keep_combo))
         self.threads_spin = QSpinBox()
         self.threads_spin.setRange(1, 32)
         self.threads_spin.valueChanged.connect(self._update_summary)
-        opts.body.addWidget(combo_row("Hilos de copia", "Archivos que se copian a la vez", self.threads_spin, 96))
+        opts.body.addWidget(combo_row(_("Hilos de copia"), _("Archivos que se copian a la vez"), self.threads_spin, 96))
         self.full_box = Toggle()
         self.full_box.toggled.connect(self._invalidate_plan)
         opts.body.addWidget(SettingRow(
-            "Revisar todo el destino", "En el próximo análisis (si no, cada 7 días)", self.full_box,
-            "Normalmente el análisis usa el índice de la última copia y no relee el disco. Cambio = distinto "
-            "tamaño o fecha de modificación (al nanosegundo en NTFS y APFS)."))
+            _("Revisar todo el destino"), _("En el próximo análisis (si no, cada 7 días)"), self.full_box,
+            _("Normalmente el análisis usa el índice de la última copia y no relee el disco. Cambio = distinto "
+            "tamaño o fecha de modificación (al nanosegundo en NTFS y APFS).")))
 
-        integ = section("integridad", "Integridad", G.SHIELD)
+        integ = section("integridad", _("Integridad"), G.SHIELD)
         self.verify_box = Toggle()
         self.verify_box.toggled.connect(self._invalidate_plan)
-        integ.body.addWidget(SettingRow("Verificar cada copia", "Relee el disco y compara su SHA-256",
+        integ.body.addWidget(SettingRow(_("Verificar cada copia"), _("Relee el disco y compara su SHA-256"),
                                         self.verify_box))
         self.scrub_combo = QComboBox()
         for secs, text in SCRUB_OPTIONS:
             self.scrub_combo.addItem(text, secs)
         integ.body.addWidget(combo_row(
-            "Revisar el disco", "Tras sincronizar, busca corrupción silenciosa", self.scrub_combo,
-            tip="Comprueba una tanda de archivos ya copiados durante el tiempo elegido: primero los nunca "
-                "comprobados y luego los de hace más de 30 días. Si el dañado es el destino, lo repara."))
+            _("Revisar el disco"), _("Tras sincronizar, busca corrupción silenciosa"), self.scrub_combo,
+            tip=_("Comprueba una tanda de archivos ya copiados durante el tiempo elegido: primero los nunca "
+                "comprobados y luego los de hace más de 30 días. Si el dañado es el destino, lo repara.")))
         self.integ_status = QLabel("")
         self.integ_status.setObjectName("faint")
         self.integ_status.setWordWrap(True)
         integ.body.addWidget(self.integ_status)
-        self.btn_scrub = QPushButton("  Comprobar todo el disco ahora")
+        self.btn_scrub = QPushButton(("  " + _("Comprobar todo el disco ahora")))
         self.btn_scrub.setIcon(glyph_icon(G.SHIELD, C["text"], 14))
         self.btn_scrub.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_scrub.clicked.connect(lambda: self._start(copy=True, scrub_all=True))
         integ.body.addWidget(self.btn_scrub)
 
         # ── automático ──
-        group("Automático")
-        disk = section("disco", "Disco de copia", G.SYNC)
+        group(_("Automático"))
+        disk = section("disco", _("Disco de copia"), G.SYNC)
         self.disk_status = QLabel("")
         self.disk_status.setObjectName("faint")
         self.disk_status.setWordWrap(True)
         disk.body.addWidget(self.disk_status)
-        where = "Se inicia con Windows, en la bandeja" if IS_WIN else "Se inicia con la sesión, en la barra de menús"
+        where = _("Se inicia con Windows, en la bandeja") if IS_WIN else _("Se inicia con la sesión, en la barra de menús")
         self.watch_box = Toggle()
         self.watch_box.toggled.connect(self._on_watch_toggled)
-        disk.body.addWidget(SettingRow("Vigilar en segundo plano", where, self.watch_box))
+        disk.body.addWidget(SettingRow(_("Vigilar en segundo plano"), where, self.watch_box))
         self.connect_combo = QComboBox()
         for key, text in CONNECT_ACTIONS.items():
             self.connect_combo.addItem(text, key)
         self.connect_combo.currentIndexChanged.connect(lambda _i: self._refresh_summaries())
-        disk.body.addWidget(QLabel("Al conectar el disco", objectName="fieldLabel"))
+        disk.body.addWidget(QLabel(_("Al conectar el disco"), objectName="fieldLabel"))
         disk.body.addWidget(self.connect_combo)
         self.card_disk = disk
 
-        rem = section("recordatorios", "Recordatorios", G.BELL)
+        rem = section("recordatorios", _("Recordatorios"), G.BELL)
         self.remind_box = Toggle()
         self.remind_box.toggled.connect(self._on_remind_toggled)
-        rem.body.addWidget(SettingRow("Recordarme hacer copia", "Solo si hay cambios sin copiar, una vez por periodo",
+        rem.body.addWidget(SettingRow(_("Recordarme hacer copia"), _("Solo si hay cambios sin copiar, una vez por periodo"),
                                       self.remind_box))
         self.remind_combo = QComboBox()
         for days, text in REMIND_OPTIONS:
             self.remind_combo.addItem(text, days)
         self.remind_combo.currentIndexChanged.connect(self._on_remind_days_changed)
-        rem.body.addWidget(combo_row("Avisar después de", "Días sin copia con cambios", self.remind_combo))
-        where = "con Windows" if IS_WIN else "al iniciar sesión"
-        link = f'<a href="#" style="color:{C["accent2"]}; text-decoration:none">Iniciarla {where} en segundo plano</a>'
-        self.remind_tray_hint = QLabel(f"Con la app cerrada no puede avisarte. {link}")
+        rem.body.addWidget(combo_row(_("Avisar después de"), _("Días sin copia con cambios"), self.remind_combo))
+        where = _("con Windows") if IS_WIN else _("al iniciar sesión")
+        link_text = html.escape(_("Iniciarla {where} en segundo plano").format(where=where))
+        link = f'<a href="#" style="color:{C["accent2"]}; text-decoration:none">{link_text}</a>'
+        self.remind_tray_hint = QLabel(html.escape(_("Con la app cerrada no puede avisarte.")) + " " + link)
         self.remind_tray_hint.setObjectName("faint")
         self.remind_tray_hint.setWordWrap(True)
         self.remind_tray_hint.linkActivated.connect(lambda _l: self.watch_box.setChecked(True))
         rem.body.addWidget(self.remind_tray_hint)
         cl = QHBoxLayout()
-        cl.addWidget(QLabel("Copias habituales", objectName="fieldLabel"))
+        cl.addWidget(QLabel(_("Copias habituales"), objectName="fieldLabel"))
         cl.addStretch(1)
-        self.btn_remind_check = QPushButton("Comprobar ahora")
+        self.btn_remind_check = QPushButton(_("Comprobar ahora"))
         self.btn_remind_check.setObjectName("link")
         self.btn_remind_check.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_remind_check.setToolTip("Mira ya si hay cambios sin copiar en todas las copias habituales")
+        self.btn_remind_check.setToolTip(_("Mira ya si hay cambios sin copiar en todas las copias habituales"))
         self.btn_remind_check.clicked.connect(lambda: self._reminder_tick(manual=True))
         cl.addWidget(self.btn_remind_check)
         rem.body.addLayout(cl)
@@ -3370,8 +3446,8 @@ class MainWindow(QMainWindow):
         self.remind_rows.setContentsMargins(0, 0, 0, 0)
         self.remind_rows.setSpacing(6)
         rem.body.addWidget(rows)
-        self.remind_empty = QLabel("Aún no hay ninguna: cada sincronización completa se añade sola, con su origen "
-                                   "y su disco.")
+        self.remind_empty = QLabel(_("Aún no hay ninguna: cada sincronización completa se añade sola, con su origen "
+                                   "y su disco."))
         self.remind_empty.setObjectName("faint")
         self.remind_empty.setWordWrap(True)
         rem.body.addWidget(self.remind_empty)
@@ -3381,20 +3457,20 @@ class MainWindow(QMainWindow):
         self.card_remind = rem
 
         # ── sistema ──
-        group("Sistema")
-        power = section("energia", "Energía", G.POWER)
+        group(_("Sistema"))
+        power = section("energia", _("Energía"), G.POWER)
         self.awake_box = Toggle()
         self.awake_box.toggled.connect(lambda _on: (self._save_settings(), self._refresh_awake(),
                                                     self._refresh_summaries()))
         if IS_MAC:
-            how = ("El Mac no reposa por inactividad ni duerme los discos (la pantalla sí puede apagarse), y "
+            how = (_("El Mac no reposa por inactividad ni duerme los discos (la pantalla sí puede apagarse), y "
                    "cerrar la app, la sesión o apagar pide confirmación. Si se duerme igualmente, la copia "
-                   "espera al disco y sigue sola.")
+                   "espera al disco y sigue sola."))
         else:
-            how = ("El equipo no se suspende por inactividad (la pantalla sí puede apagarse), el disco USB no "
+            how = (_("El equipo no se suspende por inactividad (la pantalla sí puede apagarse), el disco USB no "
                    "se duerme y Windows avisa si intentas apagar o reiniciar. Si se suspende igualmente (tapa, "
-                   "botón), la copia se pausa y sigue sola al volver.")
-        power.body.addWidget(SettingRow("Equipo y disco despiertos", "Mientras analiza o sincroniza",
+                   "botón), la copia se pausa y sigue sola al volver."))
+        power.body.addWidget(SettingRow(_("Equipo y disco despiertos"), _("Mientras analiza o sincroniza"),
                                         self.awake_box, how))
         self.awake_status = QLabel("")
         self.awake_status.setObjectName("faint")
@@ -3403,16 +3479,37 @@ class MainWindow(QMainWindow):
         power.body.addWidget(self.awake_status)
         self.card_power = power
 
-        upd = section("actualizaciones", "Actualizaciones", G.DOWNLOAD)
+        lang = section("idioma", _("Idioma"), G.GLOBE)
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem(_("Automático ({name})").format(name=i18n.LANGS[i18n.system_language()]), "auto")
+        for code, name in i18n.LANGS.items():
+            self.lang_combo.addItem(name, code)
+        self.lang_combo.setCurrentIndex(max(0, self.lang_combo.findData(LANGUAGE)))
+        lang.body.addWidget(combo_row(_("Idioma de la app"), _("Automático: el del sistema"), self.lang_combo, 170))
+        self.lang_note = QLabel("")
+        self.lang_note.setObjectName("faint")
+        self.lang_note.setWordWrap(True)
+        self.lang_note.hide()
+        lang.body.addWidget(self.lang_note)
+        self.btn_restart = QPushButton()
+        self.btn_restart.setObjectName("primary")
+        self.btn_restart.setIcon(glyph_icon(G.REFRESH, "#FFFFFF", 14))
+        self.btn_restart.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_restart.clicked.connect(self._restart_app)
+        self.btn_restart.hide()
+        lang.body.addWidget(self.btn_restart)
+        self.lang_combo.currentIndexChanged.connect(self._on_language_changed)
+
+        upd = section("actualizaciones", _("Actualizaciones"), G.DOWNLOAD)
         self.update_box = Toggle()
         self.update_box.toggled.connect(self._on_update_toggled)
-        upd.body.addWidget(SettingRow("Buscar versiones nuevas", "En GitHub; pregunta antes de instalar",
+        upd.body.addWidget(SettingRow(_("Buscar versiones nuevas"), _("En GitHub; pregunta antes de instalar"),
                                       self.update_box))
         self.update_status = QLabel("")
         self.update_status.setObjectName("faint")
         self.update_status.setWordWrap(True)
         upd.body.addWidget(self.update_status)
-        self.btn_update = QPushButton("  Buscar ahora")
+        self.btn_update = QPushButton(("  " + _("Buscar ahora")))
         self.btn_update.setIcon(glyph_icon(G.REFRESH, C["text"], 14))
         self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_update.clicked.connect(lambda: self._check_updates(manual=True))
@@ -3433,6 +3530,40 @@ class MainWindow(QMainWindow):
         self.sidebar = inner
         return scroll
 
+    # ── idioma ───────────────────────────────────────────────────────────
+    def _on_language_changed(self):
+        choice = self.lang_combo.currentData()
+        self.settings.setValue("language", choice)
+        self.settings.sync()
+        target = i18n.resolve(choice)
+        pending = target != i18n.current()
+        if pending:  # el aviso, ya en el idioma elegido
+            self.lang_note.setText(i18n.tr_in(target, "El idioma cambia al reiniciar la app. Tus ajustes y copias "
+                                                      "se conservan."))
+            self.btn_restart.setText("  " + i18n.tr_in(target, "Reiniciar ahora"))
+        self.lang_note.setVisible(pending)
+        self.btn_restart.setVisible(pending)
+        self._refresh_summaries()
+
+    def _restart_app(self):
+        """Vuelve a abrir la app (para aplicar el idioma). Con una copia en marcha, espera a que termine."""
+        if self._state in RUNNING:
+            QMessageBox.information(self, APP_NAME, _("Hay una operación en curso: reinicia la app cuando termine."))
+            return
+        self._save_settings()
+        args = [a for a in sys.argv[1:] if a not in ("--tray", "--updated")]
+        program, arguments = (sys.executable, args) if FROZEN else (sys.executable, [os.path.abspath(sys.argv[0])] + args)
+        server = getattr(QApplication.instance(), "instance_server", None)
+        if server is not None:
+            server.close()  # la nueva instancia no debe creer que ya hay otra abierta
+        started = QProcess.startDetached(program, arguments)
+        if not (started[0] if isinstance(started, tuple) else started):
+            if server is not None:
+                server.listen(INSTANCE)
+            QMessageBox.warning(self, APP_NAME, _("No se pudo reiniciar la app. Ciérrala y vuelve a abrirla."))
+            return
+        self.quit_for_update()
+
     # ── barra lateral: plegado y resúmenes ───────────────────────────────
     def _on_section_toggled(self, _key: str, _on: bool):
         if hasattr(self, "settings"):
@@ -3446,33 +3577,35 @@ class MainWindow(QMainWindow):
         sec = self.sections
         rules = self._active_rules()
         if rules:
-            more = f" y {len(rules) - 3} más" if len(rules) > 3 else ""
+            more = (" " + _("y {rules} más").format(rules=len(rules) - 3)) if len(rules) > 3 else ""
             sec["reglas"].set_summary(f"{', '.join(rules[:3])}{more}")
         else:
-            sec["reglas"].set_summary("Ninguna regla activa: se copia todo")
-        mode = {engine.MODE_MIRROR: "Espejo con versiones", engine.MODE_UPDATE: "Solo añadir y actualizar"}.get(
+            sec["reglas"].set_summary(_("Ninguna regla activa: se copia todo"))
+        mode = {engine.MODE_MIRROR: _("Espejo con versiones"), engine.MODE_UPDATE: _("Solo añadir y actualizar")}.get(
             self.mode_combo.currentData(), self.mode_combo.currentText())
-        sec["modo"].set_summary(f"{mode}  ·  versiones {self.keep_combo.currentText().lower()}  ·  "
-                                f"{self.threads_spin.value()} hilos")
+        sec["modo"].set_summary(_("{mode}  ·  versiones {lower}  ·  {value} hilos").format(mode=mode, lower=self.keep_combo.currentText().lower(), value=self.threads_spin.value()))
         scrub = self.scrub_combo.currentData()
         sec["integridad"].set_summary(
-            f"{'SHA-256 en cada copia' if self.verify_box.isChecked() else 'Sin verificar al copiar'}  ·  "
-            f"{'revisión ' + self.scrub_combo.currentText() if scrub else 'sin revisión'}")
-        sec["disco"].set_summary(f"{'Vigilando' if self.watch_box.isChecked() else 'Sin vigilar'}  ·  "
-                                 f"{self.connect_combo.currentText().lower()}")
+            (_("SHA-256 en cada copia") if self.verify_box.isChecked() else _("Sin verificar al copiar")) + "  ·  "
+            + (_("revisión {period}").format(period=self.scrub_combo.currentText()) if scrub else _("sin revisión")))
+        sec["disco"].set_summary((_("Vigilando") if self.watch_box.isChecked() else _("Sin vigilar"))
+                                 + "  ·  " + self.connect_combo.currentText().lower())
         if self.remind_box.isChecked():
             n = len(self.registry.items)
             alerts = len(self.registry.alerts())
-            text = f"Tras {self.remind_combo.currentText()}  ·  {n} copia{'s' if n != 1 else ''} habitual" \
-                   f"{'es' if n != 1 else ''}"
+            text = (_("Tras {period}").format(period=self.remind_combo.currentText()) + "  ·  "
+                    + _n("{n} copia habitual", "{n} copias habituales", n).format(n=n))
             if alerts:
-                text += f"  ·  {alerts} con cambios sin copiar"
+                text += ("  ·  " + _("{alerts} con cambios sin copiar").format(alerts=alerts))
             sec["recordatorios"].set_summary(text)
         else:
-            sec["recordatorios"].set_summary("Desactivados")
-        sec["energia"].set_summary("Sin suspensión mientras copia" if self.awake_box.isChecked() else "Desactivado")
-        sec["actualizaciones"].set_summary(f"v{APP_VERSION}  ·  "
-                                           f"{'automáticas' if self.update_box.isChecked() else 'solo a mano'}")
+            sec["recordatorios"].set_summary(_("Desactivados"))
+        sec["energia"].set_summary(_("Sin suspensión mientras copia") if self.awake_box.isChecked() else _("Desactivado"))
+        choice = self.lang_combo.currentData()
+        name = i18n.LANGS[i18n.resolve(choice)]
+        sec["idioma"].set_summary(_("Automático · {name}").format(name=name) if choice == "auto" else name)
+        sec["actualizaciones"].set_summary(f"v{APP_VERSION}  ·  " + (_("automáticas") if self.update_box.isChecked()
+                                                                       else _("solo a mano")))
 
     def _build_main(self) -> QVBoxLayout:
         col = QVBoxLayout()
@@ -3485,8 +3618,8 @@ class MainWindow(QMainWindow):
         sl.setSpacing(4)
         self.seg_group = QButtonGroup(self)
         self.seg_buttons = []
-        for i, (text, glyph) in enumerate([("Carpetas", G.TREE), ("Cambios", G.SYNC),
-                                           ("Progreso", G.SPEED), ("Incidencias", G.WARN)]):
+        for i, (text, glyph) in enumerate([(_("Carpetas"), G.TREE), (_("Cambios"), G.SYNC),
+                                           (_("Progreso"), G.SPEED), (_("Incidencias"), G.WARN)]):
             b = QPushButton(f"  {text}")
             b.setObjectName("seg")
             b.setCheckable(True)
@@ -3525,20 +3658,20 @@ class MainWindow(QMainWindow):
         h.setContentsMargins(16, 10, 10, 10)
         h.setSpacing(10)
         h.addWidget(glyph_label(G.INFO, C["accent2"], 16))
-        msg = QLabel("Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas.")
+        msg = QLabel(_("Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas."))
         msg.setObjectName("muted")
         msg.setWordWrap(True)
         h.addWidget(msg, 1)
         self.excl_count = QLabel("")
         self.excl_count.setObjectName("faint")
         h.addWidget(self.excl_count)
-        reset = QPushButton("Restablecer")
+        reset = QPushButton(_("Restablecer"))
         reset.clicked.connect(self._reset_exclusions)
         reload_btn = QPushButton()
         reload_btn.setObjectName("icon")
         reload_btn.setIcon(glyph_icon(G.REFRESH, C["text"], 14))
         reload_btn.setFixedSize(38, 34)
-        reload_btn.setToolTip("Volver a leer las carpetas del origen")
+        reload_btn.setToolTip(_("Volver a leer las carpetas del origen"))
         reload_btn.clicked.connect(self._load_tree)
         h.addWidget(reset)
         h.addWidget(reload_btn)
@@ -3560,8 +3693,8 @@ class MainWindow(QMainWindow):
         h.setSpacing(8)
         self.kind_group = QButtonGroup(self)
         self.kind_buttons: dict[str | None, QPushButton] = {}
-        for key, text in [(None, "Todos"), ("n", "Nuevos"), ("c", "Modificados"),
-                          ("m", "Movidos"), ("d", "A versiones")]:
+        for key, text in [(None, _("Todos")), ("n", _("Nuevos")), ("c", _("Modificados")),
+                          ("m", _("Movidos")), ("d", _("A versiones"))]:
             b = QPushButton(text)
             b.setObjectName("chip")
             b.setCheckable(True)
@@ -3574,7 +3707,7 @@ class MainWindow(QMainWindow):
         self.kind_buttons[None].setChecked(True)
         h.addStretch(1)
         self.change_search = QLineEdit()
-        self.change_search.setPlaceholderText("Buscar ruta…")
+        self.change_search.setPlaceholderText(_("Buscar ruta…"))
         self.change_search.setMinimumWidth(150)
         self.change_search.setMaximumWidth(260)
         self._search_timer = QTimer(self)
@@ -3601,8 +3734,8 @@ class MainWindow(QMainWindow):
         hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         self.changes.setColumnWidth(0, 130)
         self.changes.setColumnWidth(2, 120)
-        self.changes_empty = QLabel("Pulsa «Analizar» para ver exactamente qué se va a copiar, mover o guardar "
-                                    "en versiones antes de tocar nada.")
+        self.changes_empty = QLabel(_("Pulsa «Analizar» para ver exactamente qué se va a copiar, mover o guardar "
+                                    "en versiones antes de tocar nada."))
         self.changes_empty.setObjectName("muted")
         self.changes_empty.setWordWrap(True)
         self.changes_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3624,15 +3757,15 @@ class MainWindow(QMainWindow):
         self.banner = Banner()
         v.addWidget(self.banner)
 
-        self.summary_card = Card("Resumen de la copia", G.DONE)
-        self.s_new = Tile("Nuevos", G.ADD, C["ok"])
-        self.s_changed = Tile("Modificados", G.REFRESH, C["accent2"])
-        self.s_moved = Tile("Movidos", G.NEXT, C["accent"])
-        self.s_versions = Tile("A versiones", G.CLOCK, C["warn"])
-        self.s_dirs_new = Tile("Carpetas nuevas", G.FOLDER, C["folder"])
-        self.s_dirs_gone = Tile("Carpetas quitadas", G.FOLDER, C["muted"])
-        self.s_same = Tile("Sin cambios", G.CHECK, C["ok"])
-        self.s_checked = Tile("Verificados", G.SHIELD, C["accent2"])
+        self.summary_card = Card(_("Resumen de la copia"), G.DONE)
+        self.s_new = Tile(_("Nuevos"), G.ADD, C["ok"])
+        self.s_changed = Tile(_("Modificados"), G.REFRESH, C["accent2"])
+        self.s_moved = Tile(_("Movidos"), G.NEXT, C["accent"])
+        self.s_versions = Tile(_("A versiones"), G.CLOCK, C["warn"])
+        self.s_dirs_new = Tile(_("Carpetas nuevas"), G.FOLDER, C["folder"])
+        self.s_dirs_gone = Tile(_("Carpetas quitadas"), G.FOLDER, C["muted"])
+        self.s_same = Tile(_("Sin cambios"), G.CHECK, C["ok"])
+        self.s_checked = Tile(_("Verificados"), G.SHIELD, C["accent2"])
         self.summary_tiles = [self.s_new, self.s_changed, self.s_moved, self.s_versions,
                               self.s_dirs_new, self.s_dirs_gone, self.s_same, self.s_checked]
         self.summary_card.body.addWidget(TileGrid(self.summary_tiles))
@@ -3653,23 +3786,23 @@ class MainWindow(QMainWindow):
 
         right = QVBoxLayout()
         right.setSpacing(14)
-        self.t_elapsed = Tile("Transcurrido", G.TIMER, C["accent2"])
-        self.t_left = Tile("Restante", G.CLOCK, C["accent2"])
-        self.t_speed = Tile("Velocidad", G.SPEED, C["accent2"])
-        self.t_eta = Tile("Fin estimado", G.FLAG, C["accent2"])
-        self.t_copied = Tile("Copiado", G.COPY, C["accent"])
-        self.t_files = Tile("Archivos", G.DOC, C["accent"])
-        self.t_skipped = Tile("Sin cambios", G.CHECK, C["accent"])
-        self.t_errors = Tile("Errores", G.WARN, C["accent"])
+        self.t_elapsed = Tile(_("Transcurrido"), G.TIMER, C["accent2"])
+        self.t_left = Tile(_("Restante"), G.CLOCK, C["accent2"])
+        self.t_speed = Tile(_("Velocidad"), G.SPEED, C["accent2"])
+        self.t_eta = Tile(_("Fin estimado"), G.FLAG, C["accent2"])
+        self.t_copied = Tile(_("Copiado"), G.COPY, C["accent"])
+        self.t_files = Tile(_("Archivos"), G.DOC, C["accent"])
+        self.t_skipped = Tile(_("Sin cambios"), G.CHECK, C["accent"])
+        self.t_errors = Tile(_("Errores"), G.WARN, C["accent"])
         self.tiles = [self.t_elapsed, self.t_left, self.t_speed, self.t_eta,
                       self.t_copied, self.t_files, self.t_skipped, self.t_errors]
         right.addWidget(TileGrid(self.tiles))
 
         bars = Card(margins=(18, 14, 18, 16))
         bars.body.setSpacing(8)
-        self.bar_bytes, self.bar_bytes_val = self._bar_row(bars.body, "Datos")
+        self.bar_bytes, self.bar_bytes_val = self._bar_row(bars.body, _("Datos"))
         bars.body.addSpacing(4)
-        self.bar_files, self.bar_files_val = self._bar_row(bars.body, "Archivos")
+        self.bar_files, self.bar_files_val = self._bar_row(bars.body, _("Archivos"))
         right.addWidget(bars)
         top.addLayout(right, 1)
         v.addLayout(top)
@@ -3680,7 +3813,7 @@ class MainWindow(QMainWindow):
         self.chart = SpeedChart()
         chart_card.body.addWidget(self.chart)
         mid.addWidget(chart_card, 3)
-        self.active_card = Card("En curso", G.SYNC)
+        self.active_card = Card(_("En curso"), G.SYNC)
         self.active_rows_box = QVBoxLayout()
         self.active_rows_box.setSpacing(12)
         self.active_card.body.addLayout(self.active_rows_box)
@@ -3735,17 +3868,17 @@ class MainWindow(QMainWindow):
         h.setContentsMargins(16, 10, 10, 10)
         self.issues_icon = glyph_label(G.DONE, C["ok"], 16)
         h.addWidget(self.issues_icon)
-        self.issues_label = QLabel("Sin incidencias")
+        self.issues_label = QLabel(_("Sin incidencias"))
         self.issues_label.setObjectName("muted")
         h.addWidget(self.issues_label, 1)
-        self.btn_export = QPushButton("Exportar…")
+        self.btn_export = QPushButton(_("Exportar…"))
         self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_export.setEnabled(False)
         self.btn_export.clicked.connect(self._export_issues)
         h.addWidget(self.btn_export)
         v.addWidget(bar)
         self.issues = QTableWidget(0, 2)
-        self.issues.setHorizontalHeaderLabels(["RUTA", "MOTIVO"])
+        self.issues.setHorizontalHeaderLabels([_("RUTA"), _("MOTIVO")])
         self.issues.verticalHeader().hide()
         self.issues.setShowGrid(False)
         self.issues.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -3755,8 +3888,8 @@ class MainWindow(QMainWindow):
         hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
         self.issues.setColumnWidth(1, 360)
-        empty = QLabel("Ningún archivo ha dado problemas.\nSi alguno no se puede leer o copiar, aparece aquí y la "
-                       "copia sigue con el resto.")
+        empty = QLabel(_("Ningún archivo ha dado problemas.\nSi alguno no se puede leer o copiar, aparece aquí y la "
+                       "copia sigue con el resto."))
         empty.setObjectName("muted")
         empty.setWordWrap(True)
         empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3769,9 +3902,10 @@ class MainWindow(QMainWindow):
     def _set_issues(self, total: int):
         ok = total == 0
         set_glyph(self.issues_icon, G.DONE if ok else G.WARN, C["ok"] if ok else C["warn"], 16)
-        self.issues_label.setText("Sin incidencias" if ok else
-                                  f"{fmt_int(total)} incidencia{'s' if total != 1 else ''}: archivos que no se "
-                                  "pudieron leer o copiar. El resto sigue adelante.")
+        self.issues_label.setText(_("Sin incidencias") if ok else
+                                  _n("{n} incidencia: archivos que no se pudieron leer o copiar. El resto sigue "
+                                     "adelante.", "{n} incidencias: archivos que no se pudieron leer o copiar. El "
+                                     "resto sigue adelante.", total).format(n=fmt_int(total)))
         self.btn_export.setEnabled(not ok)
         self.issues_stack.setCurrentIndex(0 if ok else 1)
 
@@ -3794,11 +3928,11 @@ class MainWindow(QMainWindow):
             h.addWidget(b)
             return b
 
-        self.btn_open = button("Abrir destino", G.OPEN)
-        self.btn_scan = button("Analizar", G.SEARCH)
-        self.btn_pause = button("Pausar", G.PAUSE)
-        self.btn_cancel = button("Cancelar", G.STOP, "danger")
-        self.btn_start = button("Sincronizar", G.PLAY, "primary", "#FFFFFF")
+        self.btn_open = button(_("Abrir destino"), G.OPEN)
+        self.btn_scan = button(_("Analizar"), G.SEARCH)
+        self.btn_pause = button(_("Pausar"), G.PAUSE)
+        self.btn_cancel = button(_("Cancelar"), G.STOP, "danger")
+        self.btn_start = button(_("Sincronizar"), G.PLAY, "primary", "#FFFFFF")
         self.btn_start.setMinimumWidth(230)
         self.btn_open.clicked.connect(self._open_dest)
         self.btn_scan.clicked.connect(lambda: self._start(copy=False))
@@ -3943,17 +4077,16 @@ class MainWindow(QMainWindow):
         present = (bool(root) and engine.volume_present(dst) and self.disk_id
                    and engine.read_disk_id(root) == self.disk_id)
         if present:
-            label = engine.volume_info(root)[0] or "Disco de copia"
+            label = engine.volume_info(root)[0] or _("Disco de copia")
             where = f" ({engine.vol_name(root)})" if IS_WIN else ""
             last = engine.last_history(root)
-            self.disk_status.setText(f"{label}{where} registrado  ·  última copia "
-                                     f"{fmt_ago(last and last.get('fin'))}")
+            self.disk_status.setText(_("{label}{where} registrado  ·  última copia {v}").format(label=label, where=where, v=fmt_ago(last and last.get('fin'))))
         elif self.disk_id:
-            self.disk_status.setText("Disco registrado, ahora desconectado. Al conectarlo se reconoce aunque "
-                                     "cambie de letra o de nombre.")
+            self.disk_status.setText(_("Disco registrado, ahora desconectado. Al conectarlo se reconoce aunque "
+                                     "cambie de letra o de nombre."))
         else:
-            self.disk_status.setText("El disco se registra en la primera sincronización (se crea una carpeta "
-                                     "oculta .devbackup en su raíz).")
+            self.disk_status.setText(_("El disco se registra en la primera sincronización (se crea una carpeta "
+                                     "oculta .devbackup en su raíz)."))
         self.integ_status.setText(self.integrity_text(long=True))
 
     def _index_path(self) -> str | None:
@@ -3966,8 +4099,8 @@ class MainWindow(QMainWindow):
         """Cuánto del disco tiene su contenido comprobado, según el índice."""
         path = self._index_path()
         if not path or not os.path.exists(path):
-            return "integridad: aún sin comprobar" if not long else \
-                "Aún no hay nada comprobado. Se empieza con la próxima sincronización."
+            return _("integridad: aún sin comprobar") if not long else \
+                _("Aún no hay nada comprobado. Se empieza con la próxima sincronización.")
         try:
             con = sqlite3.connect(Path(path).as_uri() + "?mode=ro", uri=True)
             try:
@@ -3975,19 +4108,19 @@ class MainWindow(QMainWindow):
             finally:
                 con.close()
         except sqlite3.Error:
-            return "integridad: sin datos"
+            return _("integridad: sin datos")
         frac = covered / total if total else 0.0
         if not long:
-            return f"integridad comprobada en el {pct(frac)} del disco"
-        rest = "" if covered >= total else (f"  ·  faltan {fmt_int(total - covered)}; se van revisando tras cada "
-                                            f"sincronización, empezando por los nunca comprobados")
-        return f"Contenido comprobado: {fmt_int(covered)} de {fmt_int(total)} archivos ({pct(frac)}){rest}."
+            return _("integridad comprobada en el {frac} del disco").format(frac=pct(frac))
+        rest = "" if covered >= total else (("  ·  " + _("faltan {total}; se van revisando tras cada sincronización, empezando por los nunca "
+                                              "comprobados").format(total=fmt_int(total - covered))))
+        return _("Contenido comprobado: {covered} de {total} archivos ({frac}){rest}.").format(covered=fmt_int(covered), total=fmt_int(total), frac=pct(frac), rest=rest)
 
     def _on_watch_toggled(self, on: bool):
         try:
             set_autostart(on)
         except OSError as exc:
-            QMessageBox.warning(self, APP_NAME, f"No se pudo configurar el arranque automático:\n{exc}")
+            QMessageBox.warning(self, APP_NAME, _("No se pudo configurar el arranque automático:\n{exc}").format(exc=exc))
         if on:
             self._ensure_tray()
         elif self.tray:
@@ -4000,16 +4133,16 @@ class MainWindow(QMainWindow):
         if self.tray is None:
             self.tray = QSystemTrayIcon(app_icon(), self)
             menu = QMenu()
-            menu.addAction(glyph_icon(G.OPEN, C["text"], 14), "Abrir", self._show_window)
-            menu.addAction(glyph_icon(G.PLAY, C["text"], 14), "Sincronizar ahora", self._tray_sync)
-            menu.addAction(glyph_icon(G.HELP, C["text"], 14), "Guía rápida", lambda: self.show_tour())
+            menu.addAction(glyph_icon(G.OPEN, C["text"], 14), _("Abrir"), self._show_window)
+            menu.addAction(glyph_icon(G.PLAY, C["text"], 14), _("Sincronizar ahora"), self._tray_sync)
+            menu.addAction(glyph_icon(G.HELP, C["text"], 14), _("Guía rápida"), lambda: self.show_tour())
             menu.addSeparator()
-            menu.addAction(glyph_icon(G.CLOSE, C["text"], 14), "Salir", self._quit)
+            menu.addAction(glyph_icon(G.CLOSE, C["text"], 14), _("Salir"), self._quit)
             self._tray_menu = menu
             self.tray.setContextMenu(menu)
             self.tray.activated.connect(self._on_tray_activated)
             self.tray.messageClicked.connect(self._show_window)
-        self.tray.setToolTip(f"{APP_NAME} · vigilando el disco de copia")
+        self.tray.setToolTip(_("{app_name} · vigilando el disco de copia").format(app_name=APP_NAME))
         self.tray.show()
 
     def _on_tray_activated(self, reason):
@@ -4083,11 +4216,11 @@ class MainWindow(QMainWindow):
             return
         action = self.connect_combo.currentData()
         if action == "none":
-            self._notify("Disco de copia conectado", f"{new_dst} listo. Abre {APP_NAME} para sincronizar.")
+            self._notify(_("Disco de copia conectado"), _("{new_dst} listo. Abre {app_name} para sincronizar.").format(new_dst=new_dst, app_name=APP_NAME))
             return
         self._show_window()
         if action == "auto":
-            self._notify("Disco de copia conectado", "Sincronizando…")
+            self._notify(_("Disco de copia conectado"), _("Sincronizando…"))
             self._start(copy=True)
             return
         if not self._start(copy=False, show_progress=False):
@@ -4113,7 +4246,7 @@ class MainWindow(QMainWindow):
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
             chip.toggled.connect(lambda checked, n=name: self._toggle_rule(n, checked))
             if name in self.custom_rules:
-                chip.setToolTip("Regla propia · clic derecho para quitarla")
+                chip.setToolTip(_("Regla propia · clic derecho para quitarla"))
                 chip.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 chip.customContextMenuRequested.connect(lambda pos, n=name, c=chip: self._rule_menu(n, c, pos))
             self.flow.addWidget(chip)
@@ -4140,7 +4273,7 @@ class MainWindow(QMainWindow):
 
     def _rule_menu(self, name: str, chip: QPushButton, pos):
         menu = QMenu(self)
-        act = menu.addAction(glyph_icon(G.CLOSE, C["err"], 12), f"Quitar «{name}»")
+        act = menu.addAction(glyph_icon(G.CLOSE, C["err"], 12), _("Quitar «{name}»").format(name=name))
         if menu.exec(chip.mapToGlobal(pos)) == act:
             self.custom_rules.remove(name)
             self.rules.pop(name, None)
@@ -4157,7 +4290,7 @@ class MainWindow(QMainWindow):
         if os.path.isdir(src):
             n = self.tree.load(src, excluded, self._active_rules())
             self.src_card.info.setText(self.src_card.info.text().split("  ·  ")[0]
-                                       + f"  ·  {fmt_int(n)} carpetas de primer nivel")
+                                       + ("  ·  " + _("{n} carpetas de primer nivel").format(n=fmt_int(n))))
         else:
             self.tree.clear()
         self._on_tree_changed()
@@ -4172,7 +4305,7 @@ class MainWindow(QMainWindow):
 
     def _on_tree_changed(self):
         n = len(self.tree.excluded)
-        self.excl_count.setText(f"{n} excluida{'s' if n != 1 else ''} a mano" if n else "")
+        self.excl_count.setText(_n("{n} excluida a mano", "{n} excluidas a mano", n).format(n=n) if n else "")
         self._invalidate_plan()
 
     def _reset_exclusions(self):
@@ -4195,11 +4328,11 @@ class MainWindow(QMainWindow):
             return
         rules = self._active_rules()
         manual = len(self.tree.excluded) if hasattr(self, "tree") else 0
-        parts = [engine.MODES[self.mode_combo.currentData()],
-                 f"{len(rules)} regla{'s' if len(rules) != 1 else ''} activa{'s' if len(rules) != 1 else ''}"]
+        parts = [_(engine.MODES[self.mode_combo.currentData()]),
+                 _n("{n} regla activa", "{n} reglas activas", len(rules)).format(n=len(rules))]
         if manual:
-            parts.append(f"{manual} carpeta{'s' if manual != 1 else ''} excluida{'s' if manual != 1 else ''} a mano")
-        parts.append(f"{self.threads_spin.value()} hilos")
+            parts.append(_n("{n} carpeta excluida a mano", "{n} carpetas excluidas a mano", manual).format(n=manual))
+        parts.append(_n("{n} hilo", "{n} hilos", self.threads_spin.value()).format(n=self.threads_spin.value()))
         self.summary.setText("  ·  ".join(parts))
 
     # ── cambios ──────────────────────────────────────────────────────────
@@ -4217,10 +4350,10 @@ class MainWindow(QMainWindow):
         self.change_search.clear()
         self.change_search.blockSignals(False)
         if job and not rows:
-            self.changes_empty.setText("Todo está al día: no hay nada que copiar, mover ni guardar en versiones.")
+            self.changes_empty.setText(_("Todo está al día: no hay nada que copiar, mover ni guardar en versiones."))
         elif not job:
-            self.changes_empty.setText("Pulsa «Analizar» para ver exactamente qué se va a copiar, mover o guardar "
-                                       "en versiones antes de tocar nada.")
+            self.changes_empty.setText(_("Pulsa «Analizar» para ver exactamente qué se va a copiar, mover o guardar "
+                                       "en versiones antes de tocar nada."))
         self.changes_stack.setCurrentIndex(1 if rows else 0)
 
     def _filter_changes(self):
@@ -4238,22 +4371,22 @@ class MainWindow(QMainWindow):
         self.btn_pause.setVisible(running)
         self.btn_cancel.setVisible(running)
         scrubbing = running and self.job is not None and self.job.stats.step == "verificando"
-        self.btn_cancel.setText("  Omitir revisión" if scrubbing else "  Cancelar")
+        self.btn_cancel.setText(("  " + _("Omitir revisión")) if scrubbing else ("  " + _("Cancelar")))
         self.btn_open.setVisible(not running)
         if state == "paused":
-            self.btn_pause.setText("  Reanudar")
+            self.btn_pause.setText(("  " + _("Reanudar")))
             self.btn_pause.setIcon(glyph_icon(G.PLAY, C["warn"], 14))
         else:
-            self.btn_pause.setText("  Pausar")
+            self.btn_pause.setText(("  " + _("Pausar")))
             self.btn_pause.setIcon(glyph_icon(G.PAUSE, C["text"], 14))
         if state == "ready" and self.job and self.job.stats.has_changes:
             n = self.job.stats.ops_total
-            self.btn_start.setText(f"  Sincronizar {fmt_int(n)} cambio{'s' if n != 1 else ''}")
+            self.btn_start.setText("  " + _n("Sincronizar {n} cambio", "Sincronizar {n} cambios", n).format(n=fmt_int(n)))
         else:
-            self.btn_start.setText("  Sincronizar")
+            self.btn_start.setText(("  " + _("Sincronizar")))
         text, color = PILL[state]
         if state == "copying" and self.job is not None and self.job.stats.step == "verificando":
-            text, color = "Comprobando", C["accent2"]
+            text, color = _("Comprobando"), C["accent2"]
         self.pill.setText(f"●  {text}")
         self.pill.setStyleSheet(f"QLabel#pill {{ color:{color}; background:{rgba(color, 30)}; "
                                 f"border:1px solid {rgba(color, 90)}; }}")
@@ -4271,25 +4404,25 @@ class MainWindow(QMainWindow):
                 self._refresh_remind_bar()
 
     def _show_idle_banner(self):
-        dst = self.dst_card.path() or "el destino"
-        self.banner.set("info", "Listo para sincronizar",
-                        f"«Analizar» enseña qué ha cambiado sin tocar nada. «Sincronizar» deja {dst} igual que el "
-                        f"origen: copia lo nuevo y lo modificado, mueve lo renombrado y guarda en versiones lo que "
-                        f"borres.", G.INFO)
+        dst = self.dst_card.path() or _("el destino")
+        self.banner.set("info", _("Listo para sincronizar"),
+                        _("«Analizar» enseña qué ha cambiado sin tocar nada. «Sincronizar» deja {dst} igual que el "
+                          "origen: copia lo nuevo y lo modificado, mueve lo renombrado y guarda en versiones lo que "
+                          "borres.").format(dst=dst), G.INFO)
 
     # ── operación ────────────────────────────────────────────────────────
     def _validate(self, src: str, dst: str) -> str | None:
         if not src or not os.path.isdir(src):
-            return "La carpeta de origen no existe."
+            return _("La carpeta de origen no existe.")
         if not dst:
-            return "Elige una carpeta de destino."
+            return _("Elige una carpeta de destino.")
         ns, nd = os.path.normcase(os.path.abspath(src)), os.path.normcase(os.path.abspath(dst))
         if ns == nd:
-            return "El origen y el destino son la misma carpeta."
+            return _("El origen y el destino son la misma carpeta.")
         if nd.startswith(ns.rstrip("\\/") + os.sep):
-            return "El destino no puede estar dentro del origen."
+            return _("El destino no puede estar dentro del origen.")
         if not engine.volume_present(dst):
-            return f"El disco de {dst} no está conectado."
+            return _("El disco de {dst} no está conectado.").format(dst=dst)
         return None
 
     def _start(self, copy: bool, show_progress: bool = True, scrub_all: bool = False) -> bool:
@@ -4323,9 +4456,8 @@ class MainWindow(QMainWindow):
             self._reset_progress()
             self._op_start = time.perf_counter()
             self._op_wall = datetime.now()
-            self._log(f"Análisis iniciado  ·  {src}  →  {dst}", C["accent2"])
-            self._log(f"Modo: {engine.MODES[job.mode].lower()}  ·  reglas: {', '.join(job.patterns) or 'ninguna'}  ·  "
-                      f"excluidas a mano: {len(job.excluded)}")
+            self._log(_("Análisis iniciado  ·  {src}  →  {dst}").format(src=src, dst=dst), C["accent2"])
+            self._log(_("Modo: {lower}  ·  reglas: {v}  ·  excluidas a mano: {excluded}").format(lower=_(engine.MODES[job.mode]).lower(), v=', '.join(job.patterns) or _("ninguna"), excluded=len(job.excluded)))
         self.job = job
         self._finalized = False
         self._copy_seen = False
@@ -4358,7 +4490,7 @@ class MainWindow(QMainWindow):
         self.chart.reset()
         self.ring.set_busy(False)
         self.ring.set_value(0, animate=False)
-        self.ring.set_text("0 %", "", "PREPARADO")
+        self.ring.set_text(pct(0), "", _("PREPARADO"))
         self.summary_card.hide()
         self._scrub_seen = False
         for t in self.tiles:
@@ -4369,7 +4501,7 @@ class MainWindow(QMainWindow):
         self.bar_files_val.setText("—")
         self.issues.setRowCount(0)
         self._set_issues(0)
-        self.seg_buttons[PAGE_ISSUES].setText("  Incidencias")
+        self.seg_buttons[PAGE_ISSUES].setText(("  " + _("Incidencias")))
         self.log.clear()
         self._set_active_rows(0)
         self._load_changes(None)
@@ -4399,11 +4531,11 @@ class MainWindow(QMainWindow):
                     self._paused_copy += gap
                 self._pause_at = None
             self._samples.clear()
-            self._log("Reanudado")
+            self._log(_("Reanudado"))
         else:
             job.pause()
             self._pause_at = now
-            self._log("En pausa", C["warn"])
+            self._log(_("En pausa"), C["warn"])
         self._tick()
 
     def _cancel(self):
@@ -4412,14 +4544,13 @@ class MainWindow(QMainWindow):
         if self.job.phase == "copying" and self.job.stats.step == "verificando":
             # la sincronización ya está completa: omitir la revisión no deshace nada
             self.job.cancel()
-            self._log("Revisión de integridad omitida: la sincronización ya estaba completa.", C["warn"])
+            self._log(_("Revisión de integridad omitida: la sincronización ya estaba completa."), C["warn"])
             return
-        what = "la sincronización" if self.job.phase == "copying" else "el análisis"
-        ans = QMessageBox.question(self, APP_NAME, f"¿Cancelar {what}?\n\nLo que ya se haya copiado se conserva; "
-                                   "el archivo a medias se descarta.")
+        what = _("la sincronización") if self.job.phase == "copying" else _("el análisis")
+        ans = QMessageBox.question(self, APP_NAME, _("¿Cancelar {what}?\n\nLo que ya se haya copiado se conserva; el archivo a medias se descarta.").format(what=what))
         if ans == QMessageBox.StandardButton.Yes:
             self.job.cancel()
-            self._log("Cancelando…", C["warn"])
+            self._log(_("Cancelando…"), C["warn"])
 
     def _open_dest(self):
         dst = self.dst_card.path()
@@ -4461,41 +4592,39 @@ class MainWindow(QMainWindow):
             self._finish(job, phase)
 
     def _plan_text(self, s: engine.Stats) -> str:
-        return (f"{fmt_int(s.new_files)} nuevos ({fmt_bytes(s.new_bytes)})  ·  "
-                f"{fmt_int(s.changed_files)} modificados ({fmt_bytes(s.changed_bytes)})  ·  "
-                f"{fmt_int(s.moved_files)} movidos  ·  {fmt_int(s.del_files)} a versiones  ·  "
-                f"{fmt_int(s.skip_files)} sin cambios")
+        return (_("{new_files} nuevos ({new_bytes})  ·  {changed_files} modificados ({changed_bytes})  ·  "
+                  "{moved_files} movidos  ·  {del_files} a versiones  ·  {skip_files} sin cambios").format(new_files=fmt_int(s.new_files), new_bytes=fmt_bytes(s.new_bytes), changed_files=fmt_int(s.changed_files), changed_bytes=fmt_bytes(s.changed_bytes), moved_files=fmt_int(s.moved_files), del_files=fmt_int(s.del_files), skip_files=fmt_int(s.skip_files)))
 
     def _render_scan(self, job: engine.BackupJob, now: float):
         s = job.stats
         elapsed = now - self._op_start
         active = max(1e-6, elapsed - self._paused_total - self._current_pause(now))
         self.ring.set_busy(not job.paused)
-        self.ring.set_text(fmt_int(s.files_found), "archivos revisados", "ANALIZANDO")
-        title = "Analizando el origen con el índice de la última copia…" if s.fast else "Analizando origen y destino…"
-        self.banner.set("run", title, f"{fmt_int(s.dirs_scanned)} carpetas  ·  " + self._plan_text(s), G.SEARCH)
-        self.t_elapsed.set(fmt_clock(elapsed), f"desde las {self._op_wall:%H:%M:%S}")
-        self.t_left.set("—", "se calcula al terminar el análisis")
-        self.t_speed.set(f"{fmt_int(s.files_found / active)}/s", "archivos revisados por segundo")
+        self.ring.set_text(fmt_int(s.files_found), _("archivos revisados"), _("ANALIZANDO"))
+        title = _("Analizando el origen con el índice de la última copia…") if s.fast else _("Analizando origen y destino…")
+        self.banner.set("run", title, (_("{dirs_scanned} carpetas  ·").format(dirs_scanned=fmt_int(s.dirs_scanned)) + "  ") + self._plan_text(s), G.SEARCH)
+        self.t_elapsed.set(fmt_clock(elapsed), _("desde las {op_wall:%H:%M:%S}").format(op_wall=self._op_wall))
+        self.t_left.set("—", _("se calcula al terminar el análisis"))
+        self.t_speed.set(f"{fmt_int(s.files_found / active)}/s", _("archivos revisados por segundo"))
         self.t_eta.set("—", "")
-        self.t_copied.set("0 B", f"{fmt_bytes(s.new_bytes + s.changed_bytes)} por copiar")
-        self.t_files.set("0", f"{fmt_int(s.new_files + s.changed_files)} por copiar")
-        self.t_skipped.set(fmt_int(s.skip_files), f"{fmt_bytes(s.skip_bytes)} ya al día")
+        self.t_copied.set("0 B", _("{new_bytes} por copiar").format(new_bytes=fmt_bytes(s.new_bytes + s.changed_bytes)))
+        self.t_files.set("0", _("{new_files} por copiar").format(new_files=fmt_int(s.new_files + s.changed_files)))
+        self.t_skipped.set(fmt_int(s.skip_files), _("{skip_bytes} ya al día").format(skip_bytes=fmt_bytes(s.skip_bytes)))
         self._render_errors_tile(s)
         self.cur_label.setText(s.current_dir)
-        self.setWindowTitle(f"Analizando… · {APP_NAME}")
+        self.setWindowTitle(_("Analizando… · {app_name}").format(app_name=APP_NAME))
 
     def _on_copy_started(self, job: engine.BackupJob):
         s = job.stats
         if s.scan_end:
             self._log_scan_summary(job)
-        self._log(f"Sincronización iniciada con {job.threads} hilos  ·  {fmt_int(s.ops_total)} cambios  ·  "
-                  f"{fmt_bytes(s.plan_bytes)} por copiar", C["accent"])
+        self._log(_("Sincronización iniciada con {threads} hilos  ·  {ops_total} cambios  ·  {plan_bytes} por "
+                    "copiar").format(threads=job.threads, ops_total=fmt_int(s.ops_total), plan_bytes=fmt_bytes(s.plan_bytes)), C["accent"])
         self._set_active_rows(job.threads)
         self.ring.set_busy(False)
         self._samples.clear()
-        self.banner.set("run", f"Sincronizando  {job.src}  →  {job.dst}",
-                        self._plan_text(s) + f"  ·  análisis en {fmt_clock(s.scan_end - s.scan_start, ms=True)}",
+        self.banner.set("run", _("Sincronizando  {src}  →  {dst}").format(src=job.src, dst=job.dst),
+                        self._plan_text(s) + ("  ·  " + _("análisis en {scan_end}").format(scan_end=fmt_clock(s.scan_end - s.scan_start, ms=True))),
                         G.SYNC)
 
     def _scrub_left(self, job: engine.BackupJob) -> float | None:
@@ -4506,13 +4635,13 @@ class MainWindow(QMainWindow):
 
     def _on_scrub_started(self, job: engine.BackupJob):
         s = job.stats
-        limit = (f"como mucho {fmt_human(job.scrub_seconds)}" if job.scrub_seconds > 0
-                 else "todo el disco, sin límite de tiempo")
-        self._log(f"Sincronización completada. Revisión de integridad: {fmt_int(s.scrub_due)} archivos pendientes "
-                  f"de comprobar ({limit}).", C["accent2"])
-        self.banner.set("run", "Sincronización completada  ·  revisando la integridad del disco",
-                        f"Relee del disco una tanda de archivos ya copiados para detectar daños silenciosos ({limit}). "
-                        "La copia ya está completa: puedes terminar ahora con «Omitir revisión».", G.SHIELD)
+        limit = (_("como mucho {scrub_seconds}").format(scrub_seconds=fmt_human(job.scrub_seconds)) if job.scrub_seconds > 0
+                 else _("todo el disco, sin límite de tiempo"))
+        self._log(_("Sincronización completada. Revisión de integridad: {scrub_due} archivos pendientes de "
+                    "comprobar ({limit}).").format(scrub_due=fmt_int(s.scrub_due), limit=limit), C["accent2"])
+        self.banner.set("run", _("Sincronización completada  ·  revisando la integridad del disco"),
+                        _("Relee del disco una tanda de archivos ya copiados para detectar daños silenciosos "
+                          "({limit}). La copia ya está completa: puedes terminar ahora con «Omitir revisión».").format(limit=limit), G.SHIELD)
         self._set_state(self._state)  # píldora «Comprobando» y botón «Omitir revisión»
 
     def _progress(self, s: engine.Stats) -> float:
@@ -4530,24 +4659,22 @@ class MainWindow(QMainWindow):
 
     def _step_text(self, s: engine.Stats) -> str:
         return {
-            "limpieza": "Quitando temporales de copias interrumpidas…",
-            "carpetas": f"Creando carpetas nuevas en el destino…  {fmt_int(s.dirs_created)} / {fmt_int(s.dirs_to_create)}",
-            "moviendo": f"Moviendo archivos renombrados o movidos…  {fmt_int(s.moves_done)} / {fmt_int(s.moved_files)}",
-            "versionando": f"Guardando en versiones lo borrado del origen…  "
-                           f"{fmt_int(s.deletes_done)} / {fmt_int(s.del_files)}",
-            "purgando": "Quitando versiones más antiguas que el plazo elegido…",
-            "índice": "Guardando el índice para que el próximo análisis sea rápido…",
+            "limpieza": _("Quitando temporales de copias interrumpidas…"),
+            "carpetas": _("Creando carpetas nuevas en el destino…  {dirs_created} / {dirs_to_create}").format(dirs_created=fmt_int(s.dirs_created), dirs_to_create=fmt_int(s.dirs_to_create)),
+            "moviendo": _("Moviendo archivos renombrados o movidos…  {moves_done} / {moved_files}").format(moves_done=fmt_int(s.moves_done), moved_files=fmt_int(s.moved_files)),
+            "versionando": _("Guardando en versiones lo borrado del origen…  {deletes_done} / {del_files}").format(deletes_done=fmt_int(s.deletes_done), del_files=fmt_int(s.del_files)),
+            "purgando": _("Quitando versiones más antiguas que el plazo elegido…"),
+            "índice": _("Guardando el índice para que el próximo análisis sea rápido…"),
             "verificando": self._scrub_text(s),
         }.get(s.step, "")
 
     def _scrub_text(self, s: engine.Stats) -> str:
         job = self.job
-        text = (f"Comprobando la integridad del disco…  {fmt_int(s.scrub_files)} archivos "
-                f"({fmt_bytes(s.scrub_bytes)})  ·  {fmt_int(s.scrub_repaired)} reparados  ·  "
-                f"{fmt_int(s.scrub_alerts)} avisos")
+        text = (_("Comprobando la integridad del disco…  {scrub_files} archivos ({scrub_bytes})  ·  "
+                  "{scrub_repaired} reparados  ·  {scrub_alerts} avisos").format(scrub_files=fmt_int(s.scrub_files), scrub_bytes=fmt_bytes(s.scrub_bytes), scrub_repaired=fmt_int(s.scrub_repaired), scrub_alerts=fmt_int(s.scrub_alerts)))
         if job and job.scrub_seconds > 0 and s.scrub_start:
             left = job.scrub_seconds - (time.perf_counter() - s.scrub_start)
-            text += f"  ·  {fmt_human(max(0, left))} de revisión restantes"
+            text += ("  ·  " + _("{v} de revisión restantes").format(v=fmt_human(max(0, left))))
         return text
 
     def _render_copy(self, job: engine.BackupJob, now: float, final: bool = False):
@@ -4592,12 +4719,13 @@ class MainWindow(QMainWindow):
         scrubbing = s.step == "verificando" and not final
         self.ring.set_value(frac)
         if final:
-            caption = "COMPLETADO" if job.phase == "done" else "CANCELADO"
+            caption = _("COMPLETADO") if job.phase == "done" else _("CANCELADO")
         else:
-            caption = ("ESPERANDO AL DISCO" if s.disk_lost_at else "EN PAUSA" if paused
-                       else "COMPROBANDO" if s.step == "verificando" else "SINCRONIZANDO")
-        self.ring.set_text(pct(frac), "sincronizado · revisando integridad" if scrubbing
-                           else f"{fmt_bytes(s.bytes_done)} de {fmt_bytes(s.plan_bytes)}", caption)
+            caption = (_("ESPERANDO AL DISCO") if s.disk_lost_at else _("EN PAUSA") if paused
+                       else _("COMPROBANDO") if s.step == "verificando" else _("SINCRONIZANDO"))
+        self.ring.set_text(pct(frac), _("sincronizado · revisando integridad") if scrubbing
+                           else _("{done} de {total}").format(done=fmt_bytes(s.bytes_done),
+                                                             total=fmt_bytes(s.plan_bytes)), caption)
         self.bar_bytes.setValue(int(frac * 10000))
         self.bar_bytes_val.setText(f"{fmt_bytes(s.bytes_done)}  /  {fmt_bytes(s.plan_bytes)}   ·   {pct(frac)}")
         ffrac = s.ops_done / s.ops_total if s.ops_total else 1.0
@@ -4605,44 +4733,44 @@ class MainWindow(QMainWindow):
         self.bar_files.setValue(int(ffrac * 10000))
         self.bar_files_val.setText(f"{fmt_int(handled)}  /  {fmt_int(s.ops_total)}   ·   {pct(ffrac)}")
 
-        self.t_elapsed.set(fmt_clock(elapsed), f"desde las {self._op_wall:%H:%M:%S}")
+        self.t_elapsed.set(fmt_clock(elapsed), _("desde las {op_wall:%H:%M:%S}").format(op_wall=self._op_wall))
         if final:
-            self.t_left.set("00:00:00", "terminado", C["ok"] if job.phase == "done" else None)
-            self.t_eta.set(datetime.now().strftime("%H:%M:%S"), "hora de fin real")
+            self.t_left.set("00:00:00", _("terminado"), C["ok"] if job.phase == "done" else None)
+            self.t_eta.set(datetime.now().strftime("%H:%M:%S"), _("hora de fin real"))
         elif scrubbing and not paused and not s.disk_lost_at:
             left = self._scrub_left(job)
             if left is None:
                 self.t_left.set(fmt_int(max(0, s.scrub_due - s.scrub_files)),
-                                f"archivos por revisar de {fmt_int(s.scrub_due)}")
-                self.t_eta.set("—", "revisión sin límite de tiempo")
+                                _("archivos por revisar de {scrub_due}").format(scrub_due=fmt_int(s.scrub_due)))
+                self.t_eta.set("—", _("revisión sin límite de tiempo"))
             else:
-                self.t_left.set(fmt_clock(left), "revisión de integridad")
+                self.t_left.set(fmt_clock(left), _("revisión de integridad"))
                 self.t_eta.set((datetime.now() + timedelta(seconds=left)).strftime("%H:%M:%S"),
-                               "fin de la revisión (como mucho)")
+                               _("fin de la revisión (como mucho)"))
         elif paused or s.disk_lost_at:
-            why = "esperando al disco" if s.disk_lost_at else "en pausa"
+            why = _("esperando al disco") if s.disk_lost_at else _("en pausa")
             self.t_left.set("—", why)
             self.t_eta.set("—", why)
         elif eta is None:
-            self.t_left.set("…", "midiendo velocidad")
+            self.t_left.set("…", _("midiendo velocidad"))
             self.t_eta.set("…", "")
         else:
             self.t_left.set(fmt_clock(eta), f"≈ {fmt_human(eta)}")
             fin = datetime.now() + timedelta(seconds=eta)
             day = fin.date() - datetime.now().date()
-            when = "hoy" if day.days == 0 else "mañana" if day.days == 1 else fin.strftime("%d/%m/%Y")
+            when = _("hoy") if day.days == 0 else _("mañana") if day.days == 1 else fin.strftime(_("%d/%m/%Y"))
             self.t_eta.set(fin.strftime("%H:%M:%S"), when)
         if final:
-            self.t_speed.set(fmt_speed(avg), "media de la copia")
+            self.t_speed.set(fmt_speed(avg), _("media de la copia"))
         elif scrubbing:
             span = max(1e-6, time.perf_counter() - s.scrub_start) if s.scrub_start else 0
-            self.t_speed.set(fmt_speed(s.scrub_bytes / span) if span else "—", "lectura de comprobación")
+            self.t_speed.set(fmt_speed(s.scrub_bytes / span) if span else "—", _("lectura de comprobación"))
         else:
-            self.t_speed.set(fmt_speed(speed) if not paused else "—", f"{fmt_int(fps)} archivos/s")
-        self.t_copied.set(fmt_bytes(s.bytes_done), f"de {fmt_bytes(s.plan_bytes)}")
+            self.t_speed.set(fmt_speed(speed) if not paused else "—", _("{n} archivos/s").format(n=fmt_int(fps)))
+        self.t_copied.set(fmt_bytes(s.bytes_done), _("de {total}").format(total=fmt_bytes(s.plan_bytes)))
         pending = max(0, s.ops_total - s.ops_done)
-        self.t_files.set(fmt_int(handled), f"de {fmt_int(s.ops_total)}  ·  {fmt_int(pending)} pendientes")
-        self.t_skipped.set(fmt_int(s.skip_files), f"{fmt_bytes(s.skip_bytes)} ya al día")
+        self.t_files.set(fmt_int(handled), _("de {ops_total}  ·  {pending} pendientes").format(ops_total=fmt_int(s.ops_total), pending=fmt_int(pending)))
+        self.t_skipped.set(fmt_int(s.skip_files), _("{skip_bytes} ya al día").format(skip_bytes=fmt_bytes(s.skip_bytes)))
         self._render_errors_tile(s)
 
         if not final and not paused and now - self._last_chart >= 0.5:
@@ -4659,7 +4787,7 @@ class MainWindow(QMainWindow):
             self.cur_label.setText(self._step_text(s))
 
         if not final:
-            doing = "En pausa" if paused else "Comprobando integridad" if scrubbing else "Sincronizando"
+            doing = _("En pausa") if paused else _("Comprobando integridad") if scrubbing else _("Sincronizando")
             self.setWindowTitle(f"{pct(frac)} · {doing} · {APP_NAME}")
             if self.taskbar:
                 self.taskbar.value(frac)
@@ -4668,9 +4796,9 @@ class MainWindow(QMainWindow):
 
     def _render_errors_tile(self, s: engine.Stats):
         if s.errors:
-            self.t_errors.set(fmt_int(s.errors), "ver pestaña Incidencias", C["err"])
+            self.t_errors.set(fmt_int(s.errors), _("ver pestaña Incidencias"), C["err"])
         else:
-            self.t_errors.set("0", "sin incidencias", C["ok"])
+            self.t_errors.set("0", _("sin incidencias"), C["ok"])
 
     def _drain_errors(self, job: engine.BackupJob):
         total = len(job.errors)
@@ -4694,16 +4822,15 @@ class MainWindow(QMainWindow):
             if first + i < 100:
                 self._log(f"⚠ {path}  —  {msg}", C["err"])
             elif first + i == 100:
-                self._log("… más incidencias en la pestaña Incidencias", C["err"])
+                self._log(_("… más incidencias en la pestaña Incidencias"), C["err"])
         self._set_issues(total)
-        self.seg_buttons[PAGE_ISSUES].setText(f"  Incidencias  ({fmt_int(total)})")
+        self.seg_buttons[PAGE_ISSUES].setText(("  " + _("Incidencias  ({total})").format(total=fmt_int(total))))
 
     def _log_scan_summary(self, job: engine.BackupJob):
         s = job.stats
-        self._log(f"Análisis completado en {fmt_clock(s.scan_end - s.scan_start, ms=True)}  ·  "
-                  f"{fmt_int(s.files_found)} archivos ({fmt_bytes(s.bytes_found)})  ·  " + self._plan_text(s)
-                  + f"  ·  excluidas {fmt_int(s.excluded_rule + s.excluded_manual)}"
-                  + (f"  ·  enlaces omitidos {fmt_int(s.links_skipped)}" if s.links_skipped else ""), C["ok"])
+        self._log((_("Análisis completado en {scan_end}  ·  {files_found} archivos ({bytes_found})  ·").format(scan_end=fmt_clock(s.scan_end - s.scan_start, ms=True), files_found=fmt_int(s.files_found), bytes_found=fmt_bytes(s.bytes_found)) + "  ") + self._plan_text(s)
+                  + ("  ·  " + _("excluidas {excluded_rule}").format(excluded_rule=fmt_int(s.excluded_rule + s.excluded_manual)))
+                  + (("  ·  " + _("enlaces omitidos {links_skipped}").format(links_skipped=fmt_int(s.links_skipped))) if s.links_skipped else ""), C["ok"])
         self._log(job.index_note)
 
     # ── fin ──────────────────────────────────────────────────────────────
@@ -4717,15 +4844,15 @@ class MainWindow(QMainWindow):
         if phase == "ready":
             self._finish_scan(job)
         elif phase == "cancelled" and not s.copy_start:
-            self.ring.set_text("—", "análisis interrumpido", "CANCELADO")
-            self.banner.set("warn", "Análisis cancelado", "No se ha tocado nada. Pulsa Analizar o Sincronizar "
-                                                          "para empezar de nuevo.", G.WARN)
-            self._log("Análisis cancelado", C["warn"])
+            self.ring.set_text("—", _("análisis interrumpido"), _("CANCELADO"))
+            self.banner.set("warn", _("Análisis cancelado"), _("No se ha tocado nada. Pulsa Analizar o Sincronizar "
+                                                          "para empezar de nuevo."), G.WARN)
+            self._log(_("Análisis cancelado"), C["warn"])
         elif phase in ("done", "cancelled"):
             self._finish_copy(job, phase)
         else:
-            self.banner.set("err", "La operación se detuvo por un error", job.fatal or "Error desconocido", G.ERROR)
-            self._log(f"Error: {job.fatal}", C["err"])
+            self.banner.set("err", _("La operación se detuvo por un error"), job.fatal or _("Error desconocido"), G.ERROR)
+            self._log(_("Error: {fatal}").format(fatal=job.fatal), C["err"])
             if s.copy_start:
                 self._write_log(job, phase)
         self._set_state(phase)
@@ -4745,31 +4872,30 @@ class MainWindow(QMainWindow):
             free = shutil.disk_usage(engine.volume_root(job.dst)).free
         except OSError:
             free = 0
-        detail = (f"{fmt_int(s.files_found)} archivos en origen ({fmt_bytes(s.bytes_found)})  ·  " + self._plan_text(s)
-                  + f"  ·  libre en destino {fmt_bytes(free)}\n{job.index_note}")
+        detail = ((_("{files_found} archivos en origen ({bytes_found})  ·").format(files_found=fmt_int(s.files_found), bytes_found=fmt_bytes(s.bytes_found)) + "  ") + self._plan_text(s)
+                  + ("  ·  " + _("libre en destino {free}\n{index_note}").format(free=fmt_bytes(free), index_note=job.index_note)))
         if not s.has_changes:
             self.ring.set_value(1)
-            self.ring.set_text("Al día", "no hay nada que copiar", "ANÁLISIS")
-            self.banner.set("ok", f"Todo está al día  ·  análisis en {fmt_clock(scan, ms=True)}", detail, G.DONE)
+            self.ring.set_text(_("Al día"), _("no hay nada que copiar"), _("ANÁLISIS"))
+            self.banner.set("ok", _("Todo está al día  ·  análisis en {scan}").format(scan=fmt_clock(scan, ms=True)), detail, G.DONE)
         elif free and s.plan_bytes > free:
             self.ring.set_value(0, animate=False)
-            self.ring.set_text(fmt_int(s.ops_total), "cambios por aplicar", "ANÁLISIS")
-            self.banner.set("warn", "No hay espacio suficiente en el destino",
-                            detail + f"  ·  faltan {fmt_bytes(s.plan_bytes - free)}", G.WARN)
+            self.ring.set_text(fmt_int(s.ops_total), _("cambios por aplicar"), _("ANÁLISIS"))
+            self.banner.set("warn", _("No hay espacio suficiente en el destino"),
+                            detail + ("  ·  " + _("faltan {plan_bytes}").format(plan_bytes=fmt_bytes(s.plan_bytes - free))), G.WARN)
         else:
             self.ring.set_value(0, animate=False)
-            self.ring.set_text(fmt_int(s.ops_total), "cambios por aplicar", "ANÁLISIS")
-            self.banner.set("info", f"Análisis completado en {fmt_clock(scan, ms=True)}  ·  revisa la pestaña "
-                                    f"Cambios o pulsa «Sincronizar»", detail, G.CHECK)
-        self.t_elapsed.set(fmt_clock(scan, ms=True), "duración del análisis")
+            self.ring.set_text(fmt_int(s.ops_total), _("cambios por aplicar"), _("ANÁLISIS"))
+            self.banner.set("info", _("Análisis completado en {scan}  ·  revisa la pestaña Cambios o pulsa «Sincronizar»").format(scan=fmt_clock(scan, ms=True)), detail, G.CHECK)
+        self.t_elapsed.set(fmt_clock(scan, ms=True), _("duración del análisis"))
         eta = estimate_seconds(engine.volume_root(job.dst), s)
         self.t_left.set(fmt_clock(eta) if eta is not None else "—",
-                        "previsto según la última copia" if eta is not None else "se mide al copiar")
+                        _("previsto según la última copia") if eta is not None else _("se mide al copiar"))
         self.t_speed.set("—", "")
         self.t_eta.set("—", "")
-        self.t_copied.set("0 B", f"de {fmt_bytes(s.plan_bytes)}")
-        self.t_files.set("0", f"de {fmt_int(s.ops_total)}")
-        self.t_skipped.set(fmt_int(s.skip_files), f"{fmt_bytes(s.skip_bytes)} ya al día")
+        self.t_copied.set("0 B", _("de {total}").format(total=fmt_bytes(s.plan_bytes)))
+        self.t_files.set("0", _("de {total}").format(total=fmt_int(s.ops_total)))
+        self.t_skipped.set(fmt_int(s.skip_files), _("{skip_bytes} ya al día").format(skip_bytes=fmt_bytes(s.skip_bytes)))
         self._render_errors_tile(s)
         self.cur_label.setText(job.src)
         self.bar_bytes_val.setText(f"0 B  /  {fmt_bytes(s.plan_bytes)}")
@@ -4787,54 +4913,53 @@ class MainWindow(QMainWindow):
         avg = s.bytes_done / max(1e-6, copy - self._paused_copy)
         if phase == "done":
             self.ring.set_value(1)
-            self.ring.set_text("100 %", f"{fmt_bytes(s.bytes_done)} copiados",
-                               "COMPLETADO" if not s.errors else "CON INCIDENCIAS")
+            self.ring.set_text(f"100{i18n.numbers()[2]}%", _("{size} copiados").format(size=fmt_bytes(s.bytes_done)),
+                               _("COMPLETADO") if not s.errors else _("CON INCIDENCIAS"))
         self._last_log = self._write_log(job, phase)
         if phase == "done":
             self._record_pair(job, copied=True)
         self._show_summary(job, phase, total, scan, copy, avg)
-        parts = [f"{fmt_int(s.files_done)} copiados ({fmt_bytes(s.bytes_done)})",
-                 f"{fmt_int(s.moves_done)} movidos", f"{fmt_int(s.versions_saved)} versiones guardadas",
-                 f"{fmt_int(s.skip_files)} sin cambios", f"media {fmt_speed(avg)}",
-                 f"análisis {fmt_clock(scan, ms=True)}", f"copia {fmt_clock(copy, ms=True)}"]
+        parts = [_("{files_done} copiados ({bytes_done})").format(files_done=fmt_int(s.files_done), bytes_done=fmt_bytes(s.bytes_done)),
+                 _("{n} movidos").format(n=fmt_int(s.moves_done)), _("{versions_saved} versiones guardadas").format(versions_saved=fmt_int(s.versions_saved)),
+                 _("{skip_files} sin cambios").format(skip_files=fmt_int(s.skip_files)), _("media {speed}").format(speed=fmt_speed(avg)),
+                 _("análisis {scan}").format(scan=fmt_clock(scan, ms=True)), _("copia {time}").format(time=fmt_clock(copy, ms=True))]
         if s.versions_purged:
-            parts.append(f"{fmt_int(s.versions_purged)} versiones antiguas retiradas")
+            parts.append(_("{versions_purged} versiones antiguas retiradas").format(versions_purged=fmt_int(s.versions_purged)))
         if job.verify and s.files_done:
-            parts.append(f"{fmt_int(s.verified_copies)} copias verificadas con SHA-256")
+            parts.append(_("{verified_copies} copias verificadas con SHA-256").format(verified_copies=fmt_int(s.verified_copies)))
         if s.scrub_files or s.scrub_total:
             cover = s.scrub_covered / s.scrub_total if s.scrub_total else 0
-            parts.append(f"integridad: {fmt_int(s.scrub_files)} revisados, {fmt_int(s.scrub_repaired)} reparados, "
-                         f"{fmt_int(s.scrub_alerts)} avisos · disco comprobado al {pct(cover)}")
+            parts.append(_("integridad: {scrub_files} revisados, {scrub_repaired} reparados, {scrub_alerts} avisos · "
+                           "disco comprobado al {cover}").format(scrub_files=fmt_int(s.scrub_files), scrub_repaired=fmt_int(s.scrub_repaired), scrub_alerts=fmt_int(s.scrub_alerts), cover=pct(cover)))
         if self._paused_total > 0.5:
-            parts.append(f"en pausa {fmt_clock(self._paused_total, ms=True)}")
-        issues = f"{fmt_int(s.errors)} incidencia{'s' if s.errors != 1 else ''}"
+            parts.append(_("en pausa {paused_total}").format(paused_total=fmt_clock(self._paused_total, ms=True)))
+        issues = _n("{n} incidencia", "{n} incidencias", s.errors).format(n=fmt_int(s.errors))
         if s.errors:
             parts.append(issues)
-        action = ("Ver registro", self._open_log) if self._last_log else None
-        brief = f"{job.src}  →  {job.dst}  ·  {fmt_bytes(s.bytes_done)} copiados  ·  media {fmt_speed(avg)}"
+        action = (_("Ver registro"), self._open_log) if self._last_log else None
+        brief = _("{src}  →  {dst}  ·  {bytes_done} copiados  ·  media {avg}").format(src=job.src, dst=job.dst, bytes_done=fmt_bytes(s.bytes_done), avg=fmt_speed(avg))
         if phase == "cancelled":
-            self.banner.set("warn", f"Sincronización cancelada tras {fmt_clock(total, ms=True)}",
-                            brief + "  ·  lo copiado se conserva; vuelve a pulsar Sincronizar para continuar",
+            self.banner.set("warn", _("Sincronización cancelada tras {total}").format(total=fmt_clock(total, ms=True)),
+                            brief + ("  ·  " + _("lo copiado se conserva; vuelve a pulsar Sincronizar para continuar")),
                             G.WARN, action)
-            self._log("Sincronización cancelada", C["warn"])
+            self._log(_("Sincronización cancelada"), C["warn"])
         elif s.errors:
-            self.banner.set("warn", f"Sincronización terminada en {fmt_clock(total, ms=True)} con {issues}",
-                            brief + "  ·  detalles en la pestaña Incidencias", G.WARN, action)
+            self.banner.set("warn", _("Sincronización terminada en {total} con {issues}").format(total=fmt_clock(total, ms=True), issues=issues),
+                            brief + ("  ·  " + _("detalles en la pestaña Incidencias")), G.WARN, action)
         else:
-            self.banner.set("ok", f"Sincronización completada en {fmt_clock(total, ms=True)}", brief, G.DONE, action)
-        self._log(f"Fin  ·  duración total {fmt_clock(total, ms=True)}  ·  " + "  ·  ".join(parts),
+            self.banner.set("ok", _("Sincronización completada en {total}").format(total=fmt_clock(total, ms=True)), brief, G.DONE, action)
+        self._log((_("Fin  ·  duración total {total}  ·").format(total=fmt_clock(total, ms=True)) + "  ") + "  ·  ".join(parts),
                   C["ok"] if phase == "done" and not s.errors else C["warn"])
         if self._last_log:
-            self._log(f"Registro guardado en {self._last_log}")
-        self.setWindowTitle(f"{'Al día' if phase == 'done' else 'Cancelado'} · {APP_NAME}")
+            self._log(_("Registro guardado en {last_log}").format(last_log=self._last_log))
+        self.setWindowTitle(f"{_('Al día') if phase == 'done' else _('Cancelado')} · {APP_NAME}")
         self._load_changes(None)
         self.full_box.setChecked(False)
         self._refresh_disk_status()
         if phase == "done":
-            self._notify("Copia terminada" + (f" con {issues}" if s.errors else ""),
-                         f"{fmt_int(s.new_done)} nuevos · {fmt_int(s.changed_done)} modificados · "
-                         f"{fmt_int(s.moves_done)} movidos · {fmt_int(s.deletes_done)} a versiones · "
-                         f"{fmt_int(s.dirs_created)} carpetas nuevas · {fmt_clock(total)}")
+            self._notify(_("Copia terminada con {issues}").format(issues=issues) if s.errors else _("Copia terminada"),
+                         _("{new_done} nuevos · {changed_done} modificados · {moves_done} movidos · {deletes_done} a "
+                           "versiones · {dirs_created} carpetas nuevas · {total}").format(new_done=fmt_int(s.new_done), changed_done=fmt_int(s.changed_done), moves_done=fmt_int(s.moves_done), deletes_done=fmt_int(s.deletes_done), dirs_created=fmt_int(s.dirs_created), total=fmt_clock(total)))
         if os.name == "nt":
             try:
                 import winsound
@@ -4848,34 +4973,36 @@ class MainWindow(QMainWindow):
         s = job.stats
 
         def of(done: int, planned: int) -> str:
-            return f"de {fmt_int(planned)} previstos" if done != planned else ""
+            return _("de {planned} previstos").format(planned=fmt_int(planned)) if done != planned else ""
 
         self.s_new.set(fmt_int(s.new_done), f"{fmt_bytes(s.new_done_bytes)}  {of(s.new_done, s.new_files)}".strip())
         self.s_changed.set(fmt_int(s.changed_done),
                            f"{fmt_bytes(s.changed_done_bytes)}  {of(s.changed_done, s.changed_files)}".strip())
-        self.s_moved.set(fmt_int(s.moves_done), "renombrados o movidos, sin copiar")
-        self.s_versions.set(fmt_int(s.deletes_done), "borrados del origen, guardados"
-                            + (f" · {fmt_int(s.versions_purged)} antiguos retirados" if s.versions_purged else ""))
-        self.s_dirs_new.set(fmt_int(s.dirs_created), "creadas en el destino")
-        self.s_dirs_gone.set(fmt_int(s.dirs_removed), "ya no estaban en el origen")
-        self.s_same.set(fmt_int(s.skip_files), f"{fmt_bytes(s.skip_bytes)} ya al día")
+        self.s_moved.set(fmt_int(s.moves_done), _("renombrados o movidos, sin copiar"))
+        self.s_versions.set(fmt_int(s.deletes_done), _("borrados del origen, guardados")
+                            + ((" · " + _("{versions_purged} antiguos retirados").format(versions_purged=fmt_int(s.versions_purged))) if s.versions_purged else ""))
+        self.s_dirs_new.set(fmt_int(s.dirs_created), _("creadas en el destino"))
+        self.s_dirs_gone.set(fmt_int(s.dirs_removed), _("ya no estaban en el origen"))
+        self.s_same.set(fmt_int(s.skip_files), _("{skip_bytes} ya al día").format(skip_bytes=fmt_bytes(s.skip_bytes)))
         if job.verify:
-            extra = (f" · {fmt_int(s.scrub_files)} revisados, {fmt_int(s.scrub_repaired)} reparados"
+            extra = ((" · " + _("{scrub_files} revisados, {scrub_repaired} reparados").format(scrub_files=fmt_int(s.scrub_files), scrub_repaired=fmt_int(s.scrub_repaired)))
                      if s.scrub_files else "")
-            self.s_checked.set(fmt_int(s.verified_copies), "SHA-256 releyendo el disco" + extra)
+            self.s_checked.set(fmt_int(s.verified_copies), _("SHA-256 releyendo el disco") + extra)
         else:
-            self.s_checked.set("—", "verificación desactivada")
+            self.s_checked.set("—", _("verificación desactivada"))
         failed = s.files_failed + s.other_failed
-        bits = [f"Duración {fmt_clock(total, ms=True)}", f"análisis {fmt_clock(scan, ms=True)}",
-                f"copia {fmt_clock(copy, ms=True)}", f"{fmt_bytes(s.bytes_done)} copiados a {fmt_speed(avg)}"]
+        bits = [_("Duración {total}").format(total=fmt_clock(total, ms=True)), _("análisis {scan}").format(scan=fmt_clock(scan, ms=True)),
+                _("copia {time}").format(time=fmt_clock(copy, ms=True)), _("{bytes_done} copiados a {avg}").format(bytes_done=fmt_bytes(s.bytes_done), avg=fmt_speed(avg))]
         if failed:
-            bits.append(f"{fmt_int(failed)} sin copiar")
+            bits.append(_("{failed} sin copiar").format(failed=fmt_int(failed)))
         if s.errors:
-            bits.append(f"{fmt_int(s.errors)} incidencia{'s' if s.errors != 1 else ''} (pestaña Incidencias)")
+            bits.append(_n("{n} incidencia (pestaña Incidencias)", "{n} incidencias (pestaña Incidencias)",
+                           s.errors).format(n=fmt_int(s.errors)))
         if s.disk_waits:
-            bits.append(f"esperó al disco {fmt_int(s.disk_waits)} vez/veces ({fmt_human(s.disk_wait_s)})")
+            bits.append(_n("esperó al disco {n} vez ({time})", "esperó al disco {n} veces ({time})",
+                           s.disk_waits).format(n=fmt_int(s.disk_waits), time=fmt_human(s.disk_wait_s)))
         if phase == "cancelled":
-            bits.append("cancelada: lo copiado se conserva")
+            bits.append(_("cancelada: lo copiado se conserva"))
         self.summary_line.setText("  ·  ".join(bits))
         self.summary_card.show()
 
@@ -4884,54 +5011,66 @@ class MainWindow(QMainWindow):
         os.makedirs(LOG_DIR, exist_ok=True)
         path = os.path.join(LOG_DIR, f"copia_{self._op_wall:%Y%m%d_%H%M%S}.log")
         end = s.copy_end or time.perf_counter()
+        width = 23
+
+        def row(label: str, value) -> str:
+            return f"{label + ':':<{width}}{value}"
+
+        rules = ", ".join(job.patterns) or _("ninguna")
         lines = [
-            f"{APP_NAME} — informe de sincronización",
+            _("{app_name} — informe de sincronización").format(app_name=APP_NAME),
             "=" * 60,
-            f"Inicio:            {self._op_wall:%Y-%m-%d %H:%M:%S}",
-            f"Fin:               {datetime.now():%Y-%m-%d %H:%M:%S}",
-            f"Resultado:         {PILL[phase][0]}",
-            f"Origen:            {job.src}",
-            f"Destino:           {job.dst}",
-            f"Reglas:            {', '.join(job.patterns) or 'ninguna'}",
-            f"Modo:              {engine.MODES[job.mode]}",
-            f"Análisis:          {job.index_note}",
-            f"Hilos:             {job.threads}",
+            row(_("Inicio"), f"{self._op_wall:%Y-%m-%d %H:%M:%S}"),
+            row(_("Fin"), f"{datetime.now():%Y-%m-%d %H:%M:%S}"),
+            row(_("Resultado"), PILL[phase][0]),
+            row(_("Origen"), job.src),
+            row(_("Destino"), job.dst),
+            row(_("Reglas"), rules),
+            row(_("Modo"), _(engine.MODES[job.mode])),
+            row(_("Análisis"), job.index_note),
+            row(_("Hilos"), job.threads),
             "",
-            f"Duración total:    {fmt_clock(end - self._op_start, ms=True)}",
-            f"  análisis:        {fmt_clock(s.scan_end - s.scan_start, ms=True)}",
-            f"  copia:           {fmt_clock(end - s.copy_start, ms=True) if s.copy_start else '—'}",
-            f"  en pausa:        {fmt_clock(self._paused_total, ms=True)}",
+            row(_("Duración total"), fmt_clock(end - self._op_start, ms=True)),
+            row("  " + _("análisis"), fmt_clock(s.scan_end - s.scan_start, ms=True)),
+            row("  " + _("copia"), fmt_clock(end - s.copy_start, ms=True) if s.copy_start else "—"),
+            row("  " + _("en pausa"), fmt_clock(self._paused_total, ms=True)),
             "",
-            f"Carpetas analizadas:   {fmt_int(s.dirs_scanned)}",
-            f"Archivos en origen:    {fmt_int(s.files_found)}  ({fmt_bytes(s.bytes_found)})",
-            f"Sin cambios:           {fmt_int(s.skip_files)}  ({fmt_bytes(s.skip_bytes)})",
-            f"Nuevos:                {fmt_int(s.new_files)}  ({fmt_bytes(s.new_bytes)})",
-            f"Modificados:           {fmt_int(s.changed_files)}  ({fmt_bytes(s.changed_bytes)})",
-            f"Movidos/renombrados:   {fmt_int(s.moved_files)}  ({fmt_bytes(s.moved_bytes)}), hechos {fmt_int(s.moves_done)}",
-            f"Borrados → versiones:  {fmt_int(s.del_files)}  ({fmt_bytes(s.del_bytes)}), hechos {fmt_int(s.deletes_done)}",
-            f"Copiados:              {fmt_int(s.files_done)}  ({fmt_bytes(s.bytes_done)})",
-            f"Fallidos:              {fmt_int(s.files_failed + s.other_failed)}",
-            f"Versiones guardadas:   {fmt_int(s.versions_saved)}  (en {getattr(job, 'version_root', '—')})",
-            f"Versiones retiradas:   {fmt_int(s.versions_purged)}",
-            f"Carpetas creadas:      {fmt_int(s.dirs_created)}",
-            f"Carpetas quitadas:     {fmt_int(s.dirs_removed)}",
-            f"Carpetas excluidas:    {fmt_int(s.excluded_rule)} por regla, {fmt_int(s.excluded_manual)} a mano",
-            f"Enlaces omitidos:      {fmt_int(s.links_skipped)}",
-            f"Incidencias:           {fmt_int(s.errors)}",
+            row(_("Carpetas analizadas"), fmt_int(s.dirs_scanned)),
+            row(_("Archivos en origen"), f"{fmt_int(s.files_found)}  ({fmt_bytes(s.bytes_found)})"),
+            row(_("Sin cambios"), f"{fmt_int(s.skip_files)}  ({fmt_bytes(s.skip_bytes)})"),
+            row(_("Nuevos"), f"{fmt_int(s.new_files)}  ({fmt_bytes(s.new_bytes)})"),
+            row(_("Modificados"), f"{fmt_int(s.changed_files)}  ({fmt_bytes(s.changed_bytes)})"),
+            row(_("Movidos/renombrados"), _("{n} ({size}), hechos {done}").format(
+                n=fmt_int(s.moved_files), size=fmt_bytes(s.moved_bytes), done=fmt_int(s.moves_done))),
+            row(_("Borrados → versiones"), _("{n} ({size}), hechos {done}").format(
+                n=fmt_int(s.del_files), size=fmt_bytes(s.del_bytes), done=fmt_int(s.deletes_done))),
+            row(_("Copiados"), f"{fmt_int(s.files_done)}  ({fmt_bytes(s.bytes_done)})"),
+            row(_("Fallidos"), fmt_int(s.files_failed + s.other_failed)),
+            row(_("Versiones guardadas"), _("{n}  (en {path})").format(
+                n=fmt_int(s.versions_saved), path=getattr(job, "version_root", "—"))),
+            row(_("Versiones retiradas"), fmt_int(s.versions_purged)),
+            row(_("Carpetas creadas"), fmt_int(s.dirs_created)),
+            row(_("Carpetas quitadas"), fmt_int(s.dirs_removed)),
+            row(_("Carpetas excluidas"), _("{rule} por regla, {manual} a mano").format(
+                rule=fmt_int(s.excluded_rule), manual=fmt_int(s.excluded_manual))),
+            row(_("Enlaces omitidos"), fmt_int(s.links_skipped)),
+            row(_("Incidencias"), fmt_int(s.errors)),
             "",
-            f"Copias verificadas:    {fmt_int(s.verified_copies)} (SHA-256 releyendo el disco), "
-            f"reintentos {fmt_int(s.verify_retries)}" if job.verify else "Copias verificadas:    desactivado",
-            f"Revisión integridad:   {fmt_int(s.scrub_files)} archivos ({fmt_bytes(s.scrub_bytes)}), "
-            f"{fmt_int(s.scrub_repaired)} reparados, {fmt_int(s.scrub_alerts)} avisos",
-            f"Cobertura del disco:   {fmt_int(s.scrub_covered)} de {fmt_int(s.scrub_total)} archivos comprobados",
+            row(_("Copias verificadas"), _("{n} (SHA-256 releyendo el disco), reintentos {retries}").format(
+                n=fmt_int(s.verified_copies), retries=fmt_int(s.verify_retries)) if job.verify else _("desactivado")),
+            row(_("Revisión integridad"), _("{n} archivos ({size}), {repaired} reparados, {alerts} avisos").format(
+                n=fmt_int(s.scrub_files), size=fmt_bytes(s.scrub_bytes), repaired=fmt_int(s.scrub_repaired),
+                alerts=fmt_int(s.scrub_alerts))),
+            row(_("Cobertura del disco"), _("{n} de {total} archivos comprobados").format(
+                n=fmt_int(s.scrub_covered), total=fmt_int(s.scrub_total))),
         ]
         if job.errors:
-            lines += ["", "INCIDENCIAS", "-" * 60] + [f"{p}\t{m}" for p, m in job.errors]
+            lines += ["", _("INCIDENCIAS"), "-" * 60] + [f"{p}\t{m}" for p, m in job.errors]
         cut, dcut = len(job.src), len(job.dst)
         if job.moves:
-            lines += ["", "MOVIDOS", "-" * 60] + [f"{old[dcut:]}  →  {item[0][cut:]}" for old, item in job.moves]
+            lines += ["", _("MOVIDOS"), "-" * 60] + [f"{old[dcut:]}  →  {item[0][cut:]}" for old, item in job.moves]
         if job.deletes:
-            lines += ["", "BORRADOS DEL ORIGEN (GUARDADOS EN VERSIONES)", "-" * 60] + [p[dcut:] for p, _s, _m in job.deletes]
+            lines += ["", _("BORRADOS DEL ORIGEN (GUARDADOS EN VERSIONES)"), "-" * 60] + [p[dcut:] for p, _s, _m in job.deletes]
         try:
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("\n".join(lines) + "\n")
@@ -4945,10 +5084,10 @@ class MainWindow(QMainWindow):
 
     def _export_issues(self):
         if not self.job or not self.job.errors:
-            QMessageBox.information(self, APP_NAME, "No hay incidencias que exportar.")
+            QMessageBox.information(self, APP_NAME, _("No hay incidencias que exportar."))
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Exportar incidencias",
-                                              os.path.join(LOG_DIR, "incidencias.txt"), "Texto (*.txt)")
+        path, _flt = QFileDialog.getSaveFileName(self, _("Exportar incidencias"),
+                                              os.path.join(LOG_DIR, "incidencias.txt"), _("Texto (*.txt)"))
         if path:
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("\n".join(f"{p}\t{m}" for p, m in self.job.errors) + "\n")
@@ -5059,16 +5198,16 @@ class MainWindow(QMainWindow):
 
     def _pair_status(self, it: dict) -> tuple[str, str]:
         p = it.get("pending") or {}
-        ago = f"última copia {fmt_ago(it.get('last_ok'))}"
+        ago = _("última copia {v}").format(v=fmt_ago(it.get('last_ok')))
         if not it.get("remind", True):
-            return f"{ago}  ·  sin aviso", C["faint"]
+            return _("{ago}  ·  sin aviso").format(ago=ago), C["faint"]
         if p.get("missing"):
-            return f"origen no disponible  ·  {ago}", C["faint"]
+            return _("origen no disponible  ·  {ago}").format(ago=ago), C["faint"]
         changes = short_changes(p)
         if changes:
             return f"{changes}  ·  {ago}", C["warn"] if it.get("alert") else C["accent2"]
         if p.get("checked"):
-            return f"al día  ·  {ago}", C["ok"]
+            return _("al día  ·  {ago}").format(ago=ago), C["ok"]
         return ago, C["muted"]
 
     def _refresh_reminders(self):
@@ -5094,9 +5233,9 @@ class MainWindow(QMainWindow):
         self.remind_tray_hint.setVisible(enabled and not self.watch_box.isChecked())
         checked = max(((it.get("pending") or {}).get("checked", "") for it in items), default="")
         if self.rem_checker.busy:
-            self.remind_status.setText("Comprobando cambios…")
+            self.remind_status.setText(_("Comprobando cambios…"))
         else:
-            self.remind_status.setText(f"Comprobado {fmt_ago(checked)}" if checked else "")
+            self.remind_status.setText(_("Comprobado {checked}").format(checked=fmt_ago(checked)) if checked else "")
         self.remind_status.setVisible(bool(self.remind_status.text()))
         self.btn_remind_check.setEnabled(bool(items) and not self.rem_checker.busy)
         self._refresh_remind_bar(roots)
@@ -5107,7 +5246,8 @@ class MainWindow(QMainWindow):
         if self.tray:
             tip = f"{APP_NAME} · {PILL[self._state][0].lower()}"
             if alerts:
-                tip += f" · {len(alerts)} copia{'s' if len(alerts) != 1 else ''} con cambios sin copiar"
+                tip += " · " + _n("{n} copia con cambios sin copiar", "{n} copias con cambios sin copiar",
+                                  len(alerts)).format(n=len(alerts))
             self.tray.setToolTip(tip)
         if not alerts or self._state in RUNNING:
             self._bar_target = None
@@ -5117,30 +5257,30 @@ class MainWindow(QMainWindow):
         ready = [it for it in alerts if self._pair_dest(it, roots)]
         it = alerts[0]
         if len(alerts) == 1:
-            title = f"Tienes cambios sin copiar en {reminders.short_name(it['src'])}"
+            title = _("Tienes cambios sin copiar en {it}").format(it=reminders.short_name(it['src']))
             what = reminders.changes_text(it.get("pending") or {}, fmt_int, fmt_bytes)
-            text = (f"{what[:1].upper()}{what[1:]} desde tu última copia en {self._nb_label(it)}, "
-                    f"{fmt_ago(it.get('last_ok'))}.")
+            text = _("{changes} desde tu última copia en {disk}, {ago}.").format(
+                changes=what[:1].upper() + what[1:], disk=self._nb_label(it), ago=fmt_ago(it.get("last_ok")))
         else:
-            title = f"Tienes cambios sin copiar en {len(alerts)} copias"
+            title = _n("Tienes cambios sin copiar en {n} copia", "Tienes cambios sin copiar en {n} copias",
+                       len(alerts)).format(n=len(alerts))
             text = "  ·  ".join(f"{reminders.short_name(a['src'])} → {self._nb_label(a)}: "
-                                f"{short_changes(a.get('pending')) or 'con cambios'}" for a in alerts[:3])
+                                f"{short_changes(a.get('pending')) or _('con cambios')}" for a in alerts[:3])
         if ready:
             target = ready[0]
             self._bar_target = target["id"]
-            text += f"  {self._nb_label(target)} está conectado."
-            self.remind_bar.go.setText("  Sincronizar ahora" if len(alerts) == 1
-                                       else f"  Sincronizar {reminders.short_name(target['src'])}")
+            text += ("  " + _("{target} está conectado.").format(target=self._nb_label(target)))
+            self.remind_bar.go.setText(("  " + _("Sincronizar ahora")) if len(alerts) == 1
+                                       else ("  " + _("Sincronizar {target}").format(target=reminders.short_name(target['src']))))
             self.remind_bar.go.show()
         else:
             self._bar_target = None
-            text += f"  Conecta {self._nb_label(it)} para copiarlos." if len(alerts) == 1 \
-                else "  Conecta el disco de copia para guardarlos."
+            text += ("  " + _("Conecta {it} para copiarlos.").format(it=self._nb_label(it))) if len(alerts) == 1 \
+                else ("  " + _("Conecta el disco de copia para guardarlos."))
             self.remind_bar.go.hide()
         self.remind_bar.title.setText(title)
         self.remind_bar.text.setText(text)
-        self.remind_bar.close_btn.setToolTip(f"Ocultar el aviso: vuelve dentro de {days_text(self._remind_days())} "
-                                             "si sigue sin copia")
+        self.remind_bar.close_btn.setToolTip(_("Ocultar el aviso: vuelve dentro de {remind_days} si sigue sin copia").format(remind_days=days_text(self._remind_days())))
         self.remind_bar.reveal()
 
     def _reminder_tick(self, manual: bool = False):
@@ -5178,15 +5318,16 @@ class MainWindow(QMainWindow):
             p = it.get("pending") or {}
             label = self._pair_label(it)
             what = reminders.changes_text(p, fmt_int, fmt_bytes)
-            body = (f"{what[:1].upper()}{what[1:]} en {reminders.short_name(it['src'])} desde tu última copia "
-                    f"({fmt_ago(it.get('last_ok'))}). ")
-            body += f"{label} está conectado: pulsa para sincronizar." if self._pair_dest(it) \
-                else f"Conecta {label} para copiarlos."
+            body = _("{changes} en {folder} desde tu última copia ({ago}).").format(
+                changes=what[:1].upper() + what[1:], folder=reminders.short_name(it["src"]),
+                ago=fmt_ago(it.get("last_ok"))) + " "
+            body += _("{label} está conectado: pulsa para sincronizar.").format(label=label) if self._pair_dest(it) \
+                else _("Conecta {label} para copiarlos.").format(label=label)
         else:
             body = "  ·  ".join(f"{reminders.short_name(it['src'])}: {short_changes(it.get('pending'))}"
-                                for it in items[:3]) + ". Pulsa para verlos."
+                                for it in items[:3]) + ". " + _("Pulsa para verlos.")
         if self.tray and self.tray.isVisible():
-            self.tray.showMessage("Tienes cambios sin copiar", body, app_icon(), 20000)
+            self.tray.showMessage(_("Tienes cambios sin copiar"), body, app_icon(), 20000)
         else:
             QApplication.alert(self, 0)
 
@@ -5225,8 +5366,7 @@ class MainWindow(QMainWindow):
             return
         dest = self._pair_dest(it)
         if start and dest is None:
-            QMessageBox.information(self, APP_NAME, f"Conecta {self._pair_label(it)} para copiar "
-                                                    f"{reminders.short_name(it['src'])}.")
+            QMessageBox.information(self, APP_NAME, _("Conecta {it} para copiar {it2}.").format(it=self._pair_label(it), it2=reminders.short_name(it['src'])))
             return
         self.excl_map[self._excl_key()] = self.tree.excluded
         if os.path.normcase(self.src_card.path()) != os.path.normcase(it["src"]):
@@ -5250,20 +5390,20 @@ class MainWindow(QMainWindow):
         busy = self._state in RUNNING
         menu = QMenu(self)
         a_sync = menu.addAction(glyph_icon(G.PLAY, C["text"], 14),
-                                "Sincronizar ahora" if dest else f"Sincronizar  (conecta {self._pair_label(it)})")
+                                _("Sincronizar ahora") if dest else _("Sincronizar  (conecta {it})").format(it=self._pair_label(it)))
         a_sync.setEnabled(dest is not None and not busy)
         a_use = None
         if not self._is_current_pair(it):
-            a_use = menu.addAction(glyph_icon(G.SYNC, C["text"], 14), "Usar esta copia")
+            a_use = menu.addAction(glyph_icon(G.SYNC, C["text"], 14), _("Usar esta copia"))
             a_use.setEnabled(not busy)
-        a_check = menu.addAction(glyph_icon(G.SEARCH, C["text"], 14), "Comprobar cambios ahora")
+        a_check = menu.addAction(glyph_icon(G.SEARCH, C["text"], 14), _("Comprobar cambios ahora"))
         a_check.setEnabled(not busy and not self.rem_checker.busy)
         menu.addSeparator()
-        a_remind = menu.addAction(glyph_icon(G.BELL, C["text"], 14), "Avisarme de esta copia")
+        a_remind = menu.addAction(glyph_icon(G.BELL, C["text"], 14), _("Avisarme de esta copia"))
         a_remind.setCheckable(True)
         a_remind.setChecked(it.get("remind", True))
-        a_forget = menu.addAction(glyph_icon(G.CLOSE, C["text"], 14), "Quitar de la lista")
-        a_forget.setToolTip("Vuelve a aparecer si la sincronizas otra vez")
+        a_forget = menu.addAction(glyph_icon(G.CLOSE, C["text"], 14), _("Quitar de la lista"))
+        a_forget.setToolTip(_("Vuelve a aparecer si la sincronizas otra vez"))
         chosen = menu.exec(pos)
         if chosen is None:
             return
@@ -5335,12 +5475,12 @@ class MainWindow(QMainWindow):
             self.hide()
             if not self._tray_hint_shown:
                 self._tray_hint_shown = True
-                extra = " La sincronización sigue en marcha." if self._state in RUNNING else ""
-                self._notify(APP_NAME, "Sigo en la bandeja vigilando tu disco de copia." + extra)
+                extra = (" " + _("La sincronización sigue en marcha.")) if self._state in RUNNING else ""
+                self._notify(APP_NAME, _("Sigo en la bandeja vigilando tu disco de copia.") + extra)
             return
         if self.job and self._state in RUNNING and not self.job.cancelled:
-            ans = QMessageBox.question(self, APP_NAME, "Hay una operación en curso. ¿Cancelarla y salir?\n\n"
-                                       "Lo ya copiado se conserva.")
+            ans = QMessageBox.question(self, APP_NAME, _("Hay una operación en curso. ¿Cancelarla y salir?\n\n"
+                                       "Lo ya copiado se conserva."))
             if ans != QMessageBox.StandardButton.Yes:
                 self._quitting = False
                 event.ignore()
@@ -5369,8 +5509,8 @@ class MainWindow(QMainWindow):
             self._guard_start(job)
         elif not want and self.guard.active:
             if job.paused and job.phase in ("scanning", "copying"):
-                self._log(f"Pausa de más de {PAUSE_GRACE // 60} min: el equipo ya puede suspenderse. Al reanudar "
-                          "se vuelve a mantener despierto.", C["warn"])
+                self._log(_("Pausa de más de {pause_grace} min: el equipo ya puede suspenderse. Al reanudar se vuelve "
+                            "a mantener despierto.").format(pause_grace=PAUSE_GRACE // 60), C["warn"])
             self._guard_stop()
         now = time.perf_counter()
         if now - self._awake_refresh >= 1.0:
@@ -5386,22 +5526,21 @@ class MainWindow(QMainWindow):
             return s.bytes_done, s.files_done, s.moves_done, s.deletes_done, s.scrub_files
 
         root = job.meta_root if engine.volume_present(job.dst) else None
-        self.guard.start(f"{APP_NAME}: copia de seguridad en curso ({job.src} → {job.dst})", root, activity)
+        self.guard.start(_("{app_name}: copia de seguridad en curso ({src} → {dst})").format(app_name=APP_NAME, src=job.src, dst=job.dst), root, activity)
         if IS_WIN:
             keepawake.block_shutdown(int(self.winId()),
-                                     f"Copia de seguridad en curso ({job.src} → {job.dst}). Si apagas ahora se "
-                                     "interrumpe; lo ya copiado se conserva.")
+                                     _("Copia de seguridad en curso ({src} → {dst}). Si apagas ahora se interrumpe; lo ya copiado "
+                                       "se conserva.").format(src=job.src, dst=job.dst))
         if not self._guard_logged:
             self._guard_logged = True
-            parts = [f"el equipo no se suspende ({self.guard.method or 'no disponible'})"]
+            parts = [_("el equipo no se suspende ({v})").format(v=_(self.guard.method) if self.guard.method else _("no disponible"))]
             if root:
-                parts.append(f"latido al disco {engine.vol_name(root)} si pasa "
-                             f"{keepawake.BEAT_SECONDS:.0f} s sin escribir")
-            parts.append("apagar o reiniciar pide confirmación" if IS_WIN
-                         else "cerrar sesión o apagar pide confirmación")
-            self._log("Mientras dure: " + "  ·  ".join(parts), C["muted"])
+                parts.append(_("latido al disco {root} si pasa {beat_seconds:.0f} s sin escribir").format(root=engine.vol_name(root), beat_seconds=keepawake.BEAT_SECONDS))
+            parts.append(_("apagar o reiniciar pide confirmación") if IS_WIN
+                         else _("cerrar sesión o apagar pide confirmación"))
+            self._log((_("Mientras dure:") + " ") + "  ·  ".join(parts), C["muted"])
             if self.guard.error:
-                self._log(f"⚠ No se pudo impedir la suspensión: {self.guard.error}", C["warn"])
+                self._log(_("⚠ No se pudo impedir la suspensión: {error}").format(error=self.guard.error), C["warn"])
         self._refresh_awake()
 
     def _guard_stop(self):
@@ -5419,36 +5558,36 @@ class MainWindow(QMainWindow):
         if not st["active"] and not lost:
             self.awake_chip.hide()
             if self.awake_box.isChecked():
-                self.awake_status.setText("Se activa al analizar o sincronizar y se desactiva al terminar.")
+                self.awake_status.setText(_("Se activa al analizar o sincronizar y se desactiva al terminar."))
             else:
-                self.awake_status.setText("Desactivado: el equipo y el disco se suspenden con normalidad "
-                                          "aunque haya una copia en curso.")
+                self.awake_status.setText(_("Desactivado: el equipo y el disco se suspenden con normalidad "
+                                          "aunque haya una copia en curso."))
             return
         if lost:
-            color, text = C["warn"], "Esperando al disco"
+            color, text = C["warn"], _("Esperando al disco")
         elif st["disk_error"]:
-            color, text = C["warn"], "Sin suspensión · disco sin respuesta"
+            color, text = C["warn"], _("Sin suspensión · disco sin respuesta")
         else:
-            color, text = C["ok"], "Sin suspensión" + (" · disco activo" if st["disk"] else "")
+            color, text = C["ok"], _("Sin suspensión") + ((" · " + _("disco activo")) if st["disk"] else "")
         self.awake_icon.setPixmap(glyph_pixmap(G.POWER, color, 13))
         self.awake_text.setText(text)
         self.awake_text.setStyleSheet(f"color:{color};")
         self.awake_chip.setStyleSheet(f"QFrame#awake {{ background:{rgba(color, 26)}; "
                                       f"border:1px solid {rgba(color, 80)}; }}")
-        lines = [f"Equipo: no se suspende por inactividad ({st['method'] or 'no disponible'})."]
+        lines = [_("Equipo: no se suspende por inactividad ({v}).").format(v=_(st['method']) if st['method'] else _("no disponible"))]
         beat = ""
         if lost:
-            beat = "esperando a que vuelva el disco de copia"
+            beat = _("esperando a que vuelva el disco de copia")
         elif st["disk"]:
-            beat = (f"sin respuesta del disco: {st['disk_error']}" if st["disk_error"]
-                    else f"último latido hace {fmt_human(time.time() - st['last_beat'])}" if st["last_beat"]
-                    else "la copia mantiene el disco activo")
-            lines.append(f"Disco de copia ({engine.vol_name(st['root'])}): {beat}.")
-        lines.append("Apagar o reiniciar: Windows pide confirmación." if IS_WIN
-                     else "Cerrar sesión o apagar: pide confirmación.")
+            beat = (_("sin respuesta del disco: {st}").format(st=st['disk_error']) if st["disk_error"]
+                    else _("último latido hace {time}").format(time=fmt_human(time.time() - st['last_beat'])) if st["last_beat"]
+                    else _("la copia mantiene el disco activo"))
+            lines.append(_("Disco de copia ({st}): {beat}.").format(st=engine.vol_name(st['root']), beat=beat))
+        lines.append(_("Apagar o reiniciar: Windows pide confirmación.") if IS_WIN
+                     else _("Cerrar sesión o apagar: pide confirmación."))
         tip = "\n".join(lines)
         self.awake_chip.setToolTip(tip)
-        since = f"Activo desde las {datetime.fromtimestamp(self.guard.since):%H:%M:%S}" if st["active"] else ""
+        since = _("Activo desde las {since:%H:%M:%S}").format(since=datetime.fromtimestamp(self.guard.since)) if st["active"] else ""
         self.awake_status.setText("  ·  ".join(x for x in (since, beat) if x))
         self.awake_chip.show()
 
@@ -5457,21 +5596,20 @@ class MainWindow(QMainWindow):
         s = job.stats
         if s.disk_lost_at and not self._disk_lost_seen:
             self._disk_lost_seen = True
-            self._log(f"El disco de copia no responde o se ha desconectado ({job.dst}). La copia espera a que "
-                      "vuelva y repite el archivo que estaba a medias: no se pierde nada.", C["warn"])
-            self._notify(APP_NAME, "El disco de copia se ha desconectado. Vuelve a conectarlo y la copia seguirá.")
+            self._log(_("El disco de copia no responde o se ha desconectado ({dst}). La copia espera a que vuelva "
+                        "y repite el archivo que estaba a medias: no se pierde nada.").format(dst=job.dst), C["warn"])
+            self._notify(APP_NAME, _("El disco de copia se ha desconectado. Vuelve a conectarlo y la copia seguirá."))
             self._refresh_awake()
         elif not s.disk_lost_at and self._disk_lost_seen:
             self._disk_lost_seen = False
-            self._log(f"Disco de nuevo disponible: sigue la copia (en total {fmt_human(s.disk_wait_s)} "
-                      "esperando).", C["ok"])
+            self._log(_("Disco de nuevo disponible: sigue la copia (en total {disk_wait_s} esperando).").format(disk_wait_s=fmt_human(s.disk_wait_s)), C["ok"])
             self._refresh_awake()
 
     def _on_session_end_query(self, manager):
         """Windows pregunta si puede apagar, reiniciar o cerrar la sesión."""
         if self.guard.active and self.job and self._state in RUNNING:
             manager.cancel()
-            self._log("Apagado, reinicio o cierre de sesión retenido: hay una copia en curso.", C["warn"])
+            self._log(_("Apagado, reinicio o cierre de sesión retenido: hay una copia en curso."), C["warn"])
 
     def _on_about_to_quit(self):
         # también al apagar de todas formas: se para la copia de forma ordenada (sin archivos a medias)
@@ -5488,8 +5626,8 @@ class MainWindow(QMainWindow):
             if IS_MAC and self.job and self._state in RUNNING and not self.job.cancelled:
                 self._show_window()
                 ans = QMessageBox.question(
-                    self, APP_NAME, "Hay una sincronización en curso. ¿Cancelarla y salir?\n\nLo ya copiado se "
-                    "conserva. Si ibas a apagar o cerrar sesión, elige No y espera a que termine.")
+                    self, APP_NAME, _("Hay una sincronización en curso. ¿Cancelarla y salir?\n\nLo ya copiado se "
+                    "conserva. Si ibas a apagar o cerrar sesión, elige No y espera a que termine."))
                 if ans != QMessageBox.StandardButton.Yes:
                     return False
                 self.job.cancel()
@@ -5507,13 +5645,13 @@ class MainWindow(QMainWindow):
             job.pause()
             self._pause_at = time.perf_counter()
             self._sleep_paused = True
-        self._log("El equipo se va a suspender: copia en pausa. Seguirá sola al volver.", C["warn"])
+        self._log(_("El equipo se va a suspender: copia en pausa. Seguirá sola al volver."), C["warn"])
 
     def _on_system_resume(self):
         if not self._sleeping:
             return
         self._sleeping = False
-        self._log("Equipo reanudado")
+        self._log(_("Equipo reanudado"))
         QTimer.singleShot(120_000, self._reminder_tick)
         if self._sleep_paused:
             deadline = time.monotonic() + 180
@@ -5722,19 +5860,31 @@ def selftest() -> int:
         win = MainWindow()
         win._refresh_disk_status()
         say("  interfaz: construida")
+        for code in i18n.LANGS:
+            images, spots, _size = tour_assets(code)
+            missing = [k for k, pm in images.items() if pm.isNull()]
+            assert not missing and tour_folder(code).endswith(code), f"faltan ilustraciones de la guía ({code})"
+        here = i18n.current()
+        for code in i18n.LANGS:
+            if code == i18n.SOURCE:
+                continue
+            assert len(i18n.catalog(code)) > 500, f"traducción incompleta: {code}"
+            i18n.set_language(code)
+            assert _("Sincronizar") != "Sincronizar" and "{n}" not in _n("{n} hilo", "{n} hilos", 3).format(n=3)
+        i18n.set_language(here)
+        say(f"  idiomas: {', '.join(i18n.LANGS)} con traducciones e ilustraciones · "
+            f"diálogos de Qt en {i18n.current()}: {'sí' if install_qt_translations(app) else 'no'}")
         images, spots, _size = tour_assets()
-        missing = [k for k, pm in images.items() if pm.isNull()]
-        assert not missing, f"faltan ilustraciones de la guía: {missing}"
         tour = TourOverlay(win, animate=False)
         ended: list[bool] = []
         tour.finished.connect(ended.append)
         tour.open()
         steps = len(tour.card.steps)
         assert 4 <= steps <= 6 and tour.card.idx == 0
-        for _ in range(steps - 1):
+        for _i in range(steps - 1):
             tour.card.forward()
             tour.card.grab()
-        assert tour.card.idx == steps - 1 and tour.card.next_btn.text().strip() == "Empezar"
+        assert tour.card.idx == steps - 1 and tour.card.next_btn.text().strip() == _("Empezar")
         tour.card.next()
         assert ended == [True] and not tour.active, "la guía no se cerró al terminar"
         say(f"  guía rápida: {steps} pasos, {len(images)} ilustraciones, "
@@ -5775,6 +5925,7 @@ def main() -> int:
     app = App(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setQuitOnLastWindowClosed(False)
+    install_qt_translations(app)
     if send_to_running("tray" if tray_mode else "show"):
         return 0
     app.setStyle("Fusion")
@@ -5785,6 +5936,7 @@ def main() -> int:
     server = QLocalServer()
     QLocalServer.removeServer(INSTANCE)
     server.listen(INSTANCE)
+    app.instance_server = server  # se cierra al reiniciar la app (cambio de idioma)
     win = MainWindow(tray_mode=tray_mode, updated="--updated" in sys.argv)
     server.newConnection.connect(lambda: win.on_instance_message(server))
     if IS_MAC:

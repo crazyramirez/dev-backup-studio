@@ -21,6 +21,8 @@ import sys
 import threading
 import time
 
+from i18n import N_
+
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 
@@ -71,7 +73,7 @@ class _WindowsSystem:
         handle = _k32.PowerCreateRequest(ctypes.byref(ctx))
         if handle and handle != _INVALID_HANDLE and _k32.PowerSetRequest(handle, _REQUEST_SYSTEM):
             self._handle = handle
-            self.method = "solicitud de energía de Windows"
+            self.method = N_("solicitud de energía de Windows")
         else:
             if handle and handle != _INVALID_HANDLE:
                 _k32.CloseHandle(handle)
@@ -111,7 +113,7 @@ class _MacSystem:
         self._proc: subprocess.Popen | None = None
         try:
             self._iokit_assertions(reason)
-            self.method = "aserciones de energía de macOS"
+            self.method = N_("aserciones de energía de macOS")
         except (OSError, AttributeError):
             self._release_ids()
             self._proc = subprocess.Popen(["caffeinate", "-i", "-m", "-s", "-w", str(os.getpid())],

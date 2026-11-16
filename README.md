@@ -63,6 +63,8 @@ primera vez:
   con cambios sin copiar, te avisa una vez por periodo: «Tienes cambios sin copiar en DEV · 37 archivos
   desde tu última copia, hace 4 días». Comprueba sin abrir archivos; si no has tocado nada, no avisa.
   Con el disco conectado, se sincroniza desde el propio aviso.
+- **En seis idiomas.** Español, inglés, francés, italiano, chino y japonés: automático según el
+  sistema o elegido en *Sistema → Idioma*.
 - **Guía rápida.** La primera vez enseña en cinco pasos, con capturas de la propia app, cómo dejarla
   lista. Se vuelve a abrir con el botón *Guía*, con F1 (⌘? en macOS) o desde el icono de la bandeja.
 - **Se actualiza sola, preguntando.** Comprueba en GitHub si hay una versión nueva (como mucho una vez
@@ -124,11 +126,12 @@ sección en `CHANGELOG.md`, de donde salen las notas de la versión), GitHub Act
 4. publica la versión con el instalador y el `.dmg`.
 
 ```bash
-git tag v1.7.0
-git push origin v1.7.0
+git tag v1.8.0
+git push origin v1.8.0
 ```
 
-Las ilustraciones de la guía rápida (`assets/tour/`) y `docs/guia.png` se generan con capturas reales
+Los textos se traducen con `locales/<idioma>.json` (lista de textos: `python tools/i18n_extract.py`,
+comprobación: `--check`). Las ilustraciones de la guía rápida (`assets/tour/<idioma>/`) y `docs/guia.png` se generan con capturas reales
 de la app: `python tools/make_tour.py` (Windows; monta datos de ejemplo con `subst`).
 
 ## Limitaciones

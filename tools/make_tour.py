@@ -1,7 +1,10 @@
-"""Genera las ilustraciones de la guía rápida (assets/tour/) con capturas reales de la app.
+"""Genera las ilustraciones de la guía rápida (assets/tour/<idioma>/) con capturas reales de la app.
 
-    python tools/make_tour.py            # captura con datos de ejemplo y compone
-    python tools/make_tour.py --compose  # solo recompone a partir de la última captura
+    python tools/make_tour.py                    # todos los idiomas (un proceso por idioma)
+    python tools/make_tour.py --lang en          # solo un idioma
+    python tools/make_tour.py --lang en --compose  # solo recompone a partir de la última captura
+
+En español también rehace las capturas del README (docs/).
 
 Solo Windows: monta los datos de ejemplo como S:\\Proyectos y X:\\Copia con «subst» para que las
 rutas de las capturas queden limpias. Las capturas se hacen a 2× para pantallas de alta densidad.
@@ -21,9 +24,40 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-OUT = os.path.join(ROOT, "assets", "tour")
-WORK = os.path.join(tempfile.gettempdir(), "devbackup_tour")
+LANG = sys.argv[sys.argv.index("--lang") + 1] if "--lang" in sys.argv else ""
+OUT = os.path.join(ROOT, "assets", "tour", LANG)
+WORK = os.path.join(tempfile.gettempdir(), f"devbackup_tour_{LANG}")
 RAW = os.path.join(WORK, "raw")
+
+# datos de ejemplo en el idioma de cada captura
+DEMO = {
+    "es": {"root": "Proyectos", "backup": "Copia", "label": "Disco USB", "file": "archivo", "res": "recurso",
+           "level": "nivel", "order": "pedido",
+           "p": {"app": "App Móvil", "api": "API Pagos", "fw": "Firmware ESP32", "game": "Juego Arcade",
+                 "shop": "Tienda Online", "web": "Web Corporativa"}},
+    "en": {"root": "Projects", "backup": "Backup", "label": "USB Drive", "file": "file", "res": "asset",
+           "level": "level", "order": "order",
+           "p": {"app": "Mobile App", "api": "Payments API", "fw": "ESP32 Firmware", "game": "Arcade Game",
+                 "shop": "Online Store", "web": "Company Website"}},
+    "fr": {"root": "Projets", "backup": "Sauvegarde", "label": "Disque USB", "file": "fichier", "res": "ressource",
+           "level": "niveau", "order": "commande",
+           "p": {"app": "App mobile", "api": "API Paiements", "fw": "Firmware ESP32", "game": "Jeu d'arcade",
+                 "shop": "Boutique en ligne", "web": "Site vitrine"}},
+    "it": {"root": "Progetti", "backup": "Backup", "label": "Disco USB", "file": "file", "res": "risorsa",
+           "level": "livello", "order": "ordine",
+           "p": {"app": "App mobile", "api": "API Pagamenti", "fw": "Firmware ESP32", "game": "Gioco arcade",
+                 "shop": "Negozio online", "web": "Sito aziendale"}},
+    "zh": {"root": "项目", "backup": "备份", "label": "USB 磁盘", "file": "file", "res": "asset",
+           "level": "level", "order": "order",
+           "p": {"app": "移动应用", "api": "支付 API", "fw": "ESP32 固件", "game": "街机游戏",
+                 "shop": "网上商店", "web": "企业网站"}},
+    "ja": {"root": "プロジェクト", "backup": "バックアップ", "label": "USB ディスク", "file": "file", "res": "asset",
+           "level": "level", "order": "order",
+           "p": {"app": "モバイルアプリ", "api": "決済 API", "fw": "ESP32 ファームウェア", "game": "アーケードゲーム",
+                 "shop": "オンラインストア", "web": "企業サイト"}},
+}
+D = DEMO.get(LANG, DEMO["es"])
+P = D["p"]
 SRC_LETTER, DST_LETTER = "S:", "X:"
 DPR = 2.0
 W, H = 920, 400  # lienzo lógico de cada ilustración (se guarda a 2×)
@@ -41,7 +75,7 @@ def make_demo(base: str) -> tuple[str, str]:
     src_vol, dst_vol = os.path.join(base, "src_vol"), os.path.join(base, "dst_vol")
     _rmtree(src_vol)
     _rmtree(dst_vol)
-    src = os.path.join(src_vol, "Proyectos")
+    src = os.path.join(src_vol, D["root"])
     os.makedirs(dst_vol)
 
     def write(rel: str, n: int) -> None:
@@ -56,26 +90,26 @@ def make_demo(base: str) -> tuple[str, str]:
                 fh.write(os.urandom(n))
 
     projects = {
-        "App Móvil": ["lib/screens", "lib/widgets", "assets/img", "build/outputs"],
-        "API Pagos": ["app/routes", "app/models", "tests"],
-        "Firmware ESP32": ["src", "include", "data"],
-        "Juego Arcade": ["Assets/Sprites", "Assets/Audio", "Scripts"],
-        "Tienda Online": ["src/components", "src/pages", "public/img"],
-        "Web Corporativa": ["css", "js", "img"],
+        P["app"]: ["lib/screens", "lib/widgets", "assets/img", "build/outputs"],
+        P["api"]: ["app/routes", "app/models", "tests"],
+        P["fw"]: ["src", "include", "data"],
+        P["game"]: ["Assets/Sprites", "Assets/Audio", "Scripts"],
+        P["shop"]: ["src/components", "src/pages", "public/img"],
+        P["web"]: ["css", "js", "img"],
     }
     for proj, dirs in projects.items():
         for d in dirs:
             for i in range(random.randint(30, 60)):
                 ext = random.choice([".ts", ".tsx", ".py", ".cpp", ".png", ".json", ".md"])
-                write(f"{proj}/{d}/archivo_{i:03d}{ext}", random.randint(800, 60000))
+                write(f"{proj}/{d}/{D['file']}_{i:03d}{ext}", random.randint(800, 60000))
         write(f"{proj}/node_modules/react/index.js", 2000)
         write(f"{proj}/README.md", 3000)
     # recursos medianos repartidos: datos y archivos avanzan a la par y el tiempo restante es realista
-    media = {"Juego Arcade/Assets/Sprites": ".png", "Juego Arcade/Assets/Audio": ".wav",
-             "Tienda Online/public/img": ".jpg", "App Móvil/assets/img": ".png"}
+    media = {f"{P['game']}/Assets/Sprites": ".png", f"{P['game']}/Assets/Audio": ".wav",
+             f"{P['shop']}/public/img": ".jpg", f"{P['app']}/assets/img": ".png"}
     for folder, ext in media.items():
         for i in range(30):
-            write(f"{folder}/recurso_{i:03d}{ext}", random.randint(1, 3) << 20)
+            write(f"{folder}/{D['res']}_{i:03d}{ext}", random.randint(1, 3) << 20)
     return src_vol, dst_vol
 
 
@@ -95,7 +129,7 @@ def capture() -> None:
     # copia lenta para poder fotografiar el progreso a mitad
     engine._PROGRESS = lambda fn: orig_progress(lambda *a: (time.sleep(0.012) if slow["on"] else None, fn(*a))[1])
     real_info = engine.volume_info
-    engine.volume_info = lambda root: (("Disco USB",) + real_info(root)[1:]) if root.upper().startswith(DST_LETTER) \
+    engine.volume_info = lambda root: ((D["label"],) + real_info(root)[1:]) if root.upper().startswith(DST_LETTER) \
         else real_info(root)
 
     import backup_studio as bs
@@ -112,16 +146,11 @@ def capture() -> None:
     bs.datetime = Clock
     from PyQt6.QtGui import QFont, QPixmap
 
-    _rmtree(WORK)
-    os.makedirs(RAW)
+    os.makedirs(RAW, exist_ok=True)
     src_vol, dst_vol = make_demo(WORK)
     subst(SRC_LETTER, src_vol)
     subst(DST_LETTER, dst_vol)
-    src, dst = SRC_LETTER + "\\Proyectos", DST_LETTER + "\\Copia"
-
-    appdata = os.path.join(WORK, "appdata")
-    bs.DATA_DIR = appdata
-    bs.LOG_DIR = os.path.join(appdata, "logs")
+    src, dst = SRC_LETTER + "\\" + D["root"], DST_LETTER + "\\" + D["backup"]
     bs.set_autostart = lambda _on: None
     app = bs.App(sys.argv)
     app.setQuitOnLastWindowClosed(False)
@@ -185,7 +214,7 @@ def capture() -> None:
         tree = win.tree
         for i in range(tree.topLevelItemCount()):
             it = tree.topLevelItem(i)
-            if it.text(0) == "App Móvil":
+            if it.text(0) == P["app"]:
                 it.setExpanded(True)
                 for j in range(it.childCount()):
                     if it.child(j).text(0) == "build":
@@ -215,18 +244,18 @@ def capture() -> None:
 
     def mutate():
         slow["on"] = False
-        p = os.path.join(src, "API Pagos", "app", "models", "archivo_003.py")
+        p = os.path.join(src, P["api"], "app", "models", f"{D['file']}_003.py")
         if not os.path.exists(p):
-            p = next(os.path.join(r, f) for r, _d, fs in os.walk(os.path.join(src, "API Pagos")) for f in fs)
+            p = next(os.path.join(r, f) for r, _d, fs in os.walk(os.path.join(src, P["api"])) for f in fs)
         m = os.stat(p).st_mtime
         data = bytearray(open(p, "rb").read())
         data[0] ^= 1
         open(p, "wb").write(bytes(data))
         os.utime(p, (m + 7, m + 7))
-        os.rename(os.path.join(src, "Web Corporativa"), os.path.join(src, "Web Corporativa 2026"))
-        os.remove(os.path.join(src, "Tienda Online", "README.md"))
+        os.rename(os.path.join(src, P["web"]), os.path.join(src, P["web"] + " 2026"))
+        os.remove(os.path.join(src, P["shop"], "README.md"))
         for i in range(4):
-            with open(os.path.join(src, "Juego Arcade", "Scripts", f"nivel_{5 + i}.cs"), "w") as fh:
+            with open(os.path.join(src, P["game"], "Scripts", f"{D['level']}_{5 + i}.cs"), "w") as fh:
                 fh.write("// nuevo nivel\n" * 60)
         subst(DST_LETTER, None)
 
@@ -271,7 +300,7 @@ def capture() -> None:
 
     def remind_due():
         for i in range(6):
-            with open(os.path.join(src, "Tienda Online", "src", "pages", f"pedido_{i}.tsx"), "w") as fh:
+            with open(os.path.join(src, P["shop"], "src", "pages", f"{D['order']}_{i}.tsx"), "w") as fh:
                 fh.write("export default {}\n" * 40)
         offset[0] = timedelta(days=4, hours=2)
         win.seg_buttons[bs.PAGE_TREE].click()
@@ -294,7 +323,10 @@ def capture() -> None:
         win.show_tour(animate=False)
 
     def tour_doc():
-        # captura del README: la guía abierta sobre la app
+        # captura del README (en español): la guía abierta sobre la app
+        if LANG != "es":
+            win.tour.finish(False)
+            return
         size = win.size()
         pm = QPixmap(int(size.width() * DPR), int(size.height() * DPR))
         pm.setDevicePixelRatio(DPR)
@@ -537,9 +569,9 @@ def compose() -> None:
     _r, dlg_at = panel(p, "dialog", W - dlg["w"] * dsc - 28, H - dlg["h"] * dsc - 18, scale=dsc, strong=True)
     save(img, p, "5-conecta", [bar_at("go", 4), dlg_at("sync", 4)])
 
-    # capturas del README con el diseño actual
+    # capturas del README (en español) con el diseño actual
     docs = os.path.join(ROOT, "docs")
-    for name, out, width in (("window_copy", "progreso.png", 1800), ("window_changes", "cambios.png", 1800),
+    for name, out, width in [] if LANG != "es" else (("window_copy", "progreso.png", 1800), ("window_changes", "cambios.png", 1800),
                              ("dialog", "conectar.png", 875)):
         raw(name).toImage().scaledToWidth(width, Qt.TransformationMode.SmoothTransformation).save(
             os.path.join(docs, out))
@@ -550,7 +582,27 @@ def compose() -> None:
     print("tour.json listo", flush=True)
 
 
+def prepare() -> None:
+    """Ajustes de la app de captura en una carpeta propia, con el idioma elegido (se lee al importar la app)."""
+    if "--compose" not in sys.argv:
+        _rmtree(WORK)
+    data = os.path.join(WORK, "env", "DEV Backup Studio")
+    os.makedirs(data, exist_ok=True)
+    with open(os.path.join(data, "settings.ini"), "w", encoding="utf-8") as fh:
+        fh.write(f"[General]\nlanguage={LANG}\ntour=99\n")
+    os.environ["APPDATA"] = os.path.join(WORK, "env")
+
+
 if __name__ == "__main__":
+    if not LANG:  # todos los idiomas, cada uno en su proceso: los textos se fijan al arrancar la app
+        import i18n
+        extra = [a for a in sys.argv[1:] if a == "--compose"]
+        for code in i18n.LANGS:
+            print(f"== {code}", flush=True)
+            subprocess.run([sys.executable, "-X", "utf8", os.path.abspath(__file__), "--lang", code] + extra,
+                           check=True)
+        sys.exit(0)
+    prepare()
     if "--compose" not in sys.argv:
         capture()
     compose()

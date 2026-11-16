@@ -1,5 +1,15 @@
 # Novedades
 
+## 1.8.0
+
+- **Seis idiomas.** Español, inglés, francés, italiano, chino (simplificado) y japonés. Por defecto la
+  app usa el idioma del sistema; en *Sistema → Idioma* se puede elegir otro y la app ofrece reiniciarse
+  para aplicarlo (el aviso aparece ya en el idioma elegido). Los ajustes y las copias no cambian.
+- Todo traducido: ventana, avisos, notificaciones, diálogos, el informe de cada copia y la guía rápida,
+  cuyas capturas están hechas con la app en cada idioma.
+- Números, porcentajes y fechas con el formato de cada idioma, y letra propia para chino y japonés.
+- Los recordatorios reconocen los registros de copias escritos en cualquiera de los idiomas.
+
 ## 1.7.0
 
 - **Barra lateral reordenada por uso.** Primero *Copia* (origen → destino en una sola tarjeta), luego
