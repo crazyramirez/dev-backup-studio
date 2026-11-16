@@ -248,22 +248,19 @@ def capture() -> None:
     after(100, wait_state("done", "cancelled", "failed"))
     after(800, lambda: (win.seg_buttons[bs.PAGE_TREE].click(), None)[1])
     after(400, lambda: grab("tree", win.stack.widget(bs.PAGE_TREE), rects=tree_rects()))
-    after(50, lambda: grab("src", win.src_card, rects={"edit": rect_in(win.src_card.edit, win.src_card),
-                                                        "btn": rect_in(win.src_card.btn, win.src_card)}))
-    after(50, lambda: grab("dst", win.dst_card, rects={"edit": rect_in(win.dst_card.edit, win.dst_card),
-                                                        "btn": rect_in(win.dst_card.btn, win.dst_card)}))
-    after(50, lambda: grab("rules", win.chips_box.parentWidget(),
-                           rects={"chips": rect_in(win.chips_box, win.chips_box.parentWidget())}))
-    after(50, lambda: grab("disk", win.watch_box.parentWidget(),
-                           rects={"watch": rect_in(win.watch_box, win.watch_box.parentWidget())}))
-    after(50, lambda: grab("power", win.awake_box.parentWidget()))
+    after(50, lambda: grab("pair", win.card_pair, rects={"src": rect_in(win.src_card.edit, win.card_pair),
+                                                          "dst": rect_in(win.dst_card.edit, win.card_pair)}))
+    after(50, lambda: grab("rules", win.card_rules, rects={"chips": rect_in(win.chips_box, win.card_rules)}))
+    after(50, lambda: grab("disk", win.card_disk, rects={"status": rect_in(win.disk_status, win.card_disk),
+                                                          "watch": rect_in(win.watch_box, win.card_disk)}))
     after(50, lambda: grab("footer", win.btn_start.parentWidget(), rects=footer_rects()))
     after(50, lambda: grab("window_done", win.centralWidget()))
     after(200, mutate)
     after(2600, lambda: subst(DST_LETTER, dst_vol))  # «enchufar» el disco
     after(200, dialog_ready)
     after(300, lambda: (win.seg_buttons[bs.PAGE_CHANGES].click(), None)[1])
-    after(400, lambda: grab("changes", win.stack.widget(bs.PAGE_CHANGES)))
+    after(400, lambda: (grab("changes", win.stack.widget(bs.PAGE_CHANGES)),
+                        grab("window_changes", win.centralWidget())))
     after(300, lambda: grab("dialog", win.dialog, rects={"sync": rect_in(win.dialog.b_sync, win.dialog),
                                                          "tiles": rect_in(win.dialog.t_new.parentWidget(),
                                                                           win.dialog)}))
@@ -283,7 +280,7 @@ def capture() -> None:
     def remind_grab():
         if win.rem_checker.busy or not win.remind_bar.isVisible() or win.remind_bar._anim.state().name == "Running":
             return False
-        bar, card = win.remind_bar, win.remind_box.parentWidget()
+        bar, card = win.remind_bar, win.card_remind
         grab("remind_bar", bar, rects={"go": rect_in(bar.go, bar)})
         grab("remind_card", card)
         return None
@@ -487,16 +484,14 @@ def compose() -> None:
     p.drawImage(QPointF(0, 0), layer)
     save(img, p, "1-bienvenida", [])
 
-    # 2 · origen y destino
+    # 2 · origen → destino en su tarjeta, y el disco de copia que se reconoce aunque cambie de letra
     img, p = canvas()
-    cw = meta["src"]["w"]
-    gap = 66
-    x0 = (W - 2 * cw - gap) / 2
-    y0 = (H - meta["src"]["h"]) / 2 - 4
-    _r1, src_at = panel(p, "src", x0, y0, strong=True)
-    _r2, dst_at = panel(p, "dst", x0 + cw + gap, y0, strong=True)
-    arrow_badge(p, QPointF(W / 2, y0 + meta["src"]["h"] / 2))
-    save(img, p, "2-origen-destino", [src_at("edit", 5), dst_at("edit", 5)])
+    pair, disk = meta["pair"], meta["disk"]
+    gap = 54
+    x0 = (W - pair["w"] - disk["w"] - gap) / 2
+    _r, pair_at = panel(p, "pair", x0, (H - pair["h"]) / 2, strong=True)
+    _r, disk_at = panel(p, "disk", x0 + pair["w"] + gap, (H - disk["h"]) / 2 + 6, strong=True)
+    save(img, p, "2-origen-destino", [pair_at("src", 5), pair_at("dst", 5), disk_at("status", 6)])
 
     # 3 · qué copiar: árbol con una carpeta desmarcada y reglas por nombre
     img, p = canvas()
@@ -541,6 +536,14 @@ def compose() -> None:
     dsc = 0.66
     _r, dlg_at = panel(p, "dialog", W - dlg["w"] * dsc - 28, H - dlg["h"] * dsc - 18, scale=dsc, strong=True)
     save(img, p, "5-conecta", [bar_at("go", 4), dlg_at("sync", 4)])
+
+    # capturas del README con el diseño actual
+    docs = os.path.join(ROOT, "docs")
+    for name, out, width in (("window_copy", "progreso.png", 1800), ("window_changes", "cambios.png", 1800),
+                             ("dialog", "conectar.png", 875)):
+        raw(name).toImage().scaledToWidth(width, Qt.TransformationMode.SmoothTransformation).save(
+            os.path.join(docs, out))
+        print("captura docs/" + out, flush=True)
 
     with open(os.path.join(OUT, "tour.json"), "w", encoding="utf-8") as fh:
         json.dump({"size": [W, H], "spots": spots}, fh, indent=1, ensure_ascii=False)

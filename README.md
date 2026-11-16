@@ -124,8 +124,8 @@ sección en `CHANGELOG.md`, de donde salen las notas de la versión), GitHub Act
 4. publica la versión con el instalador y el `.dmg`.
 
 ```bash
-git tag v1.6.0
-git push origin v1.6.0
+git tag v1.7.0
+git push origin v1.7.0
 ```
 
 Las ilustraciones de la guía rápida (`assets/tour/`) y `docs/guia.png` se generan con capturas reales

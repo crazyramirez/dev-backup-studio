@@ -25,6 +25,15 @@ def pair_id(src: str, disk_id: str, dst_rel: str, dst: str) -> str:
     return hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
 
 
+def _same(a: str, b: str) -> bool:
+    return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
+
+
+def _under(path: str, root: str) -> bool:
+    path, root = os.path.normcase(os.path.normpath(path)), os.path.normcase(os.path.normpath(root))
+    return path == root or path.startswith(root.rstrip("\\/") + os.sep)
+
+
 def parse_time(iso: str | None) -> datetime | None:
     try:
         return datetime.fromisoformat(iso) if iso else None
@@ -99,8 +108,51 @@ class Registry:
         if copied:
             it["copies"] = it.get("copies", 0) + 1
             it["last_end"] = stamp(now)
+        if disk_id:
+            # la misma copia apuntada antes solo por su ruta (sin marca de disco): pasa a ser esta
+            for other in list(self.items.values()):
+                if (other is not it and not other.get("disk_id") and _same(other["src"], src)
+                        and _same(other.get("dst", ""), dst)):
+                    self._merge(it, other)
         self._trim()
         return it
+
+    def _merge(self, keep: dict, other: dict) -> None:
+        """Une dos apuntes de la misma copia: suma copias y conserva la más reciente."""
+        self.items.pop(other["id"], None)
+        keep["copies"] = keep.get("copies", 0) + other.get("copies", 0)
+        keep["first"] = min(keep.get("first") or other.get("first", ""), other.get("first") or keep.get("first", ""))
+        keep["remind"] = keep.get("remind", True) and other.get("remind", True)
+        if (other.get("last_ok") or "") > (keep.get("last_ok") or ""):
+            for key in ("last_ok", "last_end", "pending", "alert", "snooze_until", "next_check", "patterns",
+                        "excluded"):
+                if key in other:
+                    keep[key] = other[key]
+
+    def adopt_disk(self, disk_id: str, root: str, rel_of, label: str = "", must_exist: bool = False) -> int:
+        """Las copias apuntadas solo por ruta en la unidad `root` pasan a llevar la marca de ese disco
+        (así se reconocen aunque cambie de letra). Con `must_exist`, solo si su carpeta está en él.
+        Devuelve cuántas cambiaron."""
+        if not disk_id or not root:
+            return 0
+        changed = 0
+        for it in list(self.items.values()):
+            dst = it.get("dst", "")
+            if it.get("disk_id") or not dst or not _under(dst, root):
+                continue
+            if must_exist and not os.path.isdir(dst):
+                continue
+            rel = rel_of(dst)
+            self.items.pop(it["id"], None)
+            it.update(disk_id=disk_id, dst_rel=rel, label=it.get("label") or label)
+            it["id"] = pair_id(it["src"], disk_id, rel, dst)
+            twin = self.items.get(it["id"])
+            if twin is None:
+                self.items[it["id"]] = it
+            else:
+                self._merge(twin, it)
+            changed += 1
+        return changed
 
     def _trim(self) -> None:
         for it in self.to_list()[MAX_COPIES:]:

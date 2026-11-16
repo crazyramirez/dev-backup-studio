@@ -1,5 +1,25 @@
 # Novedades
 
+## 1.7.0
+
+- **Barra lateral reordenada por uso.** Primero *Copia* (origen → destino en una sola tarjeta), luego
+  *Qué se copia*, *Cómo se copia* (modo y versiones, integridad), *Automático* (disco de copia,
+  recordatorios) y *Sistema* (energía, actualizaciones). Es más ancha y un 30 % más corta.
+- **Tarjetas plegables con resumen.** Plegada, cada tarjeta enseña en una línea lo elegido («Espejo con
+  versiones · versiones 90 días · 16 hilos»). Lo que se usa menos empieza plegado y la app recuerda cómo
+  las dejas.
+- **Interruptores** en lugar de casillas de dos líneas: título, explicación corta y el interruptor a la
+  derecha; un clic en el texto también lo cambia, y se maneja con el teclado. Las explicaciones largas
+  pasan a la ayuda emergente.
+- La ventana estrecha ya no corta la página *Progreso* ni las demás: las casillas de datos pasan a dos
+  columnas cuando no caben y los textos se reparten en varias líneas.
+- *Incidencias* sin problemas se ve en verde, con un mensaje claro, y *Exportar* solo se activa si hay algo.
+- Las copias recuperadas de los registros cuyo disco no estaba conectado al actualizar se apuntaban
+  solo por su ruta, y la siguiente copia al mismo sitio se apuntaba aparte (la antigua podía avisar sin
+  motivo). Ahora se unen: al arrancar toman la marca del disco registrado, al conectar un disco con su
+  carpeta toman la suya y al sincronizar se juntan con la copia nueva. También toman el nombre del disco.
+- Capturas del README y de la guía rápida con el diseño nuevo.
+
 ## 1.6.0
 
 - **Recordatorios de copia.** Si llevas días sin copiar y has cambiado algo desde la última copia, la

@@ -35,7 +35,7 @@ from PyQt6.QtGui import (QBrush, QColor, QConicalGradient, QDesktopServices, QFo
                          QPainter, QPainterPath, QPalette, QPen, QPixmap, QRadialGradient, QShortcut)
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtSvg import QSvgRenderer
-from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox,
+from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QApplication, QButtonGroup, QComboBox,
                              QDialog, QFileDialog, QFrame, QGraphicsBlurEffect, QGraphicsOpacityEffect,
                              QGraphicsPixmapItem, QGraphicsScene, QGridLayout, QHBoxLayout, QHeaderView,
                              QLabel, QLayout, QLineEdit, QMainWindow, QMenu, QMessageBox,
@@ -50,7 +50,7 @@ import reminders
 import updater
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.7.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -81,6 +81,9 @@ DEFAULT_RULES = {"node_modules"}
 # restante tenga en cuenta que mil archivos pequeños tardan más que uno grande.
 # En un disco USB mecánico cada archivo cuesta lo que ~1 MB de datos.
 FILE_COST = 1024 * 1024
+SIDEBAR_W = 428
+TILE_MIN = 146  # ancho mínimo de una casilla de datos (Progreso, resumen)
+DEFAULT_FOLDED = ["modo", "integridad", "energia", "actualizaciones"]  # tarjetas plegadas al empezar
 DEFAULT_THREADS = 16
 
 C = {
@@ -143,6 +146,9 @@ ICONS = {
     "bell": _p("M6.2 10a5.8 5.8 0 1 1 11.6 0c0 4.6 1.9 6.3 1.9 6.3H4.3S6.2 14.6 6.2 10z")
             + _p("M10.1 19.6a2.1 2.1 0 0 0 3.8 0"),
     "more": '<circle cx="5.5" cy="12" r=".6"/><circle cx="12" cy="12" r=".6"/><circle cx="18.5" cy="12" r=".6"/>',
+    "chevdown": _p("M7 10l5 5 5-5"),
+    "chevright": _p("M10 7l5 5-5 5"),
+    "arrowdown": _p("M12 5v14M6.5 13.5L12 19l5.5-5.5"),
 }
 
 
@@ -401,6 +407,7 @@ QPushButton#seg:hover { color: %(text)s; }
 QPushButton#seg:checked { background: %(card2)s; color: %(text)s; }
 QPushButton#link { background: transparent; border: none; color: %(accent2)s; padding: 4px 6px; }
 QPushButton#link:hover { color: #7DE6F5; }
+QPushButton#link:disabled { color: %(faint)s; }
 QPushButton#help {
     background: transparent; border: 1px solid %(line2)s; border-radius: 13px;
     padding: 5px 13px 5px 10px; font-size: 12px; font-weight: 700; color: %(muted)s;
@@ -427,6 +434,11 @@ QPushButton#remGo:hover { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:
 QPushButton#remLater { padding: 8px 14px; border-radius: 10px; background: rgba(255,255,255,8); }
 QPushButton#remClose, QPushButton#remMore { background: transparent; border: none; border-radius: 8px; padding: 0; }
 QPushButton#remClose:hover, QPushButton#remMore:hover { background: %(hover)s; }
+QLabel#group { color: %(faint)s; font-size: 10px; font-weight: 800; padding-left: 6px; }
+QLabel#sectionSummary { color: %(muted)s; font-size: 12px; padding-top: 7px; }
+QLabel#rowTitle { font-size: 13px; font-weight: 600; }
+QLabel#rowSub { color: %(faint)s; font-size: 12px; }
+QFrame#pathBlock { background: transparent; border: none; }
 QFrame#remRow { background: %(panel)s; border: 1px solid %(line)s; border-radius: 11px; }
 QFrame#remRow:hover { border-color: %(line2)s; background: #12161E; }
 QLabel#remTitle { font-weight: 700; font-size: 13px; }
@@ -727,7 +739,7 @@ class Tile(QFrame):
     def __init__(self, title: str, glyph: int, color: str):
         super().__init__()
         self.setObjectName("tile")
-        self.setMinimumWidth(150)
+        self.setMinimumWidth(TILE_MIN)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(15, 13, 15, 13)
@@ -1172,11 +1184,282 @@ class FolderTree(QTreeWidget):
         self.changed.emit()
 
 
+# ── componentes de ajustes ───────────────────────────────────────────────────
+
+class Toggle(QAbstractButton):
+    """Interruptor con el pomo animado. Misma API que una casilla (isChecked, setChecked, toggled)."""
+    W, H = 38, 22
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setFixedSize(self.W, self.H)
+        self._pos = 0.0
+        self._hover = False
+        self._kbd = False
+        self._anim = QVariantAnimation(self)
+        self._anim.setDuration(170)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._anim.valueChanged.connect(self._on_anim)
+        self.toggled.connect(self._animate)
+
+    def sizeHint(self):  # noqa: N802
+        return QSize(self.W, self.H)
+
+    def _animate(self, on: bool):
+        if not ui_animations():
+            self.update()
+            return
+        self._anim.stop()
+        self._anim.setStartValue(self._pos)
+        self._anim.setEndValue(1.0 if on else 0.0)
+        self._anim.start()
+
+    def _on_anim(self, v):
+        self._pos = float(v)
+        self.update()
+
+    def enterEvent(self, _):  # noqa: N802
+        self._hover = True
+        self.update()
+
+    def leaveEvent(self, _):  # noqa: N802
+        self._hover = False
+        self.update()
+
+    def focusInEvent(self, e):  # noqa: N802
+        self._kbd = e.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
+        super().focusInEvent(e)
+
+    def focusOutEvent(self, e):  # noqa: N802
+        self._kbd = False
+        super().focusOutEvent(e)
+
+    def paintEvent(self, _):  # noqa: N802
+        if self._anim.state() != QVariantAnimation.State.Running:
+            self._pos = 1.0 if self.isChecked() else 0.0  # también tras setChecked con las señales bloqueadas
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.isEnabled():
+            p.setOpacity(0.42)
+        track = QRectF(1, 1, self.W - 2, self.H - 2)
+        r = track.height() / 2
+        off = QColor("#2E3546" if self._hover else "#262C3A")
+        p.setPen(QPen(QColor("#3A4258"), 1))
+        p.setBrush(off)
+        p.drawRoundedRect(track, r, r)
+        if self._pos > 0:
+            g = QLinearGradient(track.topLeft(), track.topRight())
+            g.setColorAt(0, QColor("#8E80FF" if self._hover else C["accent"]))
+            g.setColorAt(1, QColor("#64A0FF" if self._hover else "#4F8BFF"))
+            p.save()
+            p.setOpacity(p.opacity() * self._pos)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(g)
+            p.drawRoundedRect(track, r, r)
+            p.restore()
+        d = track.height() - 6
+        x = track.left() + 3 + (track.width() - d - 6) * self._pos
+        knob = QRectF(x, track.top() + 3, d, d)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(0, 0, 0, 70))
+        p.drawEllipse(knob.translated(0, 1))
+        p.setBrush(QColor("#FFFFFF") if self._pos > 0.5 else QColor("#C9CEDB"))
+        p.drawEllipse(knob)
+        if self._kbd and self.hasFocus():
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(QColor(45, 212, 238, 200), 1.6))
+            p.drawRoundedRect(QRectF(0.8, 0.8, self.W - 1.6, self.H - 1.6), r + 1, r + 1)
+
+
+class SettingRow(QWidget):
+    """Ajuste: título, explicación de una línea y el control a la derecha. Clic en el texto = interruptor."""
+
+    def __init__(self, title: str, subtitle: str, control: QWidget, tip: str = ""):
+        super().__init__()
+        self.control = control
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(14)
+        col = QVBoxLayout()
+        col.setSpacing(1)
+        self.title = QLabel(title)
+        self.title.setObjectName("rowTitle")
+        col.addWidget(self.title)
+        self.sub = QLabel(subtitle)
+        self.sub.setObjectName("rowSub")
+        self.sub.setWordWrap(True)
+        self.sub.setVisible(bool(subtitle))
+        col.addWidget(self.sub)
+        lay.addLayout(col, 1)
+        lay.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
+        if tip:
+            self.setToolTip(tip)
+        if isinstance(control, Toggle):
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mouseReleaseEvent(self, e):  # noqa: N802
+        inside = self.rect().contains(e.position().toPoint())
+        if isinstance(self.control, Toggle) and self.control.isEnabled() and inside:
+            self.control.toggle()
+        super().mouseReleaseEvent(e)
+
+
+class Section(QFrame):
+    """Tarjeta de ajustes plegable: icono, título y, plegada, un resumen de una línea de lo elegido."""
+    expanded_changed = pyqtSignal(str, bool)
+
+    def __init__(self, key: str, title: str, glyph: str, collapsible: bool = True):
+        super().__init__()
+        self.key = key
+        self.collapsible = collapsible
+        self.expanded = True
+        self.setObjectName("card")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(18, 14, 14, 16)
+        outer.setSpacing(0)
+        self.head = QWidget()
+        self.head.setObjectName("sectionHead")
+        hl = QHBoxLayout(self.head)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(8)
+        hl.addWidget(glyph_label(glyph, C["accent2"], 14))
+        lbl = QLabel(title.upper())
+        lbl.setObjectName("cardTitle")
+        hl.addWidget(lbl)
+        hl.addStretch(1)
+        self.chevron = QLabel()
+        self.chevron.setFixedSize(24, 22)
+        self.chevron.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hl.addWidget(self.chevron)
+        self.chevron.setVisible(collapsible)
+        outer.addWidget(self.head)
+        self.summary = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.summary.setObjectName("sectionSummary")
+        self.summary.hide()
+        outer.addWidget(self.summary)
+        self.content = QWidget()
+        self.body = QVBoxLayout(self.content)
+        self.body.setContentsMargins(0, 14, 4, 0)
+        self.body.setSpacing(14)
+        outer.addWidget(self.content)
+        self._anim = QVariantAnimation(self)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._anim.valueChanged.connect(lambda v: self.content.setMaximumHeight(int(v)))
+        self._anim.finished.connect(self._anim_done)
+        if collapsible:
+            self.head.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.head.setToolTip("Plegar o desplegar")
+        self._chevron()
+
+    def _chevron(self):
+        self.chevron.setPixmap(glyph_pixmap("chevdown" if self.expanded else "chevright", C["muted"], 16))
+
+    def set_summary(self, text: str) -> None:
+        self.summary.setText(text)
+        self.summary.setToolTip(text)
+
+    def set_expanded(self, on: bool, animate: bool = True) -> None:
+        if not self.collapsible or on == self.expanded:
+            return
+        self.expanded = on
+        self._chevron()
+        self.summary.setVisible(not on)
+        self._anim.stop()
+        if not (animate and ui_animations() and self.isVisible()):
+            self.content.setMaximumHeight(16777215)
+            self.content.setVisible(on)
+        else:
+            full = self.content.sizeHint().height()
+            self.content.setVisible(True)
+            self._anim.setStartValue(0 if on else self.content.height())
+            self._anim.setEndValue(full if on else 0)
+            self._anim.setDuration(220 if on else 180)
+            self._anim.start()
+        self.expanded_changed.emit(self.key, on)
+
+    def _anim_done(self):
+        self.content.setMaximumHeight(16777215)
+        self.content.setVisible(self.expanded)
+
+    def mouseReleaseEvent(self, e):  # noqa: N802
+        if self.collapsible and self.head.geometry().contains(e.position().toPoint()):
+            self.set_expanded(not self.expanded)
+        super().mouseReleaseEvent(e)
+
+
+class FlowConnector(QWidget):
+    """Separador entre origen y destino con una flecha hacia abajo: de aquí → a allí."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedHeight(30)
+
+    def paintEvent(self, _):  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cy = self.height() / 2
+        p.setPen(QPen(QColor(C["line"]), 1))
+        p.drawLine(QPointF(0, cy), QPointF(self.width(), cy))
+        c = QPointF(self.width() / 2, cy)
+        p.setPen(QPen(QColor(124, 108, 255, 110), 1))
+        g = QLinearGradient(c.x() - 13, c.y() - 13, c.x() + 13, c.y() + 13)
+        g.setColorAt(0, QColor(124, 108, 255, 70))
+        g.setColorAt(1, QColor(45, 212, 238, 50))
+        p.setBrush(QColor(C["card"]))
+        p.drawEllipse(c, 13, 13)
+        p.setBrush(g)
+        p.drawEllipse(c, 13, 13)
+        icon = cached_glyph("arrowdown", C["text"], 14)
+        p.drawPixmap(QRectF(c.x() - 7, c.y() - 7, 14, 14), icon, QRectF(icon.rect()))
+
+
+class TileGrid(QWidget):
+    """Rejilla de casillas que pasa de 4 a 2 columnas cuando no caben (ventana estrecha)."""
+
+    def __init__(self, tiles: list, spacing: int = 12):
+        super().__init__()
+        self.tiles = tiles
+        self.spacing = spacing
+        self.grid = QGridLayout(self)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setSpacing(spacing)
+        self.cols = 0
+        self._place(4)
+
+    def _need(self, cols: int) -> int:
+        return cols * TILE_MIN + (cols - 1) * self.spacing
+
+    def _place(self, cols: int):
+        if cols == self.cols:
+            return
+        self.cols = cols
+        for t in self.tiles:
+            self.grid.removeWidget(t)
+        for i, t in enumerate(self.tiles):
+            self.grid.addWidget(t, i // cols, i % cols)
+        for c in range(4):
+            self.grid.setColumnStretch(c, 1 if c < cols else 0)
+
+    def minimumSizeHint(self):  # noqa: N802
+        return QSize(self._need(2), super().minimumSizeHint().height())
+
+    def resizeEvent(self, e):  # noqa: N802
+        self._place(4 if e.size().width() >= self._need(4) else 2)
+        super().resizeEvent(e)
+
+
 class PathCard(Card):
     changed = pyqtSignal()
 
-    def __init__(self, title: str, glyph: int, dialog_title: str):
+    def __init__(self, title: str, glyph: int, dialog_title: str, frameless: bool = False):
         super().__init__(title, glyph)
+        if frameless:  # va dentro de otra tarjeta (origen → destino)
+            self.setObjectName("pathBlock")
+            self.body.setContentsMargins(0, 0, 0, 0)
+            self.body.setSpacing(10)
         self.dialog_title = dialog_title
         row = QHBoxLayout()
         row.setSpacing(8)
@@ -2674,7 +2957,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(app_icon())
         self.resize(1440, 920)
-        self.setMinimumSize(1180, 760)
+        self.setMinimumSize(1220, 760)
         os.makedirs(DATA_DIR, exist_ok=True)
         self.settings = QSettings(os.path.join(DATA_DIR, "settings.ini"), QSettings.Format.IniFormat)
 
@@ -2833,6 +3116,7 @@ class MainWindow(QMainWindow):
         if not self.update_box.isChecked():
             parts.append("búsqueda automática desactivada")
         self.update_status.setText("  ·  ".join(parts))
+        self._refresh_summaries()
 
     def quit_for_update(self):
         """Cierra la app para que el instalador pueda sustituirla."""
@@ -2912,163 +3196,60 @@ class MainWindow(QMainWindow):
         return w
 
     def _build_sidebar(self) -> QWidget:
+        """Ajustes en el orden en que se usan: qué y adónde, qué se copia, cómo, lo automático y el sistema."""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setFixedWidth(392)
+        scroll.setFixedWidth(SIDEBAR_W)
         inner = QWidget()
         lay = QVBoxLayout(inner)
-        lay.setContentsMargins(0, 0, 8, 0)
-        lay.setSpacing(14)
+        lay.setContentsMargins(0, 0, 10, 4)
+        lay.setSpacing(12)
+        self.sections: dict[str, Section] = {}
 
-        self.src_card = PathCard("Origen", G.FOLDER, "Carpeta de origen")
-        self.dst_card = PathCard("Destino", G.DRIVE, "Carpeta de destino")
+        def group(text: str, first: bool = False):
+            g = QLabel(text.upper())
+            g.setObjectName("group")
+            if not first:
+                lay.addSpacing(6)
+            lay.addWidget(g)
+
+        def section(key: str, title: str, glyph: str, collapsible: bool = True) -> Section:
+            sec = Section(key, title, glyph, collapsible)
+            sec.expanded_changed.connect(self._on_section_toggled)
+            self.sections[key] = sec
+            lay.addWidget(sec)
+            return sec
+
+        def combo_row(title: str, subtitle: str, combo: QComboBox, width: int = 148, tip: str = "") -> SettingRow:
+            combo.setFixedWidth(width)
+            return SettingRow(title, subtitle, combo, tip)
+
+        # ── copia: origen → destino ──
+        group("Copia", first=True)
+        pair = Card(margins=(18, 16, 18, 16))
+        pair.body.setSpacing(0)
+        self.src_card = PathCard("Origen", G.FOLDER, "Carpeta de origen", frameless=True)
+        self.dst_card = PathCard("Destino", G.DRIVE, "Carpeta de destino", frameless=True)
         self.src_card.changed.connect(self._on_src_changed)
         self.dst_card.changed.connect(self._on_dst_changed)
-        lay.addWidget(self.src_card)
-        lay.addWidget(self.dst_card)
+        pair.body.addWidget(self.src_card)
+        pair.body.addWidget(FlowConnector())
+        pair.body.addWidget(self.dst_card)
+        self.card_pair = pair
+        lay.addWidget(pair)
 
-        disk = Card("Disco de copia", G.SYNC)
-        self.disk_status = QLabel("")
-        self.disk_status.setObjectName("faint")
-        self.disk_status.setWordWrap(True)
-        disk.body.addWidget(self.disk_status)
-        where = "con Windows, icono en la bandeja" if IS_WIN else "al iniciar sesión, icono en la barra de menús"
-        self.watch_box = QCheckBox(f"Vigilar el disco en segundo plano\n(se inicia {where})")
-        self.watch_box.toggled.connect(self._on_watch_toggled)
-        disk.body.addWidget(self.watch_box)
-        lbl = QLabel("Al conectar el disco")
-        lbl.setObjectName("fieldLabel")
-        disk.body.addWidget(lbl)
-        self.connect_combo = QComboBox()
-        for key, text in CONNECT_ACTIONS.items():
-            self.connect_combo.addItem(text, key)
-        disk.body.addWidget(self.connect_combo)
-        lay.addWidget(disk)
-
-        rem = Card("Recordatorios", G.BELL)
-        self.remind_box = QCheckBox("Recordarme hacer copia\nsi hay cambios sin copiar")
-        self.remind_box.toggled.connect(self._on_remind_toggled)
-        rem.body.addWidget(self.remind_box)
-        rrow = QHBoxLayout()
-        rl = QLabel("Avisar después de")
-        rl.setObjectName("fieldLabel")
-        self.remind_combo = QComboBox()
-        for days, text in REMIND_OPTIONS:
-            self.remind_combo.addItem(text, days)
-        self.remind_combo.setFixedWidth(130)
-        self.remind_combo.currentIndexChanged.connect(self._on_remind_days_changed)
-        rrow.addWidget(rl)
-        rrow.addStretch(1)
-        rrow.addWidget(self.remind_combo)
-        rem.body.addLayout(rrow)
-        rhint = QLabel("Solo avisa si has cambiado algo desde la última copia, y como mucho una vez por periodo.")
-        rhint.setObjectName("faint")
-        rhint.setWordWrap(True)
-        rem.body.addWidget(rhint)
-        where = "con Windows" if IS_WIN else "al iniciar sesión"
-        link = f'<a href="#" style="color:{C["accent2"]}; text-decoration:none">Iniciarla {where} en segundo plano</a>'
-        self.remind_tray_hint = QLabel(f"Con la app cerrada no puede avisarte. {link}")
-        self.remind_tray_hint.setObjectName("faint")
-        self.remind_tray_hint.setWordWrap(True)
-        self.remind_tray_hint.linkActivated.connect(lambda _l: self.watch_box.setChecked(True))
-        rem.body.addWidget(self.remind_tray_hint)
-        cl = QLabel("Copias habituales")
-        cl.setObjectName("fieldLabel")
-        rem.body.addWidget(cl)
-        rows = QWidget()
-        self.remind_rows = QVBoxLayout(rows)
-        self.remind_rows.setContentsMargins(0, 0, 0, 0)
-        self.remind_rows.setSpacing(6)
-        rem.body.addWidget(rows)
-        self.remind_empty = QLabel("Aún no hay ninguna: cada sincronización completa se añade aquí sola, con "
-                                   "su origen y su disco.")
-        self.remind_empty.setObjectName("faint")
-        self.remind_empty.setWordWrap(True)
-        rem.body.addWidget(self.remind_empty)
-        brow = QHBoxLayout()
-        self.remind_status = QLabel("")
-        self.remind_status.setObjectName("faint")
-        self.btn_remind_check = QPushButton("Comprobar ahora")
-        self.btn_remind_check.setObjectName("link")
-        self.btn_remind_check.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_remind_check.setToolTip("Mira ya si hay cambios sin copiar en todas las copias habituales")
-        self.btn_remind_check.clicked.connect(lambda: self._reminder_tick(manual=True))
-        brow.addWidget(self.remind_status, 1)
-        brow.addWidget(self.btn_remind_check)
-        rem.body.addLayout(brow)
-        lay.addWidget(rem)
-
-        power = Card("Energía", G.POWER)
-        self.awake_box = QCheckBox("Mantener despiertos el equipo y el disco\nmientras analiza o sincroniza")
-        self.awake_box.toggled.connect(lambda _on: (self._save_settings(), self._refresh_awake()))
-        power.body.addWidget(self.awake_box)
-        if IS_MAC:
-            how = ("El Mac no reposa por inactividad ni duerme los discos (la pantalla sí puede apagarse), y "
-                   "cerrar la app, la sesión o apagar pide confirmación. Si se duerme igualmente, la copia "
-                   "espera al disco y sigue sola.")
-        else:
-            how = ("El equipo no se suspende por inactividad (la pantalla sí puede apagarse), el disco USB no "
-                   "se duerme y Windows avisa si intentas apagar o reiniciar. Si se suspende igualmente (tapa, "
-                   "botón), la copia se pausa y sigue sola al volver.")
-        power_hint = QLabel(how)
-        power_hint.setObjectName("faint")
-        power_hint.setWordWrap(True)
-        power.body.addWidget(power_hint)
-        self.awake_status = QLabel("")
-        self.awake_status.setObjectName("faint")
-        self.awake_status.setWordWrap(True)
-        power.body.addWidget(self.awake_status)
-        lay.addWidget(power)
-
-        integ = Card("Integridad", G.SHIELD)
-        self.verify_box = QCheckBox("Verificar cada archivo copiado\n(relee el disco y compara su SHA-256)")
-        self.verify_box.toggled.connect(self._invalidate_plan)
-        integ.body.addWidget(self.verify_box)
-        srow = QHBoxLayout()
-        sl = QLabel("Revisar el disco tras sincronizar")
-        sl.setObjectName("fieldLabel")
-        self.scrub_combo = QComboBox()
-        for secs, text in SCRUB_OPTIONS:
-            self.scrub_combo.addItem(text, secs)
-        self.scrub_combo.setFixedWidth(150)
-        srow.addWidget(sl)
-        srow.addStretch(1)
-        srow.addWidget(self.scrub_combo)
-        integ.body.addLayout(srow)
-        self.integ_status = QLabel("")
-        self.integ_status.setObjectName("faint")
-        self.integ_status.setWordWrap(True)
-        integ.body.addWidget(self.integ_status)
-        self.btn_scrub = QPushButton("  Comprobar todo el disco ahora")
-        self.btn_scrub.setIcon(glyph_icon(G.SHIELD, C["text"], 14))
-        self.btn_scrub.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_scrub.clicked.connect(lambda: self._start(copy=True, scrub_all=True))
-        integ.body.addWidget(self.btn_scrub)
-        lay.addWidget(integ)
-
-        upd = Card("Actualizaciones", G.DOWNLOAD)
-        self.update_box = QCheckBox("Buscar versiones nuevas en GitHub\ny preguntar antes de actualizar")
-        self.update_box.toggled.connect(self._on_update_toggled)
-        upd.body.addWidget(self.update_box)
-        self.update_status = QLabel("")
-        self.update_status.setObjectName("faint")
-        self.update_status.setWordWrap(True)
-        upd.body.addWidget(self.update_status)
-        self.btn_update = QPushButton("  Buscar ahora")
-        self.btn_update.setIcon(glyph_icon(G.REFRESH, C["text"], 14))
-        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_update.clicked.connect(lambda: self._check_updates(manual=True))
-        upd.body.addWidget(self.btn_update)
-        lay.addWidget(upd)
-
-        rules = Card("Excluir carpetas por nombre", G.FILTER)
-        hint = QLabel("Se omiten en cualquier nivel de cada proyecto, en el origen y en el destino. Admite "
-                      "comodines, p. ej. *.egg-info. Clic derecho en una regla propia para quitarla.")
+        # ── qué se copia ──
+        group("Qué se copia")
+        rules = section("reglas", "Excluir carpetas", G.FILTER)
+        hint = QLabel("Se omiten en cualquier nivel de cada proyecto, en origen y destino. Admite comodines "
+                      "(*.egg-info).")
         hint.setObjectName("faint")
         hint.setWordWrap(True)
         rules.body.addWidget(hint)
         self.chips_box = QWidget()
+        self.chips_box.setToolTip("Clic para activar o desactivar una regla · clic derecho en una regla propia "
+                                  "para quitarla")
         self.flow = FlowLayout(self.chips_box, 8)
         rules.body.addWidget(self.chips_box)
         add_row = QHBoxLayout()
@@ -3081,16 +3262,16 @@ class MainWindow(QMainWindow):
         add_btn.setIcon(glyph_icon(G.ADD, C["text"], 14))
         add_btn.setFixedSize(38, 36)
         add_btn.setToolTip("Añadir regla")
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.clicked.connect(self._add_rule)
         add_row.addWidget(self.rule_edit, 1)
         add_row.addWidget(add_btn)
         rules.body.addLayout(add_row)
-        lay.addWidget(rules)
+        self.card_rules = rules
 
-        opts = Card("Sincronización", G.GEAR)
-        lbl = QLabel("Modo")
-        lbl.setObjectName("fieldLabel")
-        opts.body.addWidget(lbl)
+        # ── cómo se copia ──
+        group("Cómo se copia")
+        opts = section("modo", "Modo y versiones", G.GEAR)
         self.mode_combo = QComboBox()
         for key, text in engine.MODES.items():
             self.mode_combo.addItem(text, key)
@@ -3100,44 +3281,198 @@ class MainWindow(QMainWindow):
         self.mode_hint.setObjectName("faint")
         self.mode_hint.setWordWrap(True)
         opts.body.addWidget(self.mode_hint)
-        krow = QHBoxLayout()
-        kl = QLabel("Conservar versiones")
-        kl.setObjectName("fieldLabel")
         self.keep_combo = QComboBox()
         for days, text in KEEP_OPTIONS:
             self.keep_combo.addItem(text, days)
-        self.keep_combo.setFixedWidth(130)
-        krow.addWidget(kl)
-        krow.addStretch(1)
-        krow.addWidget(self.keep_combo)
-        opts.body.addLayout(krow)
-        trow = QHBoxLayout()
-        tl = QLabel("Hilos de copia")
-        tl.setObjectName("fieldLabel")
+        opts.body.addWidget(combo_row("Conservar versiones", "De lo que modificas o borras", self.keep_combo))
         self.threads_spin = QSpinBox()
         self.threads_spin.setRange(1, 32)
-        self.threads_spin.setFixedWidth(84)
         self.threads_spin.valueChanged.connect(self._update_summary)
-        trow.addWidget(tl)
-        trow.addStretch(1)
-        trow.addWidget(self.threads_spin)
-        opts.body.addLayout(trow)
-        self.full_box = QCheckBox("Revisar todo el destino en el próximo análisis")
-        self.full_box.setToolTip("Normalmente el análisis usa el índice de la última copia y no relee el disco; "
-                                 "cada 7 días se revisa entero de forma automática.")
+        opts.body.addWidget(combo_row("Hilos de copia", "Archivos que se copian a la vez", self.threads_spin, 96))
+        self.full_box = Toggle()
         self.full_box.toggled.connect(self._invalidate_plan)
-        opts.body.addWidget(self.full_box)
-        th = QLabel("Cambio = distinto tamaño o fecha de modificación (al nanosegundo en NTFS y APFS). El "
-                    "análisis diario usa el índice de la última copia; cada 7 días revisa el destino entero.")
-        th.setObjectName("faint")
-        th.setWordWrap(True)
-        opts.body.addWidget(th)
-        lay.addWidget(opts)
+        opts.body.addWidget(SettingRow(
+            "Revisar todo el destino", "En el próximo análisis (si no, cada 7 días)", self.full_box,
+            "Normalmente el análisis usa el índice de la última copia y no relee el disco. Cambio = distinto "
+            "tamaño o fecha de modificación (al nanosegundo en NTFS y APFS)."))
+
+        integ = section("integridad", "Integridad", G.SHIELD)
+        self.verify_box = Toggle()
+        self.verify_box.toggled.connect(self._invalidate_plan)
+        integ.body.addWidget(SettingRow("Verificar cada copia", "Relee el disco y compara su SHA-256",
+                                        self.verify_box))
+        self.scrub_combo = QComboBox()
+        for secs, text in SCRUB_OPTIONS:
+            self.scrub_combo.addItem(text, secs)
+        integ.body.addWidget(combo_row(
+            "Revisar el disco", "Tras sincronizar, busca corrupción silenciosa", self.scrub_combo,
+            tip="Comprueba una tanda de archivos ya copiados durante el tiempo elegido: primero los nunca "
+                "comprobados y luego los de hace más de 30 días. Si el dañado es el destino, lo repara."))
+        self.integ_status = QLabel("")
+        self.integ_status.setObjectName("faint")
+        self.integ_status.setWordWrap(True)
+        integ.body.addWidget(self.integ_status)
+        self.btn_scrub = QPushButton("  Comprobar todo el disco ahora")
+        self.btn_scrub.setIcon(glyph_icon(G.SHIELD, C["text"], 14))
+        self.btn_scrub.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_scrub.clicked.connect(lambda: self._start(copy=True, scrub_all=True))
+        integ.body.addWidget(self.btn_scrub)
+
+        # ── automático ──
+        group("Automático")
+        disk = section("disco", "Disco de copia", G.SYNC)
+        self.disk_status = QLabel("")
+        self.disk_status.setObjectName("faint")
+        self.disk_status.setWordWrap(True)
+        disk.body.addWidget(self.disk_status)
+        where = "Se inicia con Windows, en la bandeja" if IS_WIN else "Se inicia con la sesión, en la barra de menús"
+        self.watch_box = Toggle()
+        self.watch_box.toggled.connect(self._on_watch_toggled)
+        disk.body.addWidget(SettingRow("Vigilar en segundo plano", where, self.watch_box))
+        self.connect_combo = QComboBox()
+        for key, text in CONNECT_ACTIONS.items():
+            self.connect_combo.addItem(text, key)
+        self.connect_combo.currentIndexChanged.connect(lambda _i: self._refresh_summaries())
+        disk.body.addWidget(QLabel("Al conectar el disco", objectName="fieldLabel"))
+        disk.body.addWidget(self.connect_combo)
+        self.card_disk = disk
+
+        rem = section("recordatorios", "Recordatorios", G.BELL)
+        self.remind_box = Toggle()
+        self.remind_box.toggled.connect(self._on_remind_toggled)
+        rem.body.addWidget(SettingRow("Recordarme hacer copia", "Solo si hay cambios sin copiar, una vez por periodo",
+                                      self.remind_box))
+        self.remind_combo = QComboBox()
+        for days, text in REMIND_OPTIONS:
+            self.remind_combo.addItem(text, days)
+        self.remind_combo.currentIndexChanged.connect(self._on_remind_days_changed)
+        rem.body.addWidget(combo_row("Avisar después de", "Días sin copia con cambios", self.remind_combo))
+        where = "con Windows" if IS_WIN else "al iniciar sesión"
+        link = f'<a href="#" style="color:{C["accent2"]}; text-decoration:none">Iniciarla {where} en segundo plano</a>'
+        self.remind_tray_hint = QLabel(f"Con la app cerrada no puede avisarte. {link}")
+        self.remind_tray_hint.setObjectName("faint")
+        self.remind_tray_hint.setWordWrap(True)
+        self.remind_tray_hint.linkActivated.connect(lambda _l: self.watch_box.setChecked(True))
+        rem.body.addWidget(self.remind_tray_hint)
+        cl = QHBoxLayout()
+        cl.addWidget(QLabel("Copias habituales", objectName="fieldLabel"))
+        cl.addStretch(1)
+        self.btn_remind_check = QPushButton("Comprobar ahora")
+        self.btn_remind_check.setObjectName("link")
+        self.btn_remind_check.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_remind_check.setToolTip("Mira ya si hay cambios sin copiar en todas las copias habituales")
+        self.btn_remind_check.clicked.connect(lambda: self._reminder_tick(manual=True))
+        cl.addWidget(self.btn_remind_check)
+        rem.body.addLayout(cl)
+        rows = QWidget()
+        self.remind_rows_box = rows
+        self.remind_rows = QVBoxLayout(rows)
+        self.remind_rows.setContentsMargins(0, 0, 0, 0)
+        self.remind_rows.setSpacing(6)
+        rem.body.addWidget(rows)
+        self.remind_empty = QLabel("Aún no hay ninguna: cada sincronización completa se añade sola, con su origen "
+                                   "y su disco.")
+        self.remind_empty.setObjectName("faint")
+        self.remind_empty.setWordWrap(True)
+        rem.body.addWidget(self.remind_empty)
+        self.remind_status = QLabel("")
+        self.remind_status.setObjectName("faint")
+        rem.body.addWidget(self.remind_status)
+        self.card_remind = rem
+
+        # ── sistema ──
+        group("Sistema")
+        power = section("energia", "Energía", G.POWER)
+        self.awake_box = Toggle()
+        self.awake_box.toggled.connect(lambda _on: (self._save_settings(), self._refresh_awake(),
+                                                    self._refresh_summaries()))
+        if IS_MAC:
+            how = ("El Mac no reposa por inactividad ni duerme los discos (la pantalla sí puede apagarse), y "
+                   "cerrar la app, la sesión o apagar pide confirmación. Si se duerme igualmente, la copia "
+                   "espera al disco y sigue sola.")
+        else:
+            how = ("El equipo no se suspende por inactividad (la pantalla sí puede apagarse), el disco USB no "
+                   "se duerme y Windows avisa si intentas apagar o reiniciar. Si se suspende igualmente (tapa, "
+                   "botón), la copia se pausa y sigue sola al volver.")
+        power.body.addWidget(SettingRow("Equipo y disco despiertos", "Mientras analiza o sincroniza",
+                                        self.awake_box, how))
+        self.awake_status = QLabel("")
+        self.awake_status.setObjectName("faint")
+        self.awake_status.setWordWrap(True)
+        self.awake_status.setToolTip(how)
+        power.body.addWidget(self.awake_status)
+        self.card_power = power
+
+        upd = section("actualizaciones", "Actualizaciones", G.DOWNLOAD)
+        self.update_box = Toggle()
+        self.update_box.toggled.connect(self._on_update_toggled)
+        upd.body.addWidget(SettingRow("Buscar versiones nuevas", "En GitHub; pregunta antes de instalar",
+                                      self.update_box))
+        self.update_status = QLabel("")
+        self.update_status.setObjectName("faint")
+        self.update_status.setWordWrap(True)
+        upd.body.addWidget(self.update_status)
+        self.btn_update = QPushButton("  Buscar ahora")
+        self.btn_update.setIcon(glyph_icon(G.REFRESH, C["text"], 14))
+        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_update.clicked.connect(lambda: self._check_updates(manual=True))
+        upd.body.addWidget(self.btn_update)
         lay.addStretch(1)
+
+        folded = self._cfg.get("folded")
+        for key in (DEFAULT_FOLDED if not isinstance(folded, list) else folded):
+            if key in self.sections:
+                self.sections[key].set_expanded(False, animate=False)
+        for w in (self.mode_combo, self.keep_combo, self.threads_spin, self.full_box, self.verify_box,
+                  self.scrub_combo, self.remind_combo):
+            sig = w.toggled if isinstance(w, Toggle) else (w.valueChanged if isinstance(w, QSpinBox)
+                                                          else w.currentIndexChanged)
+            sig.connect(lambda *_a: self._refresh_summaries())
 
         scroll.setWidget(inner)
         self.sidebar = inner
         return scroll
+
+    # ── barra lateral: plegado y resúmenes ───────────────────────────────
+    def _on_section_toggled(self, _key: str, _on: bool):
+        if hasattr(self, "settings"):
+            folded = [k for k, s in self.sections.items() if s.collapsible and not s.expanded]
+            self.settings.setValue("folded", json.dumps(folded))
+
+    def _refresh_summaries(self):
+        """La línea que enseña cada tarjeta plegada: lo elegido, sin tener que abrirla."""
+        if not hasattr(self, "sections"):
+            return
+        sec = self.sections
+        rules = self._active_rules()
+        if rules:
+            more = f" y {len(rules) - 3} más" if len(rules) > 3 else ""
+            sec["reglas"].set_summary(f"{', '.join(rules[:3])}{more}")
+        else:
+            sec["reglas"].set_summary("Ninguna regla activa: se copia todo")
+        mode = {engine.MODE_MIRROR: "Espejo con versiones", engine.MODE_UPDATE: "Solo añadir y actualizar"}.get(
+            self.mode_combo.currentData(), self.mode_combo.currentText())
+        sec["modo"].set_summary(f"{mode}  ·  versiones {self.keep_combo.currentText().lower()}  ·  "
+                                f"{self.threads_spin.value()} hilos")
+        scrub = self.scrub_combo.currentData()
+        sec["integridad"].set_summary(
+            f"{'SHA-256 en cada copia' if self.verify_box.isChecked() else 'Sin verificar al copiar'}  ·  "
+            f"{'revisión ' + self.scrub_combo.currentText() if scrub else 'sin revisión'}")
+        sec["disco"].set_summary(f"{'Vigilando' if self.watch_box.isChecked() else 'Sin vigilar'}  ·  "
+                                 f"{self.connect_combo.currentText().lower()}")
+        if self.remind_box.isChecked():
+            n = len(self.registry.items)
+            alerts = len(self.registry.alerts())
+            text = f"Tras {self.remind_combo.currentText()}  ·  {n} copia{'s' if n != 1 else ''} habitual" \
+                   f"{'es' if n != 1 else ''}"
+            if alerts:
+                text += f"  ·  {alerts} con cambios sin copiar"
+            sec["recordatorios"].set_summary(text)
+        else:
+            sec["recordatorios"].set_summary("Desactivados")
+        sec["energia"].set_summary("Sin suspensión mientras copia" if self.awake_box.isChecked() else "Desactivado")
+        sec["actualizaciones"].set_summary(f"v{APP_VERSION}  ·  "
+                                           f"{'automáticas' if self.update_box.isChecked() else 'solo a mano'}")
 
     def _build_main(self) -> QVBoxLayout:
         col = QVBoxLayout()
@@ -3192,6 +3527,7 @@ class MainWindow(QMainWindow):
         h.addWidget(glyph_label(G.INFO, C["accent2"], 16))
         msg = QLabel("Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas.")
         msg.setObjectName("muted")
+        msg.setWordWrap(True)
         h.addWidget(msg, 1)
         self.excl_count = QLabel("")
         self.excl_count.setObjectName("faint")
@@ -3239,7 +3575,8 @@ class MainWindow(QMainWindow):
         h.addStretch(1)
         self.change_search = QLineEdit()
         self.change_search.setPlaceholderText("Buscar ruta…")
-        self.change_search.setFixedWidth(260)
+        self.change_search.setMinimumWidth(150)
+        self.change_search.setMaximumWidth(260)
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(250)
@@ -3267,6 +3604,7 @@ class MainWindow(QMainWindow):
         self.changes_empty = QLabel("Pulsa «Analizar» para ver exactamente qué se va a copiar, mover o guardar "
                                     "en versiones antes de tocar nada.")
         self.changes_empty.setObjectName("muted")
+        self.changes_empty.setWordWrap(True)
         self.changes_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.changes_stack = QStackedWidget()
         self.changes_stack.addWidget(self.changes_empty)
@@ -3287,8 +3625,6 @@ class MainWindow(QMainWindow):
         v.addWidget(self.banner)
 
         self.summary_card = Card("Resumen de la copia", G.DONE)
-        sgrid = QGridLayout()
-        sgrid.setSpacing(12)
         self.s_new = Tile("Nuevos", G.ADD, C["ok"])
         self.s_changed = Tile("Modificados", G.REFRESH, C["accent2"])
         self.s_moved = Tile("Movidos", G.NEXT, C["accent"])
@@ -3299,11 +3635,7 @@ class MainWindow(QMainWindow):
         self.s_checked = Tile("Verificados", G.SHIELD, C["accent2"])
         self.summary_tiles = [self.s_new, self.s_changed, self.s_moved, self.s_versions,
                               self.s_dirs_new, self.s_dirs_gone, self.s_same, self.s_checked]
-        for i, t in enumerate(self.summary_tiles):
-            sgrid.addWidget(t, i // 4, i % 4)
-        for c in range(4):
-            sgrid.setColumnStretch(c, 1)
-        self.summary_card.body.addLayout(sgrid)
+        self.summary_card.body.addWidget(TileGrid(self.summary_tiles))
         self.summary_line = QLabel("")
         self.summary_line.setObjectName("muted")
         self.summary_line.setWordWrap(True)
@@ -3314,15 +3646,13 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         top.setSpacing(14)
         ring_card = Card(margins=(10, 10, 10, 10))
-        ring_card.setFixedWidth(300)
+        ring_card.setFixedWidth(284)
         self.ring = Ring()
         ring_card.body.addWidget(self.ring)
         top.addWidget(ring_card)
 
         right = QVBoxLayout()
         right.setSpacing(14)
-        grid = QGridLayout()
-        grid.setSpacing(12)
         self.t_elapsed = Tile("Transcurrido", G.TIMER, C["accent2"])
         self.t_left = Tile("Restante", G.CLOCK, C["accent2"])
         self.t_speed = Tile("Velocidad", G.SPEED, C["accent2"])
@@ -3333,11 +3663,7 @@ class MainWindow(QMainWindow):
         self.t_errors = Tile("Errores", G.WARN, C["accent"])
         self.tiles = [self.t_elapsed, self.t_left, self.t_speed, self.t_eta,
                       self.t_copied, self.t_files, self.t_skipped, self.t_errors]
-        for i, t in enumerate(self.tiles):
-            grid.addWidget(t, i // 4, i % 4)
-        for c in range(4):
-            grid.setColumnStretch(c, 1)
-        right.addLayout(grid)
+        right.addWidget(TileGrid(self.tiles))
 
         bars = Card(margins=(18, 14, 18, 16))
         bars.body.setSpacing(8)
@@ -3407,13 +3733,16 @@ class MainWindow(QMainWindow):
         bar.setObjectName("hint")
         h = QHBoxLayout(bar)
         h.setContentsMargins(16, 10, 10, 10)
-        h.addWidget(glyph_label(G.WARN, C["warn"], 16))
+        self.issues_icon = glyph_label(G.DONE, C["ok"], 16)
+        h.addWidget(self.issues_icon)
         self.issues_label = QLabel("Sin incidencias")
         self.issues_label.setObjectName("muted")
         h.addWidget(self.issues_label, 1)
-        export = QPushButton("Exportar…")
-        export.clicked.connect(self._export_issues)
-        h.addWidget(export)
+        self.btn_export = QPushButton("Exportar…")
+        self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export.setEnabled(False)
+        self.btn_export.clicked.connect(self._export_issues)
+        h.addWidget(self.btn_export)
         v.addWidget(bar)
         self.issues = QTableWidget(0, 2)
         self.issues.setHorizontalHeaderLabels(["RUTA", "MOTIVO"])
@@ -3426,8 +3755,25 @@ class MainWindow(QMainWindow):
         hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
         self.issues.setColumnWidth(1, 360)
-        v.addWidget(self.issues, 1)
+        empty = QLabel("Ningún archivo ha dado problemas.\nSi alguno no se puede leer o copiar, aparece aquí y la "
+                       "copia sigue con el resto.")
+        empty.setObjectName("muted")
+        empty.setWordWrap(True)
+        empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.issues_stack = QStackedWidget()
+        self.issues_stack.addWidget(empty)
+        self.issues_stack.addWidget(self.issues)
+        v.addWidget(self.issues_stack, 1)
         return page
+
+    def _set_issues(self, total: int):
+        ok = total == 0
+        set_glyph(self.issues_icon, G.DONE if ok else G.WARN, C["ok"] if ok else C["warn"], 16)
+        self.issues_label.setText("Sin incidencias" if ok else
+                                  f"{fmt_int(total)} incidencia{'s' if total != 1 else ''}: archivos que no se "
+                                  "pudieron leer o copiar. El resto sigue adelante.")
+        self.btn_export.setEnabled(not ok)
+        self.issues_stack.setCurrentIndex(0 if ok else 1)
 
     def _build_footer(self) -> QWidget:
         f = QFrame()
@@ -3485,6 +3831,7 @@ class MainWindow(QMainWindow):
             "awake": st.value("awake", "true") == "true",
             "remind": st.value("remind", "true") == "true",
             "remind_days": int(st.value("remind_days", 3)),
+            "folded": js("folded", None),
         }
         self.disk_id = st.value("disk_id", "") or ""
         self.dst_rel = st.value("dst_rel", "") or ""
@@ -3503,6 +3850,10 @@ class MainWindow(QMainWindow):
             self.registry = reminders.Registry(js("copias", []))
         else:
             self.registry = self._seed_registry()  # copias hechas antes de existir los recordatorios
+            st.setValue("copias", json.dumps(self.registry.to_list(), ensure_ascii=False))
+        # copias apuntadas solo por ruta en la letra del disco registrado: pasan a llevar su marca
+        if self.disk_id and self._cfg["dst"] and self.registry.adopt_disk(
+                self.disk_id, engine.volume_root(self._cfg["dst"]), engine.rel_to_volume):
             st.setValue("copias", json.dumps(self.registry.to_list(), ensure_ascii=False))
 
     def _save_settings(self):
@@ -3556,6 +3907,7 @@ class MainWindow(QMainWindow):
         self.remind_combo.setCurrentIndex(max(0, self.remind_combo.findData(self._cfg["remind_days"])))
         for w in (self.remind_box, self.remind_combo):
             w.blockSignals(False)
+        self._refresh_summaries()
         self._rebuild_chips()
         self._load_tree()
         self._adopt_disk()
@@ -3642,6 +3994,7 @@ class MainWindow(QMainWindow):
             self.tray.hide()
         self._save_settings()
         self._refresh_reminders()
+        self._refresh_summaries()
 
     def _ensure_tray(self):
         if self.tray is None:
@@ -3765,9 +4118,11 @@ class MainWindow(QMainWindow):
                 chip.customContextMenuRequested.connect(lambda pos, n=name, c=chip: self._rule_menu(n, c, pos))
             self.flow.addWidget(chip)
         self.chips_box.updateGeometry()
+        self._refresh_summaries()
 
     def _toggle_rule(self, name: str, on: bool):
         self.rules[name] = on
+        self._refresh_summaries()
         self.tree.set_patterns(self._active_rules())
         self._invalidate_plan()
 
@@ -4013,7 +4368,7 @@ class MainWindow(QMainWindow):
         self.bar_bytes_val.setText("—")
         self.bar_files_val.setText("—")
         self.issues.setRowCount(0)
-        self.issues_label.setText("Sin incidencias")
+        self._set_issues(0)
         self.seg_buttons[PAGE_ISSUES].setText("  Incidencias")
         self.log.clear()
         self._set_active_rows(0)
@@ -4340,8 +4695,7 @@ class MainWindow(QMainWindow):
                 self._log(f"⚠ {path}  —  {msg}", C["err"])
             elif first + i == 100:
                 self._log("… más incidencias en la pestaña Incidencias", C["err"])
-        self.issues_label.setText(f"{fmt_int(total)} incidencia{'s' if total != 1 else ''}: archivos que no se "
-                                  "pudieron leer o copiar. El resto sigue adelante.")
+        self._set_issues(total)
         self.seg_buttons[PAGE_ISSUES].setText(f"  Incidencias  ({fmt_int(total)})")
 
     def _log_scan_summary(self, job: engine.BackupJob):
@@ -4657,6 +5011,15 @@ class MainWindow(QMainWindow):
             found = engine.read_disk_id(root)
             if found and found not in roots:
                 roots[found] = root
+        labels = {found: engine.volume_info(root)[0] or engine.vol_name(root) for found, root in roots.items()}
+        adopted = sum(self.registry.adopt_disk(found, root, engine.rel_to_volume, labels[found], must_exist=True)
+                      for found, root in roots.items())
+        for it in self.registry.items.values():
+            if it.get("disk_id") in labels and not it.get("label"):
+                it["label"] = labels[it["disk_id"]]  # copias recuperadas de los registros, sin nombre de disco
+                adopted += 1
+        if adopted:
+            self._save_registry()
         return roots
 
     def _pair_dest(self, it: dict, roots: dict | None = None) -> str | None:
@@ -4681,7 +5044,7 @@ class MainWindow(QMainWindow):
         return it.get("label") or reminders.short_name(it.get("dst", ""))
 
     def _nb_label(self, it: dict) -> str:
-        return self._pair_label(it).replace(" ", " ")  # «Disco USB» no se parte entre dos líneas
+        return self._pair_label(it).replace(" ", "\u00a0")  # «Disco USB» no se parte entre dos líneas
 
     def _record_pair(self, job: engine.BackupJob, copied: bool):
         """Copia completa (o análisis que encontró el destino al día): ya no hay nada pendiente."""
@@ -4713,6 +5076,7 @@ class MainWindow(QMainWindow):
             return
         enabled = self.remind_box.isChecked()
         self.remind_combo.setEnabled(enabled)
+        roots = self._disk_roots()  # antes de pintar: puede completar marcas y nombres de disco
         while self.remind_rows.count():
             w = self.remind_rows.takeAt(0).widget()
             if w is not None:
@@ -4725,16 +5089,20 @@ class MainWindow(QMainWindow):
             row.menu_requested.connect(self._reminder_menu)
             self.remind_rows.addWidget(row)
         self.remind_empty.setVisible(not items)
+        self.remind_rows_box.setVisible(bool(items))
+        self.btn_remind_check.setVisible(bool(items))
         self.remind_tray_hint.setVisible(enabled and not self.watch_box.isChecked())
         checked = max(((it.get("pending") or {}).get("checked", "") for it in items), default="")
         if self.rem_checker.busy:
             self.remind_status.setText("Comprobando cambios…")
         else:
             self.remind_status.setText(f"Comprobado {fmt_ago(checked)}" if checked else "")
+        self.remind_status.setVisible(bool(self.remind_status.text()))
         self.btn_remind_check.setEnabled(bool(items) and not self.rem_checker.busy)
-        self._refresh_remind_bar()
+        self._refresh_remind_bar(roots)
+        self._refresh_summaries()
 
-    def _refresh_remind_bar(self):
+    def _refresh_remind_bar(self, roots: dict | None = None):
         alerts = self.registry.alerts() if self.remind_box.isChecked() else []
         if self.tray:
             tip = f"{APP_NAME} · {PILL[self._state][0].lower()}"
@@ -4745,7 +5113,7 @@ class MainWindow(QMainWindow):
             self._bar_target = None
             self.remind_bar.conceal()
             return
-        roots = self._disk_roots()
+        roots = self._disk_roots() if roots is None else roots
         ready = [it for it in alerts if self._pair_dest(it, roots)]
         it = alerts[0]
         if len(alerts) == 1:
@@ -5331,7 +5699,8 @@ def selftest() -> int:
             time.sleep(1.1)
             since = time.time()
             time.sleep(1.1)
-            for name, text in (("a0.txt", "cambio"), ("nuevo.txt", "nuevo"), (os.path.join("node_modules", "x.js"), "-")):
+            changed = (("a0.txt", "cambio"), ("nuevo.txt", "nuevo"), (os.path.join("node_modules", "x.js"), "-"))
+            for name, text in changed:
                 with open(os.path.join(rsrc, "p", name), "w") as fh:
                     fh.write(text)
             res = engine.changes_since(rsrc, since, ["node_modules"], [])
@@ -5345,6 +5714,10 @@ def selftest() -> int:
             assert reg.apply_check(pair["id"], res, now, 3) == "alert" and not reg.due(now, 3), "aviso repetido"
             reg.record(rsrc, dst, "disco", "copia", "USB", now, ["node_modules"], [])
             assert not reg.alerts(), "la copia no quitó el aviso"
+            twin = reminders.Registry()
+            twin.record(rsrc, dst, "", "", "", now - timedelta(days=9), [], [])  # recuperada de un registro, sin marca
+            twin.record(rsrc, dst, "disco", "copia", "USB", now, [], [])
+            assert len(twin.items) == 1 and twin.to_list()[0]["copies"] == 2, "copia duplicada por ruta y por disco"
             say(f"  recordatorios: {res['files']} cambios de {res['scanned']} archivos, un aviso por periodo")
         win = MainWindow()
         win._refresh_disk_status()
