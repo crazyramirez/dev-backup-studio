@@ -59,6 +59,8 @@ primera vez:
   «Copia de seguridad en curso», y en macOS lo pide la propia app. Si el equipo se suspende igualmente
   o el disco se desconecta, la copia espera y sigue sola sin dar nada por fallido. Se desactiva en
   *Energía*.
+- **Guía rápida.** La primera vez enseña en cinco pasos, con capturas de la propia app, cómo dejarla
+  lista. Se vuelve a abrir con el botón *Guía*, con F1 (⌘? en macOS) o desde el icono de la bandeja.
 - **Se actualiza sola, preguntando.** Comprueba en GitHub si hay una versión nueva (como mucho una vez
   al día), enseña las novedades y, si aceptas, descarga el instalador, comprueba su SHA-256, lo instala
   y se vuelve a abrir. Se puede desactivar o buscar a mano en *Actualizaciones*. Novedades de cada
@@ -67,6 +69,8 @@ primera vez:
 | Al conectar el disco | Revisar los cambios antes de copiar |
 |---|---|
 | ![Diálogo al conectar](docs/conectar.png) | ![Lista de cambios](docs/cambios.png) |
+
+![Guía rápida](docs/guia.png)
 
 ## Cómo decide qué copiar
 
@@ -116,9 +120,12 @@ sección en `CHANGELOG.md`, de donde salen las notas de la versión), GitHub Act
 4. publica la versión con el instalador y el `.dmg`.
 
 ```bash
-git tag v1.4.0
-git push origin v1.4.0
+git tag v1.5.0
+git push origin v1.5.0
 ```
+
+Las ilustraciones de la guía rápida (`assets/tour/`) y `docs/guia.png` se generan con capturas reales
+de la app: `python tools/make_tour.py` (Windows; monta datos de ejemplo con `subst`).
 
 ## Limitaciones
 

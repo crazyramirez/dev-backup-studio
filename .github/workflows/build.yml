@@ -49,7 +49,8 @@ jobs:
         shell: bash
         run: |
           pyinstaller --noconfirm --clean --windowed --name "DEV Backup Studio" \
-            --icon assets/icon.ico --version-file build/version_info.txt backup_studio.py
+            --icon assets/icon.ico --version-file build/version_info.txt \
+            --add-data "assets/tour:assets/tour" backup_studio.py
 
       - name: Autoprueba de la app (Windows)
         if: runner.os == 'Windows'
@@ -97,7 +98,8 @@ jobs:
         run: |
           version="${{ steps.version.outputs.version }}"
           pyinstaller --noconfirm --clean --windowed --name "DEV Backup Studio" \
-            --icon assets/icon.png --osx-bundle-identifier com.crazyramirez.devbackupstudio backup_studio.py
+            --icon assets/icon.png --osx-bundle-identifier com.crazyramirez.devbackupstudio \
+            --add-data "assets/tour:assets/tour" backup_studio.py
           plist="dist/DEV Backup Studio.app/Contents/Info.plist"
           plutil -replace CFBundleShortVersionString -string "$version" "$plist"
           plutil -replace CFBundleVersion -string "$version" "$plist"

@@ -21,4 +21,5 @@ if not match:
 os.makedirs(os.path.join(ROOT, "build"), exist_ok=True)
 with open(os.path.join(ROOT, "build", "notes.md"), "w", encoding="utf-8") as fh:
     fh.write(match[1].strip() + "\n")
+sys.stdout.reconfigure(errors="replace")  # consola de Windows sin UTF-8
 print(match[1].strip())

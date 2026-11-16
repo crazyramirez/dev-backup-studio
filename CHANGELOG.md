@@ -1,5 +1,15 @@
 # Novedades
 
+## 1.5.0
+
+- **Guía rápida.** La primera vez que abres la app aparece un visor de cinco pasos con capturas reales:
+  elegir origen y destino, decidir qué se copia, analizar y sincronizar, y dejar que vigile el disco.
+  En cada captura se destaca dónde tocar.
+- Se vuelve a abrir cuando quieras con el botón *Guía* de la cabecera, con F1 (⌘? en macOS) o desde el
+  icono de la bandeja.
+- Se maneja con el teclado (← →, Intro, Esc) o con los puntos de progreso, y respeta el ajuste del sistema
+  que reduce las animaciones.
+
 ## 1.4.0
 
 - **Resumen al terminar.** Una tarjeta con lo que ha hecho la copia: archivos nuevos, modificados,

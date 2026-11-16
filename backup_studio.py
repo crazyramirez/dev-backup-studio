@@ -31,12 +31,13 @@ from PyQt6.QtCore import (QAbstractNativeEventFilter, QAbstractTableModel, QByte
                           QModelIndex, QObject, QPoint, QPointF, QRect, QRectF, QSettings, QSize, Qt, QTimer,
                           QUrl, QVariantAnimation, pyqtSignal)
 from PyQt6.QtGui import (QBrush, QColor, QConicalGradient, QDesktopServices, QFont,
-                         QFontDatabase, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette,
-                         QPen, QPixmap)
+                         QFontDatabase, QFontMetricsF, QIcon, QImage, QKeySequence, QLinearGradient,
+                         QPainter, QPainterPath, QPalette, QPen, QPixmap, QRadialGradient, QShortcut)
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QComboBox,
-                             QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
+                             QDialog, QFileDialog, QFrame, QGraphicsBlurEffect, QGraphicsOpacityEffect,
+                             QGraphicsPixmapItem, QGraphicsScene, QGridLayout, QHBoxLayout, QHeaderView,
                              QLabel, QLayout, QLineEdit, QMainWindow, QMenu, QMessageBox,
                              QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
                              QSpinBox, QStackedWidget, QSystemTrayIcon, QTableView, QTableWidget,
@@ -48,7 +49,7 @@ import keepawake
 import updater
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.5.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -132,6 +133,12 @@ ICONS = {
     "shield": _p("M12 3l7.5 3v5.6c0 4.5-3.1 8.2-7.5 9.4-4.4-1.2-7.5-4.9-7.5-9.4V6z") + _p("M8.8 12.2l2.2 2.2 4.3-4.4"),
     "download": _p("M12 4v11M7.5 10.5L12 15l4.5-4.5") + _p("M5 19.5h14"),
     "power": _p("M12 3.5v8") + _p("M7.2 6.4a7.5 7.5 0 1 0 9.6 0"),
+    "arrow": _p("M5 12h14M13 6l6 6-6 6"),
+    "back": _p("M19 12H5M11 6l-6 6 6 6"),
+    "help": '<circle cx="12" cy="12" r="9"/>' + _p("M9.5 9.4a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.2-2.5 3.9")
+            + _p("M12 17.1v.1"),
+    "spark": _p("M11 3.5l1.8 4.9 4.9 1.8-4.9 1.8L11 16.9l-1.8-4.9-4.9-1.8 4.9-1.8z")
+             + _p("M18 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"),
 }
 
 
@@ -143,6 +150,7 @@ class G:
     DOC, COPY, TREE, SYNC, TIMER = "doc", "copy", "tree", "sync", "timer"
     DONE, INFO, CLOCK, SPEED, DRIVE, FILTER = "done", "info", "clock", "speed", "drive", "filter"
     SHIELD, DOWNLOAD, POWER = "shield", "download", "power"
+    ARROW, BACK, HELP, SPARK = "arrow", "back", "help", "spark"
 
 
 # ── formato (es-ES) ──────────────────────────────────────────────────────────
@@ -389,6 +397,19 @@ QPushButton#seg:hover { color: %(text)s; }
 QPushButton#seg:checked { background: %(card2)s; color: %(text)s; }
 QPushButton#link { background: transparent; border: none; color: %(accent2)s; padding: 4px 6px; }
 QPushButton#link:hover { color: #7DE6F5; }
+QPushButton#help {
+    background: transparent; border: 1px solid %(line2)s; border-radius: 13px;
+    padding: 5px 13px 5px 10px; font-size: 12px; font-weight: 700; color: %(muted)s;
+}
+QPushButton#help:hover { color: %(text)s; border-color: %(accent)s; background: %(accent_soft)s; }
+QPushButton#tourClose {
+    background: rgba(8,10,15,165); border: 1px solid rgba(255,255,255,32); border-radius: 17px; padding: 0;
+}
+QPushButton#tourClose:hover { background: rgba(26,30,42,235); border-color: rgba(255,255,255,80); }
+QPushButton#tourSkip { background: transparent; border: none; color: %(muted)s; padding: 8px; font-weight: 600; }
+QPushButton#tourSkip:hover { color: %(text)s; }
+QPushButton#tourBack { padding: 0 18px; border-radius: 12px; }
+QPushButton#tourBack:focus { border-color: %(accent)s; }
 
 QProgressBar { background: %(panel)s; border: none; border-radius: 4px; }
 QProgressBar::chunk { border-radius: 4px; background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %(accent)s, stop:1 %(accent2)s); }
@@ -1718,6 +1739,717 @@ class UpdateDialog(QDialog):
         super().reject()
 
 
+# ── guía rápida ──────────────────────────────────────────────────────────────
+
+TOUR_VERSION = 1
+TOUR_DIR = os.path.join(getattr(sys, "_MEIPASS", APP_DIR), "assets", "tour")
+
+
+def tour_steps() -> list[dict]:
+    """Pasos de la guía. Las ilustraciones salen de tools/make_tour.py (capturas reales de la app)."""
+    tray = "la barra de menús" if IS_MAC else "la bandeja"
+    return [
+        {"image": "1-bienvenida", "glyph": G.SPARK, "eyebrow": "Guía rápida",
+         "title": "Tus proyectos, siempre a salvo",
+         "text": "Copia tu carpeta de proyectos a un disco externo en cuatro pasos: rápido, comprobado y con "
+                 "historial de versiones.",
+         "chips": [(G.SHIELD, "Verificado con SHA-256"), (G.CLOCK, "Versiones de lo que cambias"),
+                   (G.NEXT, "Detecta movidos")]},
+        {"image": "2-origen-destino", "glyph": G.FOLDER, "title": "Elige origen y destino",
+         "text": "El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo.",
+         "chips": [(G.FOLDER, "Una carpeta o un disco entero"), (G.DRIVE, "Lo reconoce aunque cambie de letra")]},
+        {"image": "3-que-copiar", "glyph": G.FILTER, "title": "Decide qué se copia",
+         "text": "Desmarca carpetas en el árbol o exclúyelas por nombre, en cualquier nivel de cada proyecto.",
+         "chips": [(G.FILTER, "node_modules, .venv, dist…"), (G.TREE, "Se recuerda para la próxima")]},
+        {"image": "4-sincroniza", "glyph": G.PLAY, "title": "Analiza y sincroniza",
+         "text": "Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia y lo "
+                 "comprueba.",
+         "chips": [(G.SEARCH, "Revisa antes de copiar"), (G.SHIELD, "Cada archivo verificado"),
+                   (G.CLOCK, "Lo borrado va a versiones")]},
+        {"image": "5-conecta", "glyph": G.DRIVE, "title": "Conecta el disco y listo",
+         "text": f"Desde {tray} vigila el disco: al enchufarlo te enseña los cambios y sincroniza con un clic.",
+         "chips": [(G.SYNC, "Vigila en segundo plano"), (G.POWER, "Sin suspensión al copiar"),
+                   (G.DONE, "Resumen al terminar")]},
+    ]
+
+
+def tour_assets() -> tuple[dict[str, QPixmap], dict[str, list], tuple[float, float]]:
+    """Ilustraciones de assets/tour y zonas que se destacan en cada una (tour.json)."""
+    spots: dict[str, list] = {}
+    size = (920.0, 400.0)
+    try:
+        with open(os.path.join(TOUR_DIR, "tour.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+        spots = data.get("spots", {})
+        size = (float(data["size"][0]), float(data["size"][1]))
+    except (OSError, ValueError, TypeError, KeyError, IndexError):
+        pass
+    images = {s["image"]: QPixmap(os.path.join(TOUR_DIR, s["image"] + ".jpg")) for s in tour_steps()}
+    return images, spots, size
+
+
+def ui_animations() -> bool:
+    """False si el sistema pide menos animaciones (Windows: «Efectos de animación» desactivados)."""
+    if IS_WIN:
+        try:
+            on = ctypes.c_int(1)
+            spi_getclientareaanimation = 0x1042
+            if ctypes.windll.user32.SystemParametersInfoW(spi_getclientareaanimation, 0, ctypes.byref(on), 0):
+                return bool(on.value)
+        except Exception:  # noqa: BLE001
+            pass
+    return True
+
+
+def help_key() -> str:
+    return QKeySequence(QKeySequence.StandardKey.HelpContents).toString(
+        QKeySequence.SequenceFormat.NativeText) or "F1"
+
+
+def _ease(t: float) -> float:
+    t = min(1.0, max(0.0, t))
+    return 1 - (1 - t) ** 3
+
+
+def _font(px: int, weight=QFont.Weight.Normal, family: str | None = None, spacing: float = 0) -> QFont:
+    f = QFont(family or FONT["ui"])
+    f.setPixelSize(px)
+    f.setWeight(weight)
+    if spacing:
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, spacing)
+    return f
+
+
+_GLYPHS: dict[tuple, QPixmap] = {}
+
+
+def cached_glyph(name: str, color: str, px: int) -> QPixmap:
+    key = (name, color, px)
+    if key not in _GLYPHS:
+        _GLYPHS[key] = glyph_pixmap(name, color, px)
+    return _GLYPHS[key]
+
+
+def blur_image(img: QImage, radius: float, fill: QColor | None = None) -> QImage:
+    scene = QGraphicsScene()
+    item = QGraphicsPixmapItem(QPixmap.fromImage(img))
+    effect = QGraphicsBlurEffect()
+    effect.setBlurRadius(radius)
+    effect.setBlurHints(QGraphicsBlurEffect.BlurHint.QualityHint)
+    item.setGraphicsEffect(effect)
+    scene.addItem(item)
+    out = QImage(img.size(), QImage.Format.Format_ARGB32_Premultiplied)
+    out.fill(fill if fill is not None else QColor(0, 0, 0, 0))
+    p = QPainter(out)
+    scene.render(p, QRectF(out.rect()), QRectF(img.rect()))
+    p.end()
+    return out
+
+
+def frosted(pm: QPixmap) -> QPixmap:
+    """Versión desenfocada de una captura (cristal esmerilado detrás de la guía)."""
+    img = pm.toImage()
+    small = img.scaled(max(1, img.width() // 5), max(1, img.height() // 5),
+                       Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+    return QPixmap.fromImage(blur_image(small, 9, QColor(C["bg"])))
+
+
+def soft_shadow(w: float, h: float, radius: float, blur: float, alpha: int) -> QPixmap:
+    k = 0.5  # se difumina a media resolución: igual de suave y cuatro veces más rápido
+    pad = blur * 2
+    img = QImage(int((w + 2 * pad) * k), int((h + 2 * pad) * k), QImage.Format.Format_ARGB32_Premultiplied)
+    img.fill(QColor(0, 0, 0, 0))
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(0, 0, 0, alpha))
+    p.drawRoundedRect(QRectF(pad * k, pad * k, w * k, h * k), radius * k, radius * k)
+    p.end()
+    return QPixmap.fromImage(blur_image(img, blur * k))
+
+
+class TourDots(QWidget):
+    """Puntos de progreso: el activo se estira en una píldora con degradado. Clic para saltar a un paso."""
+    picked = pyqtSignal(int)
+    DOT, ACTIVE, GAP = 8.0, 28.0, 8.0
+
+    def __init__(self, count: int, parent: QWidget):
+        super().__init__(parent)
+        self.count, self.cur, self.prev, self.p = count, 0, -1, 1.0
+        self.hover = -1
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(int((count - 1) * (self.DOT + self.GAP) + self.ACTIVE) + 2, 24)
+
+    def set_step(self, cur: int, prev: int) -> None:
+        self.cur, self.prev = cur, prev
+        self.update()
+
+    def set_progress(self, p: float) -> None:
+        self.p = p
+        self.update()
+
+    def _rects(self) -> list[QRectF]:
+        e = _ease(self.p / 0.7) if 0 <= self.prev != self.cur else 1.0
+        out, x = [], 1.0
+        for i in range(self.count):
+            w = self.DOT
+            if i == self.cur:
+                w += (self.ACTIVE - self.DOT) * e
+            elif i == self.prev:
+                w += (self.ACTIVE - self.DOT) * (1 - e)
+            out.append(QRectF(x, (self.height() - self.DOT) / 2, w, self.DOT))
+            x += w + self.GAP
+        return out
+
+    def paintEvent(self, _):  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        for i, r in enumerate(self._rects()):
+            base = "#5B6580" if i == self.hover else ("#475066" if i < self.cur else "#2C3343")
+            p.setBrush(QColor(base))
+            p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
+            on = (r.width() - self.DOT) / (self.ACTIVE - self.DOT)
+            if on > 0.01:
+                g = QLinearGradient(r.topLeft(), r.topRight())
+                g.setColorAt(0, QColor(C["accent"]))
+                g.setColorAt(1, QColor(C["accent2"]))
+                p.setOpacity(min(1.0, on))
+                p.setBrush(g)
+                p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
+                p.setOpacity(1.0)
+
+    def _at(self, pos: QPointF) -> int:
+        for i, r in enumerate(self._rects()):
+            if r.adjusted(-self.GAP / 2, -8, self.GAP / 2, 8).contains(pos):
+                return i
+        return -1
+
+    def mouseMoveEvent(self, e):  # noqa: N802
+        i = self._at(e.position())
+        if i != self.hover:
+            self.hover = i
+            self.update()
+
+    def leaveEvent(self, _):  # noqa: N802
+        self.hover = -1
+        self.update()
+
+    def mousePressEvent(self, e):  # noqa: N802
+        i = self._at(e.position())
+        if i >= 0:
+            self.picked.emit(i)
+
+
+class TourCard(QWidget):
+    """La tarjeta de la guía: ilustración, textos y pie con navegación. Todo se pinta para animarlo fino."""
+    PAD, FOOT_H, RADIUS, MAX_W = 10, 74, 22, 940
+
+    def __init__(self, overlay: "TourOverlay"):
+        super().__init__(overlay)
+        self.overlay = overlay
+        self.steps = tour_steps()
+        self.images, self.spots, self.canvas = tour_assets()
+        self.idx, self.prev, self.dir, self.p = 0, -1, 1, 1.0
+        self.pulse = 0.0
+        self.ill_h = 380.0
+        self.text_h = 140.0
+        self.setAccessibleName("Guía rápida")
+
+        self.close_btn = QPushButton(self)
+        self.close_btn.setObjectName("tourClose")
+        self.close_btn.setIcon(glyph_icon(G.CLOSE, C["text"], 14))
+        self.close_btn.setFixedSize(34, 34)
+        self.close_btn.setToolTip("Cerrar la guía  (Esc)")
+        self.close_btn.setAccessibleName("Cerrar la guía")
+        self.skip_btn = QPushButton("Saltar la guía", self)
+        self.skip_btn.setObjectName("tourSkip")
+        self.dots = TourDots(len(self.steps), self)
+        self.back_btn = QPushButton("  Atrás", self)
+        self.back_btn.setObjectName("tourBack")
+        self.back_btn.setIcon(glyph_icon(G.BACK, C["text"], 14))
+        self.next_btn = QPushButton(self)
+        self.next_btn.setObjectName("primary")
+        self.next_btn.setLayoutDirection(Qt.LayoutDirection.RightToLeft)  # flecha a la derecha del texto
+        self.next_btn.setMinimumWidth(156)
+        for b in (self.close_btn, self.skip_btn, self.back_btn, self.next_btn):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+        for b in (self.back_btn, self.next_btn):
+            b.setFixedHeight(42)
+        self.close_btn.clicked.connect(lambda: overlay.finish(False))
+        self.skip_btn.clicked.connect(lambda: overlay.finish(False))
+        self.back_btn.clicked.connect(self.back)
+        self.next_btn.clicked.connect(self.next)
+        self.dots.picked.connect(self.go)
+
+        self.anim = QVariantAnimation(self)
+        self.anim.setStartValue(0.0)
+        self.anim.setEndValue(1.0)
+        self.anim.setDuration(600)
+        self.anim.valueChanged.connect(self._on_anim)
+        self.pulse_anim = QVariantAnimation(self)
+        self.pulse_anim.setStartValue(0.0)
+        self.pulse_anim.setEndValue(1.0)
+        self.pulse_anim.setDuration(1900)
+        self.pulse_anim.setLoopCount(-1)
+        self.pulse_anim.valueChanged.connect(self._on_pulse)
+
+    # ── navegación ──
+    @property
+    def last(self) -> int:
+        return len(self.steps) - 1
+
+    def start(self) -> None:
+        self.idx, self.prev, self.dir = 0, -1, 1
+        self._sync()
+        self._play()
+
+    def go(self, i: int) -> None:
+        i = max(0, min(self.last, i))
+        if i == self.idx:
+            return
+        self.prev, self.idx = self.idx, i
+        self.dir = 1 if i > self.prev else -1
+        self._sync()
+        self._play()
+
+    def next(self) -> None:
+        if self.idx >= self.last:
+            self.overlay.finish(True)
+        else:
+            self.go(self.idx + 1)
+
+    def forward(self) -> None:
+        if self.idx < self.last:
+            self.go(self.idx + 1)
+
+    def back(self) -> None:
+        self.go(self.idx - 1)
+
+    def _play(self) -> None:
+        self.anim.stop()
+        if self.overlay.animate:
+            self.anim.start()
+        else:
+            self._on_anim(1.0)
+
+    def _on_anim(self, v) -> None:
+        self.p = float(v)
+        self.dots.set_progress(self.p)
+        self.update()
+
+    def _on_pulse(self, v) -> None:
+        self.pulse = float(v)
+        self.update(self._ill_rect().toAlignedRect())
+
+    def _sync(self) -> None:
+        last = self.idx == self.last
+        self.back_btn.setVisible(self.idx > 0)
+        self.skip_btn.setVisible(not last)
+        self.next_btn.setText("Empezar  " if last else "Siguiente  ")
+        self.next_btn.setIcon(glyph_icon(G.CHECK if last else G.ARROW, "#FFFFFF", 15))
+        self.dots.set_step(self.idx, self.prev)
+        st = self.steps[self.idx]
+        self.setAccessibleDescription(f"{self._eyebrow(self.idx)}. {st['title']}. {st['text']}")
+        self._place()
+        if not self.next_btn.hasFocus() and not self.back_btn.hasFocus():
+            self.next_btn.setFocus()
+
+    def _eyebrow(self, i: int) -> str:
+        return self.steps[i].get("eyebrow") or f"Paso {i} de {self.last}"
+
+    # ── geometría ──
+    def fit(self, avail_w: int, avail_h: int) -> None:
+        w = max(640, min(self.MAX_W, avail_w - 56))
+        natural = (w - 2 * self.PAD) * self.canvas[1] / self.canvas[0]
+        # alto del bloque de texto: el del paso más largo, para que la tarjeta no cambie de tamaño al avanzar
+        tw = w - (34 + 48 + 18) - 34
+        self.text_h = max(58 + self._desc_height(i, tw) + 14 + 30 for i in range(len(self.steps))) + 8
+        rest = self.PAD + 26 + self.text_h + self.FOOT_H
+        self.ill_h = max(190.0, min(natural, avail_h - 48 - rest - self.PAD))
+        self.setFixedSize(int(w), int(self.PAD + self.ill_h + rest))
+        self._place()
+
+    def _place(self) -> None:
+        w, h = self.width(), self.height()
+        self.close_btn.move(w - self.PAD - 14 - 34, self.PAD + 14)
+        cy = h - self.FOOT_H / 2
+        self.skip_btn.adjustSize()
+        self.skip_btn.move(24, int(cy - self.skip_btn.height() / 2))
+        self.dots.move(int((w - self.dots.width()) / 2), int(cy - self.dots.height() / 2))
+        self.next_btn.adjustSize()
+        x = w - 30 - self.next_btn.width()
+        self.next_btn.move(x, int(cy - 21))
+        self.back_btn.adjustSize()
+        self.back_btn.move(x - 10 - self.back_btn.width(), int(cy - 21))
+
+    def _ill_rect(self) -> QRectF:
+        return QRectF(self.PAD, self.PAD, self.width() - 2 * self.PAD, self.ill_h)
+
+    def _map(self, r: QRectF, zoom: float = 1.0, dx: float = 0.0) -> tuple[float, float, float]:
+        cw, ch = self.canvas
+        s = max(r.width() / cw, r.height() / ch) * zoom
+        return s, r.x() + (r.width() - cw * s) / 2 + dx, r.y() + (r.height() - ch * s) / 2
+
+    def _text_geom(self) -> tuple[float, float, float, float]:
+        top = self.PAD + self.ill_h + 26
+        left = 34.0
+        tx = left + 48 + 18
+        return top, left, tx, self.width() - tx - 34
+
+    # ── pintura ──
+    def _phases(self, k: int) -> tuple[float, float, float, float]:
+        """Opacidad y desplazamiento del elemento k al salir (paso anterior) y al entrar (paso nuevo)."""
+        out = _ease(self.p / 0.24)
+        new = _ease((self.p - (0.1 + k * 0.05)) / 0.5)
+        return 1 - out, -self.dir * 16 * out, new, self.dir * 28 * (1 - new)
+
+    def paintEvent(self, _):  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
+                         | QPainter.RenderHint.TextAntialiasing)
+        w, h, rad = self.width(), self.height(), self.RADIUS
+        body = QPainterPath()
+        body.addRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), rad, rad)
+        g = QLinearGradient(0, 0, 0, h)
+        g.setColorAt(0, QColor("#181D29"))
+        g.setColorAt(1, QColor("#0F121A"))
+        p.fillPath(body, g)
+        p.setPen(QPen(QColor(255, 255, 255, 24), 1))
+        p.drawPath(body)
+        shine = QLinearGradient(rad, 0, w - rad, 0)
+        shine.setColorAt(0, QColor(255, 255, 255, 0))
+        shine.setColorAt(0.5, QColor(255, 255, 255, 52))
+        shine.setColorAt(1, QColor(255, 255, 255, 0))
+        p.setPen(QPen(QBrush(shine), 1))
+        p.drawLine(QPointF(rad, 0.5), QPointF(w - rad, 0.5))
+
+        self._paint_illustration(p)
+        for k in range(5):
+            old_a, old_dx, new_a, new_dx = self._phases(k)
+            if self.prev >= 0 and old_a > 0:
+                self._element(p, k, self.prev, old_a, old_dx)
+            if new_a > 0:
+                self._element(p, k, self.idx, new_a, new_dx)
+        fy = h - self.FOOT_H
+        p.setPen(QPen(QColor(255, 255, 255, 15), 1))
+        p.drawLine(QPointF(1, fy), QPointF(w - 1, fy))
+        if self.idx == self.last:
+            self._paint_hint(p, self._phases(4)[2])
+
+    def _paint_illustration(self, p: QPainter) -> None:
+        r = self._ill_rect()
+        clip = QPainterPath()
+        clip.addRoundedRect(r, 16, 16)
+        p.save()
+        p.setClipPath(clip)
+        p.fillRect(r, QColor(C["panel"]))
+        if self.prev >= 0:
+            new = _ease((self.p - 0.04) / 0.6)
+            if new < 1:  # la anterior sigue opaca debajo: fundido sin bajón de brillo
+                self._image(p, self.prev, r, 1.0, 1.0, 0)
+            self._image(p, self.idx, r, new, 1.045 - 0.045 * new, self.dir * 22 * (1 - new))
+        else:
+            new = _ease(self.p / 0.75)
+            self._image(p, self.idx, r, new, 1.06 - 0.06 * new, 0)
+        spot = _ease((self.p - 0.62) / 0.38)
+        if spot > 0:
+            self._paint_spots(p, r, spot)
+        p.restore()
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(QColor(255, 255, 255, 20), 1))
+        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 16, 16)
+
+    def _image(self, p: QPainter, i: int, r: QRectF, alpha: float, zoom: float, dx: float) -> None:
+        if alpha <= 0:
+            return
+        p.setOpacity(alpha)
+        pm = self.images.get(self.steps[i]["image"])
+        if pm is not None and not pm.isNull():
+            s, ox, oy = self._map(r, zoom, dx)
+            p.drawPixmap(QRectF(ox, oy, self.canvas[0] * s, self.canvas[1] * s), pm, QRectF(pm.rect()))
+        else:
+            # sin ilustración (no debería pasar): degradado con el icono del paso
+            g = QLinearGradient(r.topLeft(), r.bottomRight())
+            g.setColorAt(0, QColor("#1B1F3A"))
+            g.setColorAt(1, QColor("#0F2A33"))
+            p.fillRect(r, g)
+            c = r.center() + QPointF(dx, 0)
+            rg = QRadialGradient(c, r.height() * 0.6)
+            rg.setColorAt(0, QColor(124, 108, 255, 90))
+            rg.setColorAt(1, QColor(124, 108, 255, 0))
+            p.fillRect(r, rg)
+            size = r.height() * 0.34 * zoom
+            icon = cached_glyph(self.steps[i]["glyph"], "#FFFFFF", 96)
+            p.drawPixmap(QRectF(c.x() - size / 2, c.y() - size / 2, size, size), icon, QRectF(icon.rect()))
+        p.setOpacity(1.0)
+
+    def _paint_spots(self, p: QPainter, r: QRectF, a: float) -> None:
+        rects = self.spots.get(self.steps[self.idx]["image"]) or []
+        if not rects:
+            return
+        s, ox, oy = self._map(r)
+        mapped = [QRectF(ox + x * s, oy + y * s, w * s, h * s) for x, y, w, h in rects]
+        shade = QPainterPath()
+        shade.addRect(r)
+        for m in mapped:
+            hole = QPainterPath()
+            hole.addRoundedRect(m, 10, 10)
+            shade = shade.subtracted(hole)
+        p.fillPath(shade, QColor(4, 6, 10, int(105 * a)))  # el resto se apaga: la vista va a lo importante
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        for n, m in enumerate(mapped):
+            ph = (self.pulse + n * 0.5) % 1.0
+            grow = 2 + 10 * _ease(ph)
+            p.setPen(QPen(QColor(45, 212, 238, int(120 * a * (1 - ph))), 2))
+            p.drawRoundedRect(m.adjusted(-grow, -grow, grow, grow), 10 + grow, 10 + grow)
+            p.setPen(QPen(QColor(45, 212, 238, int(240 * a)), 2))
+            p.drawRoundedRect(m, 10, 10)
+
+    def _desc_height(self, i: int, width: float) -> float:
+        fm = QFontMetricsF(_font(14))
+        flags = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap)
+        return min(44.0, fm.boundingRect(QRectF(0, 0, width, 200), flags, self.steps[i]["text"]).height())
+
+    def _element(self, p: QPainter, k: int, i: int, alpha: float, dx: float) -> None:
+        st = self.steps[i]
+        top, left, tx, tw = self._text_geom()
+        p.save()
+        p.setOpacity(alpha)
+        p.translate(dx, 0)
+        if k == 0:  # icono del paso
+            box = QRectF(left, top + 2, 48, 48)
+            halo = QRadialGradient(box.center(), 52)
+            halo.setColorAt(0, QColor(124, 108, 255, 80))
+            halo.setColorAt(1, QColor(124, 108, 255, 0))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(halo)
+            p.drawEllipse(box.center(), 52, 52)
+            g = QLinearGradient(box.topLeft(), box.bottomRight())
+            g.setColorAt(0, QColor(C["accent"]))
+            g.setColorAt(1, QColor(C["accent2"]))
+            p.setBrush(g)
+            p.drawRoundedRect(box, 15, 15)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(QColor(255, 255, 255, 70), 1))
+            p.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 15, 15)
+            icon = cached_glyph(st["glyph"], "#FFFFFF", 24)
+            c = box.center()
+            p.drawPixmap(QRectF(c.x() - 12, c.y() - 12, 24, 24), icon, QRectF(icon.rect()))
+        elif k == 1:  # antetítulo
+            p.setFont(_font(11, QFont.Weight.Bold, spacing=1.6))
+            p.setPen(QColor(C["accent2"]))
+            p.drawText(QRectF(tx, top, tw, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       self._eyebrow(i).upper())
+        elif k == 2:  # título
+            p.setFont(_font(25, QFont.Weight.Bold, FONT["display"]))
+            p.setPen(QColor(C["text"]))
+            p.drawText(QRectF(tx, top + 18, tw, 34), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       st["title"])
+        elif k == 3:  # descripción
+            p.setFont(_font(14))
+            p.setPen(QColor("#A3AABB"))
+            p.drawText(QRectF(tx, top + 58, tw, 44),
+                       int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap),
+                       st["text"])
+        else:  # etiquetas
+            y = top + 58 + self._desc_height(i, tw) + 14
+            x = tx
+            f = _font(12, QFont.Weight.DemiBold)
+            fm = QFontMetricsF(f)
+            p.setFont(f)
+            for glyph, label in st["chips"]:
+                text_w = fm.horizontalAdvance(label)
+                chip = QRectF(x, y, 12 + 14 + 7 + text_w + 14, 30)
+                if chip.right() > tx + tw:
+                    break
+                p.setPen(QPen(QColor(255, 255, 255, 24), 1))
+                p.setBrush(QColor(255, 255, 255, 9))
+                p.drawRoundedRect(chip.adjusted(0.5, 0.5, -0.5, -0.5), 15, 15)
+                icon = cached_glyph(glyph, C["accent2"], 14)
+                p.drawPixmap(QRectF(x + 12, y + 8, 14, 14), icon, QRectF(icon.rect()))
+                p.setPen(QColor("#CDD2DE"))
+                p.drawText(QRectF(x + 33, y, text_w + 2, 30),
+                           Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
+                x = chip.right() + 8
+        p.restore()
+
+    def _paint_hint(self, p: QPainter, alpha: float) -> None:
+        """En el último paso, dónde volver a abrir la guía: «Vuelve a verla con [Guía] o [F1]»."""
+        if alpha <= 0:
+            return
+        p.save()
+        p.setOpacity(alpha)
+        cy = self.height() - self.FOOT_H / 2
+        x = 30.0
+        text_f, key_f = _font(12), _font(11, QFont.Weight.Bold)
+        for kind, label in (("t", "Vuelve a verla con"), ("k", "Guía"), ("t", "o"), ("k", help_key())):
+            if kind == "t":
+                fm = QFontMetricsF(text_f)
+                p.setFont(text_f)
+                p.setPen(QColor("#7D859A"))
+                wdt = fm.horizontalAdvance(label)
+                p.drawText(QRectF(x, cy - 12, wdt + 2, 24), Qt.AlignmentFlag.AlignVCenter, label)
+            else:
+                fm = QFontMetricsF(key_f)
+                wdt = fm.horizontalAdvance(label) + 16
+                cap = QRectF(x, cy - 11, wdt, 22)
+                p.setPen(QPen(QColor(255, 255, 255, 34), 1))
+                p.setBrush(QColor(255, 255, 255, 12))
+                p.drawRoundedRect(cap.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
+                p.setFont(key_f)
+                p.setPen(QColor(C["text"]))
+                p.drawText(cap, Qt.AlignmentFlag.AlignCenter, label)
+            x += wdt + 7
+        p.restore()
+
+
+class TourOverlay(QWidget):
+    """Visor de la guía sobre la ventana: fondo esmerilado y oscurecido, tarjeta centrada."""
+    finished = pyqtSignal(bool)  # True si se llegó al final
+
+    def __init__(self, win: QMainWindow, animate: bool = True):
+        super().__init__(win)
+        self.win = win
+        self.animate = animate
+        self.active = False
+        self.closing = False
+        self._completed = False
+        self.t = 0.0
+        self.snap: QPixmap | None = None
+        self.snap_blur: QPixmap | None = None
+        self._shadow: QPixmap | None = None
+        self._card_y = 0
+        self.setAccessibleName("Guía rápida")
+        self.card = TourCard(self)
+        self.fade = QVariantAnimation(self)
+        self.fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.fade.valueChanged.connect(self._on_fade)
+        self.fade.finished.connect(self._on_fade_done)
+        keys = ((Qt.Key.Key_Escape, lambda: self.finish(False)), (Qt.Key.Key_Right, self.card.forward),
+                (Qt.Key.Key_Left, self.card.back), (Qt.Key.Key_Return, self._enter), (Qt.Key.Key_Enter, self._enter))
+        for key, fn in keys:
+            sc = QShortcut(QKeySequence(key), self)
+            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            sc.activated.connect(fn)
+        self.hide()
+
+    def open(self) -> None:
+        if self.active and not self.closing:
+            return
+        self.fade.stop()
+        reopen = self.active
+        self.active, self.closing = True, False
+        if not reopen:
+            self.snap = self.win.grab()
+            self.snap_blur = frosted(self.snap)
+        self.setGeometry(self.win.rect())
+        self._layout()
+        central = self.win.centralWidget()
+        if central is not None:
+            central.setEnabled(False)  # el tabulador y los clics se quedan en la guía
+        self.show()
+        self.raise_()
+        if not reopen:
+            self.card.start()
+        if self.animate:
+            self.card.pulse_anim.start()
+        self.card.next_btn.setFocus()
+        self._fade_to(1.0, 420)
+
+    def finish(self, completed: bool) -> None:
+        if not self.active or self.closing:
+            return
+        self._completed = completed
+        self.closing = True
+        self._fade_to(0.0, 240)
+
+    def _enter(self) -> None:
+        focus = QApplication.focusWidget()
+        if isinstance(focus, QPushButton) and self.isAncestorOf(focus):
+            focus.click()
+        else:
+            self.card.next()
+
+    def _fade_to(self, target: float, ms: int) -> None:
+        if not self.animate:
+            self._on_fade(target)
+            self._on_fade_done()
+            return
+        effect = self.card.graphicsEffect()
+        if not isinstance(effect, QGraphicsOpacityEffect):
+            effect = QGraphicsOpacityEffect(self.card)
+            self.card.setGraphicsEffect(effect)
+        effect.setOpacity(self.t)
+        self.fade.setStartValue(self.t)
+        self.fade.setEndValue(target)
+        self.fade.setDuration(ms)
+        self.fade.start()
+
+    def _on_fade(self, v) -> None:
+        self.t = float(v)
+        effect = self.card.graphicsEffect()
+        if isinstance(effect, QGraphicsOpacityEffect):
+            effect.setOpacity(self.t)
+        self.card.move(self.card.x(), int(self._card_y + 18 * (1 - self.t)))
+        self.update()
+
+    def _on_fade_done(self) -> None:
+        if self.closing:
+            self.active = self.closing = False
+            self.card.pulse_anim.stop()
+            self.card.anim.stop()
+            self.hide()
+            self.card.setGraphicsEffect(None)
+            self.snap = self.snap_blur = None
+            central = self.win.centralWidget()
+            if central is not None:
+                central.setEnabled(True)
+            self.finished.emit(self._completed)
+        else:
+            self.card.setGraphicsEffect(None)  # sin efecto, la tarjeta se pinta directa y nítida
+
+    def _layout(self) -> None:
+        self.card.fit(self.width(), self.height())
+        self._card_y = (self.height() - self.card.height()) // 2
+        self.card.move((self.width() - self.card.width()) // 2, int(self._card_y + 18 * (1 - self.t)))
+        self._shadow = None
+
+    def resizeEvent(self, _):  # noqa: N802
+        self._layout()
+
+    def mousePressEvent(self, e):  # noqa: N802
+        e.accept()  # los clics fuera de la tarjeta no llegan a la ventana
+
+    def paintEvent(self, _):  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
+        if self.snap is not None:
+            p.drawPixmap(self.rect(), self.snap)
+        else:
+            p.fillRect(self.rect(), QColor(C["bg"]))
+        e = self.t
+        if self.snap_blur is not None and e > 0:
+            p.setOpacity(e)
+            p.drawPixmap(self.rect(), self.snap_blur)
+            p.setOpacity(1.0)
+        p.fillRect(self.rect(), QColor(4, 6, 10, int(150 * e)))
+        cg = QRectF(self.card.geometry())
+        halo = QRadialGradient(cg.center(), cg.width() * 0.8)
+        halo.setColorAt(0, QColor(124, 108, 255, int(44 * e)))
+        halo.setColorAt(1, QColor(124, 108, 255, 0))
+        p.fillRect(self.rect(), halo)
+        blur = 36.0
+        if self._shadow is None:
+            self._shadow = soft_shadow(cg.width(), cg.height(), TourCard.RADIUS, blur, 230)
+        pad = blur * 2
+        p.setOpacity(e)
+        p.drawPixmap(QRectF(cg.x() - pad, cg.y() - pad + 20, cg.width() + 2 * pad, cg.height() + 2 * pad),
+                     self._shadow, QRectF(self._shadow.rect()))
+        p.setOpacity(1.0)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, tray_mode: bool = False, updated: bool = False):
         super().__init__()
@@ -1757,6 +2489,8 @@ class MainWindow(QMainWindow):
         self._sleeping = False
         self._sleep_paused = False
         self._disk_lost_seen = False
+        self.tour: TourOverlay | None = None
+        self._tour_pending = True
 
         self._load_settings()
         self._build()
@@ -1769,6 +2503,7 @@ class MainWindow(QMainWindow):
 
         self.watcher = DiskWatcher(self)
         self.watcher.arrived.connect(self._on_drive_arrived)
+        QShortcut(QKeySequence(QKeySequence.StandardKey.HelpContents), self, activated=self.toggle_tour)
 
         # apagar, reiniciar o cerrar sesión con una copia en marcha
         app = QApplication.instance()
@@ -1933,6 +2668,15 @@ class MainWindow(QMainWindow):
         h.addSpacing(8)
         self.pill = QLabel()
         self.pill.setObjectName("pill")
+        self.btn_help = QPushButton("  Guía")
+        self.btn_help.setObjectName("help")
+        self.btn_help.setIcon(glyph_icon(G.HELP, C["accent2"], 15))
+        self.btn_help.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_help.setToolTip(f"Guía rápida  ({help_key()})")
+        self.btn_help.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)  # alto de la píldora
+        self.btn_help.clicked.connect(lambda: self.show_tour())
+        h.addWidget(self.btn_help)
+        h.addSpacing(4)
         h.addWidget(self.pill)
         return w
 
@@ -2600,6 +3344,7 @@ class MainWindow(QMainWindow):
             menu = QMenu()
             menu.addAction(glyph_icon(G.OPEN, C["text"], 14), "Abrir", self._show_window)
             menu.addAction(glyph_icon(G.PLAY, C["text"], 14), "Sincronizar ahora", self._tray_sync)
+            menu.addAction(glyph_icon(G.HELP, C["text"], 14), "Guía rápida", lambda: self.show_tour())
             menu.addSeparator()
             menu.addAction(glyph_icon(G.CLOSE, C["text"], 14), "Salir", self._quit)
             self._tray_menu = menu
@@ -3551,6 +4296,57 @@ class MainWindow(QMainWindow):
         if self.taskbar is None:
             set_dark_titlebar(self)
             self.taskbar = Taskbar(int(self.winId()))
+        if self._tour_pending and not self._tour_seen():
+            self._tour_pending = False
+            QTimer.singleShot(700, self._maybe_first_tour)
+
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        if self.tour is not None and self.tour.active:
+            self.tour.setGeometry(self.rect())
+
+    # ── guía rápida ──────────────────────────────────────────────────────
+    def show_tour(self, animate: bool | None = None):
+        if self.isHidden() or self.isMinimized():
+            self._show_window()
+            QTimer.singleShot(250, lambda: self.show_tour(animate))  # que la ventana se pinte antes de la captura
+            return
+        if self.tour is None:
+            self.tour = TourOverlay(self, ui_animations())
+            self.tour.finished.connect(self._on_tour_finished)
+        if animate is not None:
+            self.tour.animate = animate
+        self.tour.open()
+
+    def toggle_tour(self):
+        if self.tour is not None and self.tour.active and not self.tour.closing:
+            self.tour.finish(False)
+        else:
+            self.show_tour()
+
+    def _tour_seen(self) -> bool:
+        try:
+            return int(self.settings.value("tour", 0)) >= TOUR_VERSION
+        except (TypeError, ValueError):
+            return False
+
+    def _on_tour_finished(self, _completed: bool):
+        self.settings.setValue("tour", TOUR_VERSION)
+        self.settings.sync()
+
+    def _maybe_first_tour(self):
+        """La primera vez que se abre la ventana: guía rápida, sin pisar una copia ni otro diálogo."""
+        if self._tour_seen() or (self.tour is not None and self.tour.active):
+            return
+        if not self.isVisible() or self.isMinimized():
+            self._tour_pending = True  # al abrir la ventana la próxima vez
+            return
+        busy = (self._state in RUNNING or QApplication.activeModalWidget() is not None
+                or any(d is not None and d.isVisible() for d in (self.dialog, self.update_dialog)))
+        if busy:
+            QTimer.singleShot(5000, self._maybe_first_tour)
+            return
+        self.show_tour()
 
     def closeEvent(self, event):  # noqa: N802
         self.excl_map[self._excl_key()] = self.tree.excluded
@@ -3916,8 +4712,25 @@ def selftest() -> int:
             assert not guard.active
         win = MainWindow()
         win._refresh_disk_status()
-        win.close()
         say("  interfaz: construida")
+        images, spots, _size = tour_assets()
+        missing = [k for k, pm in images.items() if pm.isNull()]
+        assert not missing, f"faltan ilustraciones de la guía: {missing}"
+        tour = TourOverlay(win, animate=False)
+        ended: list[bool] = []
+        tour.finished.connect(ended.append)
+        tour.open()
+        steps = len(tour.card.steps)
+        assert 4 <= steps <= 6 and tour.card.idx == 0
+        for _ in range(steps - 1):
+            tour.card.forward()
+            tour.card.grab()
+        assert tour.card.idx == steps - 1 and tour.card.next_btn.text().strip() == "Empezar"
+        tour.card.next()
+        assert ended == [True] and not tour.active, "la guía no se cerró al terminar"
+        say(f"  guía rápida: {steps} pasos, {len(images)} ilustraciones, "
+            f"{sum(len(v) for v in spots.values())} zonas destacadas")
+        win.close()
         say("SELFTEST OK")
         return 0
     except BaseException:  # noqa: BLE001 - todo fallo cuenta
