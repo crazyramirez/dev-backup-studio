@@ -53,7 +53,7 @@ import updater
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.9.0"
+APP_VERSION = "1.9.1"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -1969,7 +1969,8 @@ class PairDialog(QDialog):
     entrega la carpeta de red y sus credenciales; se guardan en el sistema y el destino queda puesto.
     """
     found = pyqtSignal(list)
-    done = pyqtSignal(str)
+    # «linked» y no «done»: un atributo «done» taparía QDialog.done(), que Qt llama al cerrar
+    linked = pyqtSignal(str)
     failed = pyqtSignal(str, str)
 
     def __init__(self, win: "MainWindow"):
@@ -2040,7 +2041,7 @@ class PairDialog(QDialog):
         self.code.textChanged.connect(self._update)
         self.cloud.editTextChanged.connect(self._update)
         self.found.connect(self._on_found)
-        self.done.connect(self._on_done)
+        self.linked.connect(self._on_done)
         self.failed.connect(self._on_failed)
         self._update()
         self.code.setFocus()
@@ -2093,7 +2094,7 @@ class PairDialog(QDialog):
                 if link is None:
                     link = cloudlink.claim(host, code, cloudlink.device_name())
                     self._link = link
-                self.done.emit(cloudlink.connect(link))
+                self.linked.emit(cloudlink.connect(link))
             except cloudlink.LinkError as exc:
                 self.failed.emit(exc.kind, exc.detail)
             except Exception as exc:  # noqa: BLE001 - se enseña y se puede repetir
@@ -6079,6 +6080,15 @@ def selftest() -> int:
         win = MainWindow()
         win._refresh_disk_status()
         say("  interfaz: construida")
+        # los diálogos se cierran (QDialog.done) sin errores: ningún atributo tapa sus métodos
+        for cls in (PairDialog, ConnectDialog, UpdateDialog):
+            clash = [n for n in vars(cls) if n in ("done", "accept", "reject", "exec", "open", "result")
+                     and isinstance(vars(cls)[n], pyqtSignal)]
+            assert not clash, f"{cls.__name__}: {clash} tapa un método de QDialog"
+        pair = PairDialog(win)
+        pair.accept()  # pasa por QDialog.done(): si algo lo tapa, el resultado no cambia
+        assert pair.result() == QDialog.DialogCode.Accepted, "el diálogo «Conectar con mi nube» no se cierra"
+        say("  conectar con la nube: el diálogo abre y se cierra")
         for code in i18n.LANGS:
             images, spots, _size = tour_assets(code)
             missing = [k for k, pm in images.items() if pm.isNull()]

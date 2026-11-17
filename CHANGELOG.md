@@ -1,5 +1,12 @@
 # Novedades
 
+## 1.9.1
+
+- Corregido: el diálogo *Conectar con mi nube* no se podía cerrar ni terminar la conexión («native
+  Qt signal is not callable»). Una comprobación nueva del autodiagnóstico evita que vuelva a pasar.
+- Si el código es correcto pero falla abrir la carpeta de red, *Conectar* reintenta sin pedir otro
+  código (el código se gasta al usarlo).
+
 ## 1.9.0
 
 - **Conectar con tu nube con un código.** Debajo del destino, *Conectar con mi nube…* busca
