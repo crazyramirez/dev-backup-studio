@@ -178,7 +178,7 @@ def vol_name(root: str) -> str:
 
 # ── carpetas de red (SMB) ───────────────────────────────────────────────────
 #
-# Un destino puede ser una carpeta compartida de otro equipo de la red: «\\nube\Copias» o una
+# Un destino puede ser una carpeta compartida de otro equipo de la red: «\\nube\DEV_Backup_Studio» o una
 # unidad conectada («Z:») en Windows, o un recurso montado en /Volumes en macOS. Para el motor es
 # un disco más; la diferencia es que, si el servidor está apagado, mirar la ruta puede dejar el
 # programa esperando 20-60 s. Por eso antes de tocarla se comprueba con una conexión TCP de un
@@ -229,7 +229,7 @@ def network_host(root: str) -> str | None:
     else:
         line = _unix_mount_line(root)
         if line and _unix_fs_type(root).upper() in NET_FS:
-            # macOS: «//usuario@nube._smb._tcp.local/Copias on /Volumes/Copias (smbfs, …)»
+            # macOS: «//usuario@nube._smb._tcp.local/DEV_Backup_Studio on /Volumes/DEV_Backup_Studio (smbfs, …)»
             src = line.split(" on ", 1)[0]
             host = src.lstrip("/").split("/", 1)[0].rsplit("@", 1)[-1].split(":", 1)[0]
             if host.endswith("._smb._tcp.local"):
@@ -364,7 +364,7 @@ def mounted_volumes(network: bool = True, extra=()) -> set[str]:
     """Unidades conectadas: {"C:\\", "E:\\"} en Windows, {"/Volumes/X"} en macOS.
 
     Las de red solo cuentan si su servidor responde (con network=False no se miran: así no se
-    espera a la red). extra: raíces de carpetas de red («\\\\nube\\Copias\\») que también hay
+    espera a la red). extra: raíces de carpetas de red («\\\\nube\\DEV_Backup_Studio\\») que también hay
     que comprobar, porque no tienen letra de unidad.
     """
     if IS_WIN:

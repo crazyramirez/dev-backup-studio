@@ -55,8 +55,8 @@ primera vez:
 - **Admite una unidad entera como origen.** Si el origen es la raíz de un disco (`F:\`), se omiten la
   papelera (`$RECYCLE.BIN`), `System Volume Information` y las carpetas de sistema de macOS.
 - **Copia también en una carpeta de red.** El destino puede ser una carpeta compartida de otro equipo
-  de casa, por ejemplo la carpeta `Copias` de [Personal Cloud Storage](#juntos-con-personal-cloud-storage): una unidad de red (`Z:`) o la
-  ruta `\\nube.local\Copias\MiPC` en Windows, o el recurso montado en `/Volumes` en macOS. Antes de
+  de casa, por ejemplo la carpeta `DEV_Backup_Studio` de [Personal Cloud Storage](#juntos-con-personal-cloud-storage): una unidad de red (`Z:`) o la
+  ruta `\\nube.local\DEV_Backup_Studio\MiPC` en Windows, o el recurso montado en `/Volumes` en macOS. Antes de
   tocarla comprueba en un segundo que el servidor responde, así que un servidor apagado no deja la app
   esperando. Al volver a la red se ofrece sincronizar, como al conectar el disco.
 - **Se conecta a Personal Cloud Storage con un código.** *Conectar con mi nube…* encuentra la nube en
@@ -99,7 +99,7 @@ Así se suman lo mejor de las dos:
   versiones de lo que modificas o borras y comprueba cada archivo con SHA-256. Ya no tienes que
   conectar un disco: basta con estar en casa (o en Tailscale).
 - **Ves y descargas tus copias desde cualquier dispositivo**: el móvil, otro ordenador, el navegador.
-  Están en la carpeta `Copias` de la nube, una por ordenador.
+  Están en la carpeta `DEV_Backup_Studio` de la nube, una por ordenador.
 - **Tres copias sin esfuerzo.** El original en tu ordenador, la copia en la nube y, si usas la copia
   de seguridad en disco externo de Personal Cloud Storage, una tercera en otro disco.
 

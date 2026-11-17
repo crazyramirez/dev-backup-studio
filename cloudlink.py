@@ -300,7 +300,7 @@ def _mount_mac(link: Link) -> str:
         raise LinkError("connect", str(exc)) from exc
     if run.returncode != 0:
         raise LinkError("connect", run.stderr.strip())
-    out = run.stdout.strip()  # «file Copias», o el alias del volumen
+    out = run.stdout.strip()  # «file DEV_Backup_Studio», o el alias del volumen
     mount = os.path.join("/Volumes", link.share)
     if os.path.isdir(mount):
         return mount

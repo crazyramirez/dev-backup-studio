@@ -1765,7 +1765,7 @@ class DiskWatcher(QObject):
         self._thread.start()
 
     def set_network_roots(self, roots) -> None:
-        """Carpetas de red sin letra de unidad («\\\\nube\\Copias\\») que también hay que vigilar."""
+        """Carpetas de red sin letra de unidad («\\\\nube\\DEV_Backup_Studio\\») que también hay que vigilar."""
         self._extra = frozenset(roots)
 
     def stop(self) -> None:
