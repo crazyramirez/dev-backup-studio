@@ -55,7 +55,7 @@ primera vez:
 - **Admite una unidad entera como origen.** Si el origen es la raíz de un disco (`F:\`), se omiten la
   papelera (`$RECYCLE.BIN`), `System Volume Information` y las carpetas de sistema de macOS.
 - **Copia también en una carpeta de red.** El destino puede ser una carpeta compartida de otro equipo
-  de casa, por ejemplo la carpeta `Copias` de Personal Cloud Storage: una unidad de red (`Z:`) o la
+  de casa, por ejemplo la carpeta `Copias` de [Personal Cloud Storage](#juntos-con-personal-cloud-storage): una unidad de red (`Z:`) o la
   ruta `\\nube.local\Copias\MiPC` en Windows, o el recurso montado en `/Volumes` en macOS. Antes de
   tocarla comprueba en un segundo que el servidor responde, así que un servidor apagado no deja la app
   esperando. Al volver a la red se ofrece sincronizar, como al conectar el disco.
@@ -85,6 +85,36 @@ primera vez:
 | ![Diálogo al conectar](docs/conectar.png) | ![Lista de cambios](docs/cambios.png) |
 
 ![Guía rápida](docs/guia.png)
+
+## Juntos con Personal Cloud Storage
+
+[Personal Cloud Storage](https://github.com/crazyramirez/personal-cloud-storage) es una nube
+personal que montas en casa con una Raspberry Pi (o un mini PC) y un disco USB, sin servicios de
+terceros. DEV Backup Studio puede hacer las copias de tus ordenadores **en esa nube, por la red de
+casa**, en lugar de, o además de, un disco USB.
+
+Así se suman lo mejor de las dos:
+
+- **Tus proyectos llegan a la nube solos.** DEV Backup Studio copia lo que ha cambiado, guarda
+  versiones de lo que modificas o borras y comprueba cada archivo con SHA-256. Ya no tienes que
+  conectar un disco: basta con estar en casa (o en Tailscale).
+- **Ves y descargas tus copias desde cualquier dispositivo**: el móvil, otro ordenador, el navegador.
+  Están en la carpeta `Copias` de la nube, una por ordenador.
+- **Tres copias sin esfuerzo.** El original en tu ordenador, la copia en la nube y, si usas la copia
+  de seguridad en disco externo de Personal Cloud Storage, una tercera en otro disco.
+
+Conectarlas es cosa de un minuto, sin escribir direcciones ni contraseñas:
+
+1. En la nube, activa la carpeta de red una vez:
+   `sudo bash /opt/pcloud/current/deploy/linux/setup/pcloud-install-smb.sh --execute`
+   ([cómo](https://github.com/crazyramirez/personal-cloud-storage/blob/main/docs/OPERATIONS.md#8-quinquies-carpeta-de-red-para-copias-de-los-ordenadores-smb-opcional)).
+2. En la web de la nube: *Ajustes → Copias de tus ordenadores → Conectar un ordenador*. Aparece un
+   código de 6 cifras.
+3. En DEV Backup Studio, debajo del destino: *Conectar con mi nube…* La app encuentra la nube en la
+   red; escribe el código y pulsa *Conectar*. El destino queda puesto en la carpeta de este ordenador.
+
+Si la nube está apagada o fuera de alcance, la app lo dice en un segundo y ofrece sincronizar en
+cuanto vuelve, igual que al conectar un disco.
 
 ## Cómo decide qué copiar
 
