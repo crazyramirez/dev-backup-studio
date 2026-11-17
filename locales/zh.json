@@ -605,6 +605,24 @@
   "terminado": "已完成",
   "{size} copiados": "已复制 {size}",
   "Servidor de red no disponible": "网络服务器不可用",
-  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "无法访问网络文件夹 {dst}。请检查服务器是否已开机并处于同一网络。"
+  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "无法访问网络文件夹 {dst}。请检查服务器是否已开机并处于同一网络。",
+  "Conectar con tu nube": "连接到你的云",
+  "En la web de tu nube abre Ajustes → «Copias de tus ordenadores» y pulsa «Conectar un ordenador». Escribe aquí el código que aparece.": "在云的网页中打开“设置”→“电脑备份”，点击“连接一台电脑”，然后在这里输入显示的代码。",
+  "Nube": "云",
+  "Buscando tu nube en la red…": "正在网络中查找你的云…",
+  "Código": "代码",
+  "Conectar": "连接",
+  "Dirección de tu nube (p. ej. nube.local)": "云的地址（例如 cloud.local）",
+  "No encuentro tu nube en la red. Escribe su dirección: la que usas en el navegador, sin «https://».": "在网络中找不到你的云。请输入它的地址：即你在浏览器中使用的地址，不带“https://”。",
+  "Conectando con {host}…": "正在连接 {host}…",
+  "El código no es correcto o ha caducado. Pide uno nuevo en la web y vuelve a probar.": "代码不正确或已过期。请在网页上获取新代码后重试。",
+  "No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la misma red.": "无法连接到云。请检查地址，并确认这台电脑在同一网络中。",
+  "La carpeta de red no está activada en tu nube.": "你的云未启用网络文件夹。",
+  "Demasiados intentos. Espera unos minutos y vuelve a probar.": "尝试次数过多。请等几分钟后再试。",
+  "El código es correcto, pero no se pudo abrir la carpeta de red.": "代码正确，但无法打开网络文件夹。",
+  "Conectar con mi nube…": "连接到我的云…",
+  "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "用其网页给出的代码，把备份保存到家庭网络中的 Personal Cloud Storage。无需密码。",
+  "Espera a que termine la copia en curso.": "请等待当前备份完成。",
+  "Conectado. Las copias se guardarán en {path}.": "已连接。备份将保存到 {path}。"
  }
 }

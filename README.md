@@ -59,6 +59,9 @@ primera vez:
   ruta `\\nube.local\Copias\MiPC` en Windows, o el recurso montado en `/Volumes` en macOS. Antes de
   tocarla comprueba en un segundo que el servidor responde, así que un servidor apagado no deja la app
   esperando. Al volver a la red se ofrece sincronizar, como al conectar el disco.
+- **Se conecta a Personal Cloud Storage con un código.** *Conectar con mi nube…* encuentra la nube en
+  la red y pide el código de 6 cifras de su web. Guarda la credencial en el sistema y pone el destino
+  solo: no hay que escribir direcciones ni contraseñas.
 - **No deja que nada pare la copia.** Mientras analiza o sincroniza, el equipo no se suspende por
   inactividad y el disco USB no se duerme. Apagar o reiniciar pide confirmación: en Windows aparece
   «Copia de seguridad en curso», y en macOS lo pide la propia app. Si el equipo se suspende igualmente

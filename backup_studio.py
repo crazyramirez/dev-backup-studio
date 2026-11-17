@@ -44,6 +44,7 @@ from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QApplication, Q
                              QTableWidgetItem, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
                              QWidget)
 
+import cloudlink
 import engine
 import i18n
 import keepawake
@@ -1961,6 +1962,161 @@ class ConnectDialog(QDialog):
         super().reject()
 
 
+class PairDialog(QDialog):
+    """«Conectar con mi nube»: encuentra Personal Cloud Storage en la red y se conecta con un código.
+
+    La web de la nube da un código de 6 cifras (Ajustes → «Conectar un ordenador»). Con él, la nube
+    entrega la carpeta de red y sus credenciales; se guardan en el sistema y el destino queda puesto.
+    """
+    found = pyqtSignal(list)
+    done = pyqtSignal(str)
+    failed = pyqtSignal(str, str)
+
+    def __init__(self, win: "MainWindow"):
+        super().__init__(win)
+        self.win = win
+        self.result_path = ""
+        self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(app_icon())
+        self.setMinimumWidth(520)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(26, 24, 26, 22)
+        lay.setSpacing(14)
+
+        title = QLabel(_("Conectar con tu nube"))
+        title.setObjectName("h1")
+        lay.addWidget(title)
+        intro = QLabel(_("En la web de tu nube abre Ajustes → «Copias de tus ordenadores» y pulsa «Conectar un "
+                         "ordenador». Escribe aquí el código que aparece."))
+        intro.setObjectName("muted")
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+
+        lab_cloud = QLabel(_("Nube"))
+        lab_cloud.setObjectName("faint")
+        lay.addWidget(lab_cloud)
+        self.cloud = QComboBox()
+        self.cloud.setEditable(True)
+        self.cloud.lineEdit().setPlaceholderText(_("Buscando tu nube en la red…"))
+        lay.addWidget(self.cloud)
+
+        lab_code = QLabel(_("Código"))
+        lab_code.setObjectName("faint")
+        lay.addWidget(lab_code)
+        self.code = QLineEdit()
+        self.code.setInputMask("999 999;_")
+        self.code.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        font = self.code.font()
+        font.setPointSize(26)
+        font.setBold(True)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 4)
+        self.code.setFont(font)
+        self.code.setMinimumHeight(64)
+        lay.addWidget(self.code)
+
+        self.status = QLabel("")
+        self.status.setObjectName("muted")
+        self.status.setWordWrap(True)
+        lay.addWidget(self.status)
+        self.busy = thin_bar(4)
+        self.busy.setRange(0, 0)
+        self.busy.hide()
+        lay.addWidget(self.busy)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        self.b_cancel = QPushButton(_("Cancelar"))
+        self.b_go = QPushButton("  " + _("Conectar"))
+        self.b_go.setObjectName("primary")
+        self.b_go.setIcon(glyph_icon(G.CHECK, "#FFFFFF", 14))
+        self.b_go.setDefault(True)
+        for b in (self.b_cancel, self.b_go):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            buttons.addWidget(b)
+        lay.addLayout(buttons)
+        self.b_cancel.clicked.connect(self.reject)
+        self.b_go.clicked.connect(self._go)
+        self.code.textChanged.connect(self._update)
+        self.cloud.editTextChanged.connect(self._update)
+        self.found.connect(self._on_found)
+        self.done.connect(self._on_done)
+        self.failed.connect(self._on_failed)
+        self._update()
+        self.code.setFocus()
+        threading.Thread(target=lambda: self.found.emit(cloudlink.discover()), name="buscar-nube", daemon=True).start()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        set_dark_titlebar(self)
+
+    def _digits(self) -> str:
+        return "".join(c for c in self.code.text() if c.isdigit())
+
+    def _host(self) -> str:
+        data = self.cloud.currentData()
+        if data and self.cloud.currentText() == self.cloud.itemText(self.cloud.currentIndex()):
+            return data
+        return cloudlink.normalize_host(self.cloud.currentText())
+
+    def _update(self, *_args):
+        self.b_go.setEnabled(len(self._digits()) == 6 and bool(self._host()) and not self.busy.isVisible())
+
+    def _on_found(self, clouds: list):
+        self.cloud.lineEdit().setPlaceholderText(_("Dirección de tu nube (p. ej. nube.local)"))
+        if not clouds:
+            if not self.cloud.currentText():
+                self.status.setText(_("No encuentro tu nube en la red. Escribe su dirección: la que usas en el "
+                                      "navegador, sin «https://»."))
+            return
+        typed = self.cloud.currentText()
+        for c in clouds:
+            self.cloud.addItem(f"{c.name}  ({c.host})", c.host)
+        if not typed:
+            self.cloud.setCurrentIndex(0)
+        self._update()
+
+    def _go(self):
+        host, code = self._host(), self._digits()
+        self.busy.show()
+        self.b_go.setEnabled(False)
+        self.code.setEnabled(False)
+        self.cloud.setEnabled(False)
+        self.status.setText(_("Conectando con {host}…").format(host=host))
+
+        def work():
+            try:
+                link = cloudlink.claim(host, code, cloudlink.device_name())
+                self.done.emit(cloudlink.connect(link))
+            except cloudlink.LinkError as exc:
+                self.failed.emit(exc.kind, exc.detail)
+            except Exception as exc:  # noqa: BLE001 - se enseña y se puede repetir
+                self.failed.emit("connect", str(exc))
+
+        threading.Thread(target=work, name="conectar-nube", daemon=True).start()
+
+    def _on_failed(self, kind: str, detail: str):
+        self.busy.hide()
+        self.code.setEnabled(True)
+        self.cloud.setEnabled(True)
+        text = {
+            "code": _("El código no es correcto o ha caducado. Pide uno nuevo en la web y vuelve a probar."),
+            "unreachable": _("No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la "
+                             "misma red."),
+            "unavailable": _("La carpeta de red no está activada en tu nube."),
+            "busy": _("Demasiados intentos. Espera unos minutos y vuelve a probar."),
+            "connect": _("El código es correcto, pero no se pudo abrir la carpeta de red."),
+        }.get(kind, kind)
+        self.status.setText(text + (f"  ({detail})" if detail and kind in ("unreachable", "connect") else ""))
+        if kind == "code":
+            self.code.clear()
+            self.code.setFocus()
+        self._update()
+
+    def _on_done(self, path: str):
+        self.result_path = path
+        self.accept()
+
+
 CURRENT_VERSION = os.environ.get("DEVBACKUP_PRETEND_VERSION") or APP_VERSION  # para probar el actualizador
 
 
@@ -3331,6 +3487,14 @@ class MainWindow(QMainWindow):
         pair.body.addWidget(self.src_card)
         pair.body.addWidget(FlowConnector())
         pair.body.addWidget(self.dst_card)
+        self.cloud_btn = QPushButton("  " + _("Conectar con mi nube…"))
+        self.cloud_btn.setObjectName("link")
+        self.cloud_btn.setIcon(glyph_icon(G.GLOBE, C["accent"], 14))
+        self.cloud_btn.setToolTip(_("Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código "
+                                    "que te da su web. Sin contraseñas."))
+        self.cloud_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cloud_btn.clicked.connect(self._pair_cloud)
+        pair.body.addWidget(self.cloud_btn, 0, Qt.AlignmentFlag.AlignLeft)
         self.card_pair = pair
         lay.addWidget(pair)
 
@@ -4332,6 +4496,18 @@ class MainWindow(QMainWindow):
     def _on_dst_changed(self):
         self._adopt_disk()
         self._invalidate_plan()
+
+    def _pair_cloud(self):
+        if self._state in RUNNING:
+            QMessageBox.information(self, APP_NAME, _("Espera a que termine la copia en curso."))
+            return
+        dlg = PairDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.result_path:
+            return
+        self.dst_card.set_path(dlg.result_path)
+        self._on_dst_changed()
+        self._save_settings()
+        QMessageBox.information(self, APP_NAME, _("Conectado. Las copias se guardarán en {path}.").format(path=dlg.result_path))
 
     def _on_tree_changed(self):
         n = len(self.tree.excluded)

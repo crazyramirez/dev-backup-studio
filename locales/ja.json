@@ -605,6 +605,24 @@
   "terminado": "完了",
   "{size} copiados": "{size} コピー済み",
   "Servidor de red no disponible": "ネットワークサーバーに接続できません",
-  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "ネットワークフォルダー {dst} に接続できません。サーバーの電源が入っていて、同じネットワークにあるか確認してください。"
+  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "ネットワークフォルダー {dst} に接続できません。サーバーの電源が入っていて、同じネットワークにあるか確認してください。",
+  "Conectar con tu nube": "クラウドに接続",
+  "En la web de tu nube abre Ajustes → «Copias de tus ordenadores» y pulsa «Conectar un ordenador». Escribe aquí el código que aparece.": "クラウドのウェブで「設定」→「パソコンのバックアップ」を開き、「パソコンを接続」を押します。表示されたコードをここに入力してください。",
+  "Nube": "クラウド",
+  "Buscando tu nube en la red…": "ネットワーク上でクラウドを探しています…",
+  "Código": "コード",
+  "Conectar": "接続",
+  "Dirección de tu nube (p. ej. nube.local)": "クラウドのアドレス（例：cloud.local）",
+  "No encuentro tu nube en la red. Escribe su dirección: la que usas en el navegador, sin «https://».": "ネットワーク上にクラウドが見つかりません。ブラウザで使うアドレスを「https://」なしで入力してください。",
+  "Conectando con {host}…": "{host} に接続しています…",
+  "El código no es correcto o ha caducado. Pide uno nuevo en la web y vuelve a probar.": "コードが正しくないか、期限切れです。ウェブで新しいコードを取得して、もう一度お試しください。",
+  "No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la misma red.": "クラウドに接続できません。アドレスと、このパソコンが同じネットワークにあるかを確認してください。",
+  "La carpeta de red no está activada en tu nube.": "クラウドでネットワークフォルダーが有効になっていません。",
+  "Demasiados intentos. Espera unos minutos y vuelve a probar.": "試行回数が多すぎます。数分待ってから、もう一度お試しください。",
+  "El código es correcto, pero no se pudo abrir la carpeta de red.": "コードは正しいですが、ネットワークフォルダーを開けませんでした。",
+  "Conectar con mi nube…": "クラウドに接続…",
+  "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "ウェブに表示されるコードで、家庭内ネットワークの Personal Cloud Storage にバックアップを保存します。パスワードは不要です。",
+  "Espera a que termine la copia en curso.": "実行中のバックアップが終わるまでお待ちください。",
+  "Conectado. Las copias se guardarán en {path}.": "接続しました。バックアップは {path} に保存されます。"
  }
 }

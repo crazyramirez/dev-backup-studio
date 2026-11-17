@@ -2,6 +2,11 @@
 
 ## 1.9.0
 
+- **Conectar con tu nube con un código.** Debajo del destino, *Conectar con mi nube…* busca
+  Personal Cloud Storage en la red de casa y pide el código de 6 cifras que da su web (Ajustes →
+  *Copias de tus ordenadores* → *Conectar un ordenador*). La app recibe la carpeta de red, guarda la
+  credencial en el sistema (Administrador de credenciales de Windows, llavero en macOS), crea la
+  carpeta de este ordenador y la pone como destino. Sin contraseñas.
 - **Copias en una carpeta de red.** El destino puede ser una carpeta compartida por SMB, como la
   carpeta `Copias` de Personal Cloud Storage: una unidad de red (`Z:`) o una ruta `\\servidor\recurso`
   en Windows, o un recurso montado en `/Volumes` en macOS. Versiones, verificación SHA-256, revisión

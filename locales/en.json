@@ -623,6 +623,24 @@
   "terminado": "done",
   "{size} copiados": "{size} copied",
   "Servidor de red no disponible": "Network server not available",
-  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "Can't reach the network folder {dst}. Check that the server is on and on the same network."
+  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "Can't reach the network folder {dst}. Check that the server is on and on the same network.",
+  "Conectar con tu nube": "Connect to your cloud",
+  "En la web de tu nube abre Ajustes → «Copias de tus ordenadores» y pulsa «Conectar un ordenador». Escribe aquí el código que aparece.": "In your cloud’s website, open Settings → “Backups of your computers” and click “Connect a computer”. Type the code it shows here.",
+  "Nube": "Cloud",
+  "Buscando tu nube en la red…": "Looking for your cloud on the network…",
+  "Código": "Code",
+  "Conectar": "Connect",
+  "Dirección de tu nube (p. ej. nube.local)": "Your cloud’s address (e.g. cloud.local)",
+  "No encuentro tu nube en la red. Escribe su dirección: la que usas en el navegador, sin «https://».": "Can’t find your cloud on the network. Type its address: the one you use in the browser, without “https://”.",
+  "Conectando con {host}…": "Connecting to {host}…",
+  "El código no es correcto o ha caducado. Pide uno nuevo en la web y vuelve a probar.": "The code is wrong or has expired. Get a new one on the website and try again.",
+  "No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la misma red.": "Can’t reach the cloud. Check the address and that this computer is on the same network.",
+  "La carpeta de red no está activada en tu nube.": "The network folder isn’t turned on in your cloud.",
+  "Demasiados intentos. Espera unos minutos y vuelve a probar.": "Too many attempts. Wait a few minutes and try again.",
+  "El código es correcto, pero no se pudo abrir la carpeta de red.": "The code is right, but the network folder couldn’t be opened.",
+  "Conectar con mi nube…": "Connect to my cloud…",
+  "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "Keep your backups in Personal Cloud Storage, on your home network, with the code its website gives you. No passwords.",
+  "Espera a que termine la copia en curso.": "Wait for the current backup to finish.",
+  "Conectado. Las copias se guardarán en {path}.": "Connected. Backups will be saved to {path}."
  }
 }
