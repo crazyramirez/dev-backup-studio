@@ -621,6 +621,8 @@
   "actualización automática no disponible en este sistema": "mise à jour automatique indisponible sur ce système",
   "pico {speed}": "pic {speed}",
   "terminado": "terminé",
-  "{size} copiados": "{size} copiés"
+  "{size} copiados": "{size} copiés",
+  "Servidor de red no disponible": "Serveur réseau indisponible",
+  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "Impossible d’atteindre le dossier réseau {dst}. Vérifiez que le serveur est allumé et sur le même réseau."
  }
 }

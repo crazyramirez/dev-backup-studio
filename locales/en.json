@@ -621,6 +621,8 @@
   "actualización automática no disponible en este sistema": "automatic update not available on this system",
   "pico {speed}": "peak {speed}",
   "terminado": "done",
-  "{size} copiados": "{size} copied"
+  "{size} copiados": "{size} copied",
+  "Servidor de red no disponible": "Network server not available",
+  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "Can't reach the network folder {dst}. Check that the server is on and on the same network."
  }
 }

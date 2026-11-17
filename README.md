@@ -54,6 +54,11 @@ primera vez:
   al día y lo verificado. Pausa, cancelación y reanudación sin dejar archivos a medias.
 - **Admite una unidad entera como origen.** Si el origen es la raíz de un disco (`F:\`), se omiten la
   papelera (`$RECYCLE.BIN`), `System Volume Information` y las carpetas de sistema de macOS.
+- **Copia también en una carpeta de red.** El destino puede ser una carpeta compartida de otro equipo
+  de casa, por ejemplo la carpeta `Copias` de Personal Cloud Storage: una unidad de red (`Z:`) o la
+  ruta `\\nube.local\Copias\MiPC` en Windows, o el recurso montado en `/Volumes` en macOS. Antes de
+  tocarla comprueba en un segundo que el servidor responde, así que un servidor apagado no deja la app
+  esperando. Al volver a la red se ofrece sincronizar, como al conectar el disco.
 - **No deja que nada pare la copia.** Mientras analiza o sincroniza, el equipo no se suspende por
   inactividad y el disco USB no se duerme. Apagar o reiniciar pide confirmación: en Windows aparece
   «Copia de seguridad en curso», y en macOS lo pide la propia app. Si el equipo se suspende igualmente

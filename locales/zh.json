@@ -603,6 +603,8 @@
   "actualización automática no disponible en este sistema": "此系统不支持自动更新",
   "pico {speed}": "峰值 {speed}",
   "terminado": "已完成",
-  "{size} copiados": "已复制 {size}"
+  "{size} copiados": "已复制 {size}",
+  "Servidor de red no disponible": "网络服务器不可用",
+  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "无法访问网络文件夹 {dst}。请检查服务器是否已开机并处于同一网络。"
  }
 }

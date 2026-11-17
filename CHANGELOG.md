@@ -1,5 +1,21 @@
 # Novedades
 
+## 1.9.0
+
+- **Copias en una carpeta de red.** El destino puede ser una carpeta compartida por SMB, como la
+  carpeta `Copias` de Personal Cloud Storage: una unidad de red (`Z:`) o una ruta `\\servidor\recurso`
+  en Windows, o un recurso montado en `/Volumes` en macOS. Versiones, verificación SHA-256, revisión
+  de integridad y detección de movidos funcionan igual que en un disco USB.
+- Antes de mirar una carpeta de red se comprueba en un segundo que el servidor responde. Con el
+  servidor apagado, la app ya no se queda esperando: dice «Servidor de red no disponible».
+- Cuando el servidor vuelve a la red, la app lo trata como un disco recién conectado y ofrece
+  sincronizar. Si la red se corta a mitad, la copia espera y sigue sola.
+- La vigilancia de discos va en un hilo aparte: la ventana nunca espera a la red.
+- En destinos de red se admite una diferencia de 2 s en la fecha de modificación (cada servidor la
+  guarda con su precisión) y no se envía el latido que mantiene despierto un disco USB.
+- Corregido: la verificación sin caché fallaba en las carpetas de red con «El parámetro no es
+  correcto» (SMB no admite leer sin caché más allá del final del archivo).
+
 ## 1.8.0
 
 - **Seis idiomas.** Español, inglés, francés, italiano, chino (simplificado) y japonés. Por defecto la

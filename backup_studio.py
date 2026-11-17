@@ -52,7 +52,7 @@ import updater
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.8.0"
+APP_VERSION = "1.9.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -1584,7 +1584,7 @@ class PathCard(Card):
                 raise OSError
             du = shutil.disk_usage(root)
         except OSError:
-            self.info.setText(_("Unidad no conectada"))
+            self.info.setText(_("Servidor de red no disponible") if engine.is_network(path) else _("Unidad no conectada"))
             self.disk.setValue(0)
             return
         self.disk.setValue(int(du.used / du.total * 10000) if du.total else 0)
@@ -1703,22 +1703,41 @@ def send_to_running(message: str) -> bool:
 
 
 class DiskWatcher(QObject):
-    """Avisa cuando se conecta una unidad (consultarlas cada 2 s no cuesta nada)."""
+    """Avisa cuando se conecta una unidad o vuelve a responder una carpeta de red.
+
+    Consultar los discos cada 2 s no cuesta nada; las carpetas de red se comprueban con una conexión
+    de un segundo como mucho, y por eso todo va en un hilo aparte: la ventana nunca espera a la red.
+    """
     arrived = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._known = engine.mounted_volumes()
-        self._timer = QTimer(self)
-        self._timer.setInterval(2000)
-        self._timer.timeout.connect(self._poll)
-        self._timer.start()
+        self._extra: frozenset[str] = frozenset()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="discos", daemon=True)
+        self._thread.start()
 
-    def _poll(self):
-        now = engine.mounted_volumes()
-        for root in sorted(now - self._known):
-            self.arrived.emit(root)
-        self._known = now
+    def set_network_roots(self, roots) -> None:
+        """Carpetas de red sin letra de unidad («\\\\nube\\Copias\\») que también hay que vigilar."""
+        self._extra = frozenset(roots)
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _run(self):
+        extra = self._extra
+        known = engine.mounted_volumes(extra=extra)
+        while not self._stop.wait(2.0):
+            try:
+                now = engine.mounted_volumes(extra=self._extra)
+            except Exception:  # noqa: BLE001 - el vigilante no se puede morir
+                continue
+            # una carpeta de red que se acaba de elegir no es un disco que se acaba de conectar
+            fresh = self._extra - extra
+            extra = self._extra
+            for root in sorted(now - known - fresh):
+                self.arrived.emit(root)
+            known = now
 
 
 class ChangesModel(QAbstractTableModel):
@@ -3081,6 +3100,7 @@ class MainWindow(QMainWindow):
 
         self.watcher = DiskWatcher(self)
         self.watcher.arrived.connect(self._on_drive_arrived)
+        self._watch_network_roots()
         QShortcut(QKeySequence(QKeySequence.StandardKey.HelpContents), self, activated=self.toggle_tour)
 
         # recordatorios: cada media hora se mira qué copias toca revisar (solo se recorre el origen si toca)
@@ -3990,7 +4010,17 @@ class MainWindow(QMainWindow):
                 self.disk_id, engine.volume_root(self._cfg["dst"]), engine.rel_to_volume):
             st.setValue("copias", json.dumps(self.registry.to_list(), ensure_ascii=False))
 
+    def _network_roots(self) -> set[str]:
+        """Carpetas de red sin letra de unidad donde hay copias: el destino actual y las habituales."""
+        dsts = [self.dst_card.path()] + [it.get("dst", "") for it in self.registry.items.values()]
+        return {engine.volume_root(d) for d in dsts if d and engine.is_unc(d)}
+
+    def _watch_network_roots(self):
+        if getattr(self, "watcher", None) is not None:
+            self.watcher.set_network_roots(self._network_roots())
+
     def _save_settings(self):
+        self._watch_network_roots()
         st = self.settings
         st.setValue("src", self.src_card.path())
         st.setValue("dst", self.dst_card.path())
@@ -4194,7 +4224,7 @@ class MainWindow(QMainWindow):
     def _startup_check(self):
         if not self.disk_id:
             return
-        for root in sorted(engine.mounted_volumes()):
+        for root in sorted(engine.mounted_volumes(extra=self._network_roots())):
             if engine.read_disk_id(root) == self.disk_id:
                 last = engine.last_history(root)
                 try:
@@ -4422,6 +4452,9 @@ class MainWindow(QMainWindow):
         if nd.startswith(ns.rstrip("\\/") + os.sep):
             return _("El destino no puede estar dentro del origen.")
         if not engine.volume_present(dst):
+            if engine.is_network(dst):
+                return _("No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y "
+                         "en la misma red.").format(dst=dst)
             return _("El disco de {dst} no está conectado.").format(dst=dst)
         return None
 
@@ -5119,6 +5152,7 @@ class MainWindow(QMainWindow):
         return int(self.remind_combo.currentData() or 3) if self.remind_box.isChecked() else 0
 
     def _save_registry(self):
+        self._watch_network_roots()
         self.settings.setValue("copias", json.dumps(self.registry.to_list(), ensure_ascii=False))
         self.settings.sync()
 
@@ -5146,7 +5180,7 @@ class MainWindow(QMainWindow):
     def _disk_roots(self) -> dict[str, str]:
         """Marca de disco → raíz, de los discos conectados ahora."""
         roots: dict[str, str] = {}
-        for root in sorted(engine.mounted_volumes()):
+        for root in sorted(engine.mounted_volumes(extra=self._network_roots())):
             found = engine.read_disk_id(root)
             if found and found not in roots:
                 roots[found] = root
@@ -5525,7 +5559,8 @@ class MainWindow(QMainWindow):
                 return None
             return s.bytes_done, s.files_done, s.moves_done, s.deletes_done, s.scrub_files
 
-        root = job.meta_root if engine.volume_present(job.dst) else None
+        # el latido mantiene despierto un disco USB; a una carpeta de red no le hace falta
+        root = job.meta_root if not job.network and engine.volume_present(job.dst) else None
         self.guard.start(_("{app_name}: copia de seguridad en curso ({src} → {dst})").format(app_name=APP_NAME, src=job.src, dst=job.dst), root, activity)
         if IS_WIN:
             keepawake.block_shutdown(int(self.winId()),

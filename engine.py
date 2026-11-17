@@ -59,6 +59,7 @@ IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TMP_SUFFIX = ".bkpart"
 CHUNK = 4 * 1024 * 1024
+_SECTOR = 4096  # alineación de las lecturas sin caché
 # Los archivos grandes se copian de uno en uno: en un disco mecánico varias
 # escrituras grandes a la vez solo provocan saltos del cabezal.
 BIG_FILE = 64 * 1024 * 1024
@@ -122,10 +123,16 @@ def is_link(entry: os.DirEntry) -> bool:
     return bool(is_junction and is_junction())
 
 
+def is_unc(path: str) -> bool:
+    """¿Ruta de red de Windows («\\\\servidor\\recurso\\...»)?"""
+    return IS_WIN and path.startswith(("\\\\", "//")) and not path.startswith("\\\\?\\")
+
+
 def volume_root(path: str) -> str:
-    """Raíz de la unidad que contiene la ruta: «E:\\» en Windows, «/Volumes/X» en macOS."""
+    """Raíz de la unidad que contiene la ruta: «E:\\» o «\\\\servidor\\recurso\\» en Windows,
+    «/Volumes/X» en macOS."""
     if IS_WIN:
-        return os.path.splitdrive(os.path.abspath(path))[0] + "\\"
+        return os.path.splitdrive(os.path.abspath(path))[0].rstrip("\\/") + "\\"
     p = os.path.abspath(path)
     while not os.path.ismount(p):
         parent = os.path.dirname(p)
@@ -148,16 +155,119 @@ def volume_present(path: str) -> bool:
     llenaría el disco del sistema, así que se exige que sea un punto de montaje.
     """
     if IS_WIN:
-        return os.path.exists(volume_root(path))
+        root = volume_root(path)
+        host = network_host(root)
+        if host is not None and not host_reachable(host):
+            return False
+        return os.path.exists(root)
     parts = os.path.abspath(path).split(os.sep)
     if len(parts) > 2 and parts[1] in ("Volumes", "media", "mnt"):
         top = os.sep.join(parts[:3 if parts[1] != "media" else 4])
+        host = network_host(top)
+        if host is not None and not host_reachable(host):
+            return False
         return os.path.ismount(top)
     return True
 
 
 def vol_name(root: str) -> str:
+    if is_unc(root):
+        return root.rstrip("\\/")
     return root[:2] if IS_WIN else (os.path.basename(root.rstrip("/")) or root)
+
+
+# ── carpetas de red (SMB) ───────────────────────────────────────────────────
+#
+# Un destino puede ser una carpeta compartida de otro equipo de la red: «\\nube\Copias» o una
+# unidad conectada («Z:») en Windows, o un recurso montado en /Volumes en macOS. Para el motor es
+# un disco más; la diferencia es que, si el servidor está apagado, mirar la ruta puede dejar el
+# programa esperando 20-60 s. Por eso antes de tocarla se comprueba con una conexión TCP de un
+# segundo que el servidor responde.
+
+NET_FS = {"SMBFS", "CIFS", "SMB3", "SMB2", "NFS", "NFS4", "AFPFS", "WEBDAV"}
+SMB_PORT = 445
+_NET_PROBE_TIMEOUT = 1.0
+_NET_CACHE_S = 3.0
+_net_cache: dict[str, tuple[float, bool]] = {}
+_net_lock = threading.Lock()
+_host_cache: dict[str, tuple[float, str | None]] = {}
+
+if IS_WIN:
+    _GetDriveTypeW = ctypes.WinDLL("kernel32").GetDriveTypeW
+    _GetDriveTypeW.argtypes = [ctypes.c_wchar_p]
+    _GetDriveTypeW.restype = ctypes.c_uint
+    DRIVE_REMOTE = 4
+    try:
+        _WNetGetConnectionW = ctypes.WinDLL("mpr").WNetGetConnectionW
+        _WNetGetConnectionW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_ulong)]
+        _WNetGetConnectionW.restype = ctypes.c_ulong
+    except OSError:  # pragma: no cover - mpr.dll está en todos los Windows de escritorio
+        _WNetGetConnectionW = None
+
+
+def _unc_host(unc: str) -> str:
+    return unc.replace("/", "\\").lstrip("\\").split("\\", 1)[0]
+
+
+def network_host(root: str) -> str | None:
+    """Servidor del que cuelga la unidad, o None si es un disco local."""
+    now = time.monotonic()
+    hit = _host_cache.get(root)
+    if hit and now - hit[0] < 60:
+        return hit[1]
+    host = None
+    if IS_WIN:
+        if is_unc(root):
+            host = _unc_host(root)
+        elif len(root) >= 2 and root[1] == ":" and _GetDriveTypeW(root[:2] + "\\") == DRIVE_REMOTE:
+            host = ""  # unidad de red; si no se sabe el servidor, se mira la ruta sin comprobarlo
+            if _WNetGetConnectionW is not None:
+                buf = ctypes.create_unicode_buffer(1024)
+                size = ctypes.c_ulong(len(buf))
+                if _WNetGetConnectionW(root[:2], buf, ctypes.byref(size)) == 0:
+                    host = _unc_host(buf.value)
+    else:
+        line = _unix_mount_line(root)
+        if line and _unix_fs_type(root).upper() in NET_FS:
+            # macOS: «//usuario@nube._smb._tcp.local/Copias on /Volumes/Copias (smbfs, …)»
+            src = line.split(" on ", 1)[0]
+            host = src.lstrip("/").split("/", 1)[0].rsplit("@", 1)[-1].split(":", 1)[0]
+            if host.endswith("._smb._tcp.local"):
+                host = host[:-len("._smb._tcp.local")] + ".local"
+    _host_cache[root] = (now, host)
+    return host
+
+
+def is_network(path: str) -> bool:
+    return network_host(volume_root(path)) is not None
+
+
+def host_reachable(host: str, port: int = SMB_PORT) -> bool:
+    """¿Responde el servidor? Conexión TCP de como mucho un segundo; el resultado vale 3 s."""
+    if not host:
+        return True
+    import socket
+    now = time.monotonic()
+    with _net_lock:
+        hit = _net_cache.get(host)
+        if hit and now - hit[0] < _NET_CACHE_S:
+            return hit[1]
+    ok = False
+    try:
+        for family, kind, proto, _canon, addr in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
+            try:
+                with socket.socket(family, kind, proto) as sock:
+                    sock.settimeout(_NET_PROBE_TIMEOUT)
+                    sock.connect(addr)
+                    ok = True
+                    break
+            except OSError:
+                continue
+    except OSError:  # nombre que no se resuelve
+        ok = False
+    with _net_lock:
+        _net_cache[host] = (time.monotonic(), ok)
+    return ok
 
 
 class _Cancelled(Exception):
@@ -211,18 +321,26 @@ else:
     PROGRESS_CONTINUE, PROGRESS_CANCEL = 0, 1
 
 
-def _unix_fs_type(root: str) -> str:
-    """Sistema de archivos de un punto de montaje según «mount» (apfs, exfat, msdos, hfs…)."""
+def _unix_mount_line(root: str) -> str:
+    """Línea de «mount» del punto de montaje, o "" si no lo es."""
     try:
         out = subprocess.run(["mount"], capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.SubprocessError):
         return ""
     for line in out.splitlines():
-        # macOS: «/dev/disk4s1 on /Volumes/X (exfat, local, …)»; Linux: «… on /media/x type vfat (…)»
-        if f" on {root} (" in line:
-            return line.split(f" on {root} (", 1)[1].split(",")[0].strip()
-        if f" on {root} type " in line:
-            return line.split(f" on {root} type ", 1)[1].split()[0]
+        if f" on {root} (" in line or f" on {root} type " in line:
+            return line
+    return ""
+
+
+def _unix_fs_type(root: str) -> str:
+    """Sistema de archivos de un punto de montaje según «mount» (apfs, exfat, msdos, smbfs…)."""
+    line = _unix_mount_line(root)
+    # macOS: «/dev/disk4s1 on /Volumes/X (exfat, local, …)»; Linux: «… on /media/x type vfat (…)»
+    if f" on {root} (" in line:
+        return line.split(f" on {root} (", 1)[1].split(",")[0].strip()
+    if f" on {root} type " in line:
+        return line.split(f" on {root} type ", 1)[1].split()[0]
     return ""
 
 
@@ -242,18 +360,39 @@ def volume_info(root: str) -> tuple[str, int, str]:
     return label.value, serial.value, fs.value
 
 
-def mounted_volumes() -> set[str]:
-    """Unidades conectadas: {"C:\\", "E:\\"} en Windows, {"/Volumes/X"} en macOS."""
+def mounted_volumes(network: bool = True, extra=()) -> set[str]:
+    """Unidades conectadas: {"C:\\", "E:\\"} en Windows, {"/Volumes/X"} en macOS.
+
+    Las de red solo cuentan si su servidor responde (con network=False no se miran: así no se
+    espera a la red). extra: raíces de carpetas de red («\\\\nube\\Copias\\») que también hay
+    que comprobar, porque no tienen letra de unidad.
+    """
     if IS_WIN:
         mask = _GetLogicalDrives()
-        return {f"{chr(65 + i)}:\\" for i in range(26) if mask & (1 << i)}
+        found = set()
+        for i in range(26):
+            if not mask & (1 << i):
+                continue
+            root = f"{chr(65 + i)}:\\"
+            if network_host(root) is None:
+                found.add(root)
+            elif network and volume_present(root):
+                found.add(root)
+        if network:
+            found |= {r for r in extra if volume_present(r)}
+        return found
     bases = ["/Volumes"] if IS_MAC else [f"/media/{os.environ.get('USER', '')}", "/media", "/mnt"]
     found = set()
     for base in bases:
         try:
             for name in os.listdir(base):
                 p = os.path.join(base, name)
-                if os.path.ismount(p) and not os.path.islink(p):
+                if os.path.islink(p):
+                    continue
+                host = network_host(p)
+                if host is not None and not (network and host_reachable(host)):
+                    continue  # un recurso de red caído puede colgar ismount
+                if os.path.ismount(p):
                     found.add(p)
         except OSError:
             pass
@@ -292,18 +431,35 @@ def file_digest(path: str, rb: ReadBuffer, uncached: bool = False, stop: threadi
         handle = _CreateFileW(lp(path), 0x80000000, 0x7, None, 3, flags, None)
         if handle is None or handle == INVALID_HANDLE:
             raise ctypes.WinError(ctypes.get_last_error())
+        # Por SMB, una lectura sin caché que pasa del final del archivo da «parámetro incorrecto»
+        # (87); en un disco local devuelve lo que queda. En red se lee sin caché solo la parte
+        # múltiplo de 4 KB y la cola, más corta, se lee normal.
+        remaining = os.stat(lp(path)).st_size if uncached and is_network(path) else -1
+        offset = 0
         try:
             got = wintypes.DWORD()
             while True:
                 if stop is not None and stop.is_set():
                     raise _Cancelled
-                if not _ReadFile(handle, rb.addr, rb.size, ctypes.byref(got), None):
+                want = rb.size
+                if remaining >= 0:
+                    want = min(rb.size, remaining // _SECTOR * _SECTOR)
+                    if not want:
+                        break
+                if not _ReadFile(handle, rb.addr, want, ctypes.byref(got), None):
                     raise ctypes.WinError(ctypes.get_last_error())
                 if not got.value:
                     break
                 h.update(rb.view[:got.value])
+                offset += got.value
+                if remaining >= 0:
+                    remaining -= got.value
         finally:
             _CloseHandle(handle)
+        if remaining > 0:
+            with open(lp(path), "rb", buffering=0) as fh:
+                fh.seek(offset)
+                h.update(fh.read())
         return h.digest()
     with open(path, "rb", buffering=0) as fh:
         if uncached and IS_MAC:
@@ -686,7 +842,11 @@ class BackupJob:
         self.scrub_seconds = scrub_seconds  # 0 = no revisar, -1 = sin límite de tiempo
 
         fs = volume_info(volume_root(self.dst))[2].upper()
+        self.network = is_network(self.dst)
         self.tolerance_ns = TOLERANCE_NS.get(fs, 0)
+        if self.network:
+            # cada servidor guarda la fecha con su propia precisión (y no siempre dice cuál)
+            self.tolerance_ns = max(self.tolerance_ns, 2 * 10**9)
         self.fat = fs in FAT_FAMILY
 
         self.stats = Stats()

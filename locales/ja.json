@@ -603,6 +603,8 @@
   "actualización automática no disponible en este sistema": "このシステムでは自動アップデートを利用できません",
   "pico {speed}": "ピーク {speed}",
   "terminado": "完了",
-  "{size} copiados": "{size} コピー済み"
+  "{size} copiados": "{size} コピー済み",
+  "Servidor de red no disponible": "ネットワークサーバーに接続できません",
+  "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.": "ネットワークフォルダー {dst} に接続できません。サーバーの電源が入っていて、同じネットワークにあるか確認してください。"
  }
 }
