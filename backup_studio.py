@@ -53,7 +53,7 @@ import updater
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.9.1"
+APP_VERSION = "1.9.2"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"

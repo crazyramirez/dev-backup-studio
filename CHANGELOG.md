@@ -1,5 +1,12 @@
 # Novedades
 
+## 1.9.2
+
+- **Marcar todo y Desmarcar todo** en *Qué se copia*, en lugar de *Restablecer*. Sin selección
+  actúan sobre todo el árbol; con carpetas seleccionadas (Ctrl o Mayús + clic) solo sobre ellas y lo
+  que tienen dentro, y el botón lo dice («Marcar 2 seleccionadas»). Se desactivan cuando no hay nada
+  que hacer. Las carpetas excluidas por regla no cambian.
+
 ## 1.9.1
 
 - Corregido: el diálogo *Conectar con mi nube* no se podía cerrar ni terminar la conexión («native
