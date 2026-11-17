@@ -248,8 +248,6 @@
   "Carpetas": "フォルダー",
   "Cambios": "変更",
   "Progreso": "進行状況",
-  "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas.": "コピーしないフォルダーのチェックを外してください。展開すると個別のサブフォルダーを選べます。",
-  "Restablecer": "リセット",
   "Volver a leer las carpetas del origen": "コピー元のフォルダーを再読み込み",
   "Todos": "すべて",
   "Buscar ruta…": "パスを検索…",
@@ -623,6 +621,21 @@
   "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "ウェブに表示されるコードで、家庭内ネットワークの Personal Cloud Storage にバックアップを保存します。パスワードは不要です。",
   "Espera a que termine la copia en curso.": "実行中のバックアップが終わるまでお待ちください。",
   "Conectado. Las copias se guardarán en {path}.": "接続しました。バックアップは {path} に保存されます。",
-  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "コードは正しいですが、ネットワークフォルダーを開けませんでした。「接続」を押して再試行してください。新しいコードは不要です。"
+  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "コードは正しいですが、ネットワークフォルダーを開けませんでした。「接続」を押して再試行してください。新しいコードは不要です。",
+  "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas, o selecciona varias (Ctrl o Mayús + clic) para marcarlas o desmarcarlas a la vez.": "コピーしないフォルダーのチェックを外します。展開して特定のサブフォルダーを選ぶか、複数を選択（Ctrl または Shift + クリック）してまとめてチェック・解除できます。",
+  "Marcar {n} seleccionada": [
+   "選択した {n} 件をチェック",
+   "選択した {n} 件をチェック"
+  ],
+  "Desmarcar {n} seleccionada": [
+   "選択した {n} 件のチェックを外す",
+   "選択した {n} 件のチェックを外す"
+  ],
+  "Incluye las carpetas seleccionadas y todo lo que tienen dentro.": "選択したフォルダーと、その中のすべてを含めます。",
+  "Excluye las carpetas seleccionadas y todo lo que tienen dentro.": "選択したフォルダーと、その中のすべてを除外します。",
+  "Marcar todo": "すべてチェック",
+  "Desmarcar todo": "すべて解除",
+  "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).": "すべてのフォルダーを含めます（手動の除外を解除。ルールはそのまま）。",
+  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "すべてのフォルダーを除外します。コピー元のルートにあるファイルは引き続きコピーされます。"
  }
 }

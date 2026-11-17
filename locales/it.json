@@ -252,8 +252,6 @@
   "Carpetas": "Cartelle",
   "Cambios": "Modifiche",
   "Progreso": "Avanzamento",
-  "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas.": "Deseleziona le cartelle che non vuoi copiare. Espandi per scegliere sottocartelle specifiche.",
-  "Restablecer": "Ripristina",
   "Volver a leer las carpetas del origen": "Rileggi le cartelle dell'origine",
   "Todos": "Tutti",
   "Buscar ruta…": "Cerca percorso…",
@@ -641,6 +639,21 @@
   "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "Salva i backup in Personal Cloud Storage, nella rete di casa, con il codice che ti dà il suo sito. Senza password.",
   "Espera a que termine la copia en curso.": "Attendi che finisca il backup in corso.",
   "Conectado. Las copias se guardarán en {path}.": "Connesso. I backup verranno salvati in {path}.",
-  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "Il codice è corretto, ma non è stato possibile aprire la cartella di rete. Premi «Connetti» per riprovare: non serve un altro codice."
+  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "Il codice è corretto, ma non è stato possibile aprire la cartella di rete. Premi «Connetti» per riprovare: non serve un altro codice.",
+  "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas, o selecciona varias (Ctrl o Mayús + clic) para marcarlas o desmarcarlas a la vez.": "Deseleziona le cartelle che non vuoi copiare. Espandi per scegliere sottocartelle specifiche, oppure selezionane più di una (Ctrl o Maiusc + clic) per selezionarle o deselezionarle insieme.",
+  "Marcar {n} seleccionada": [
+   "Seleziona {n} scelta",
+   "Seleziona {n} scelte"
+  ],
+  "Desmarcar {n} seleccionada": [
+   "Deseleziona {n} scelta",
+   "Deseleziona {n} scelte"
+  ],
+  "Incluye las carpetas seleccionadas y todo lo que tienen dentro.": "Include le cartelle scelte e tutto ciò che contengono.",
+  "Excluye las carpetas seleccionadas y todo lo que tienen dentro.": "Esclude le cartelle scelte e tutto ciò che contengono.",
+  "Marcar todo": "Seleziona tutto",
+  "Desmarcar todo": "Deseleziona tutto",
+  "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).": "Include tutte le cartelle (toglie le esclusioni manuali; le regole restano).",
+  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Esclude tutte le cartelle. I file sciolti nella radice dell’origine vengono comunque copiati."
  }
 }

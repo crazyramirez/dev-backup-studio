@@ -1144,6 +1144,8 @@ class FolderTree(QTreeWidget):
         self.setAnimated(True)
         self.setIndentation(20)
         self.setIconSize(QSize(16, 16))
+        # varias a la vez con Ctrl o Mayús: «Marcar» y «Desmarcar» actúan solo sobre la selección
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         hdr = self.header()
         hdr.setStretchLastSection(False)
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -1176,6 +1178,50 @@ class FolderTree(QTreeWidget):
 
     def reset(self) -> None:
         self.excluded.clear()
+        self.refresh()
+        self.changed.emit()
+
+    # ── marcar y desmarcar en bloque ──
+
+    def _under(self, key: str, rel: str) -> bool:
+        return key == rel or key.startswith(rel + os.sep)
+
+    def scope(self) -> list[QTreeWidgetItem]:
+        """Carpetas seleccionadas que se pueden marcar (sin las que ya cuelgan de otra seleccionada)."""
+        picked = [(it, engine.norm_rel(it.data(0, self.REL))) for it in self.selectedItems()
+                  if it.flags() & Qt.ItemFlag.ItemIsUserCheckable]
+        return [it for it, rel in picked if not any(o != rel and self._under(rel, o) for _it, o in picked)]
+
+    def can_check(self, items: list[QTreeWidgetItem]) -> bool:
+        """¿Queda algo desmarcado (la carpeta o algo dentro)?"""
+        if not items:
+            return bool(self.excluded)
+        rels = [engine.norm_rel(it.data(0, self.REL)) for it in items]
+        return any(self._under(k, r) for k in self.excluded for r in rels)
+
+    def can_uncheck(self, items: list[QTreeWidgetItem]) -> bool:
+        """¿Queda alguna marcada?"""
+        if not items:
+            root = self.invisibleRootItem()
+            items = [root.child(i) for i in range(root.childCount())
+                     if root.child(i).flags() & Qt.ItemFlag.ItemIsUserCheckable]
+        return any(it.checkState(0) == Qt.CheckState.Checked for it in items)
+
+    def set_checked(self, items: list[QTreeWidgetItem], checked: bool) -> None:
+        """Marca o desmarca esas carpetas con todo lo que tienen dentro; sin ninguna, el árbol entero."""
+        if not items:
+            root = self.invisibleRootItem()
+            items = [root.child(i) for i in range(root.childCount())
+                     if root.child(i).flags() & Qt.ItemFlag.ItemIsUserCheckable]
+            if checked:
+                self.excluded.clear()
+                items = []
+        for it in items:
+            rel = engine.norm_rel(it.data(0, self.REL))
+            # lo de dentro sigue a la carpeta: no quedan exclusiones sueltas debajo
+            self.excluded -= {k for k in self.excluded if self._under(k, rel)}
+            if not checked:
+                self.excluded.add(rel)
         self.refresh()
         self.changed.emit()
 
@@ -3851,26 +3897,33 @@ class MainWindow(QMainWindow):
         h.setContentsMargins(16, 10, 10, 10)
         h.setSpacing(10)
         h.addWidget(glyph_label(G.INFO, C["accent2"], 16))
-        msg = QLabel(_("Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas."))
+        msg = QLabel(_("Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas, o "
+                       "selecciona varias (Ctrl o Mayús + clic) para marcarlas o desmarcarlas a la vez."))
         msg.setObjectName("muted")
         msg.setWordWrap(True)
         h.addWidget(msg, 1)
         self.excl_count = QLabel("")
         self.excl_count.setObjectName("faint")
         h.addWidget(self.excl_count)
-        reset = QPushButton(_("Restablecer"))
-        reset.clicked.connect(self._reset_exclusions)
+        self.b_check_all = QPushButton()
+        self.b_uncheck_all = QPushButton()
+        for b, on in ((self.b_check_all, True), (self.b_uncheck_all, False)):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _c=False, on=on: self._check_scope(on))
         reload_btn = QPushButton()
         reload_btn.setObjectName("icon")
         reload_btn.setIcon(glyph_icon(G.REFRESH, C["text"], 14))
         reload_btn.setFixedSize(38, 34)
         reload_btn.setToolTip(_("Volver a leer las carpetas del origen"))
         reload_btn.clicked.connect(self._load_tree)
-        h.addWidget(reset)
+        h.addWidget(self.b_check_all)
+        h.addWidget(self.b_uncheck_all)
         h.addWidget(reload_btn)
         v.addWidget(bar)
         self.tree = FolderTree()
         self.tree.changed.connect(self._on_tree_changed)
+        self.tree.itemSelectionChanged.connect(self._update_check_buttons)
+        self._update_check_buttons()
         v.addWidget(self.tree, 1)
         return page
 
@@ -4521,10 +4574,33 @@ class MainWindow(QMainWindow):
     def _on_tree_changed(self):
         n = len(self.tree.excluded)
         self.excl_count.setText(_n("{n} excluida a mano", "{n} excluidas a mano", n).format(n=n) if n else "")
+        self._update_check_buttons()
         self._invalidate_plan()
 
     def _reset_exclusions(self):
         self.tree.reset()
+
+    def _check_scope(self, checked: bool):
+        self.tree.set_checked(self.tree.scope(), checked)
+
+    def _update_check_buttons(self):
+        """Los botones dicen sobre qué actúan (todo o la selección) y se apagan si no hay nada que hacer."""
+        items = self.tree.scope()
+        n = len(items)
+        if n:
+            self.b_check_all.setText(_n("Marcar {n} seleccionada", "Marcar {n} seleccionadas", n).format(n=n))
+            self.b_uncheck_all.setText(_n("Desmarcar {n} seleccionada", "Desmarcar {n} seleccionadas", n).format(n=n))
+            tip_on = _("Incluye las carpetas seleccionadas y todo lo que tienen dentro.")
+            tip_off = _("Excluye las carpetas seleccionadas y todo lo que tienen dentro.")
+        else:
+            self.b_check_all.setText(_("Marcar todo"))
+            self.b_uncheck_all.setText(_("Desmarcar todo"))
+            tip_on = _("Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).")
+            tip_off = _("Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.")
+        self.b_check_all.setToolTip(tip_on)
+        self.b_uncheck_all.setToolTip(tip_off)
+        self.b_check_all.setEnabled(self.tree.can_check(items))
+        self.b_uncheck_all.setEnabled(self.tree.can_uncheck(items))
 
     def _on_mode_changed(self):
         self.mode_hint.setText(MODE_HINTS[self.mode_combo.currentData()])

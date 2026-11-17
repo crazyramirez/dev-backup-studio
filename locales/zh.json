@@ -248,8 +248,6 @@
   "Carpetas": "文件夹",
   "Cambios": "更改",
   "Progreso": "进度",
-  "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas.": "取消勾选不想备份的文件夹。展开可选择具体的子文件夹。",
-  "Restablecer": "重置",
   "Volver a leer las carpetas del origen": "重新读取源文件夹",
   "Todos": "全部",
   "Buscar ruta…": "搜索路径…",
@@ -623,6 +621,21 @@
   "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "用其网页给出的代码，把备份保存到家庭网络中的 Personal Cloud Storage。无需密码。",
   "Espera a que termine la copia en curso.": "请等待当前备份完成。",
   "Conectado. Las copias se guardarán en {path}.": "已连接。备份将保存到 {path}。",
-  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "代码正确，但无法打开网络文件夹。点击“连接”重试，无需新代码。"
+  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "代码正确，但无法打开网络文件夹。点击“连接”重试，无需新代码。",
+  "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas, o selecciona varias (Ctrl o Mayús + clic) para marcarlas o desmarcarlas a la vez.": "取消勾选不想复制的文件夹。展开可选择具体的子文件夹，或选中多个（Ctrl 或 Shift + 单击）一次性勾选或取消勾选。",
+  "Marcar {n} seleccionada": [
+   "勾选选中的 {n} 个",
+   "勾选选中的 {n} 个"
+  ],
+  "Desmarcar {n} seleccionada": [
+   "取消勾选选中的 {n} 个",
+   "取消勾选选中的 {n} 个"
+  ],
+  "Incluye las carpetas seleccionadas y todo lo que tienen dentro.": "包含选中的文件夹及其中的所有内容。",
+  "Excluye las carpetas seleccionadas y todo lo que tienen dentro.": "排除选中的文件夹及其中的所有内容。",
+  "Marcar todo": "全部勾选",
+  "Desmarcar todo": "全部取消勾选",
+  "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).": "包含所有文件夹（移除手动排除；规则保留）。",
+  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "排除所有文件夹。源根目录下的单独文件仍会复制。"
  }
 }

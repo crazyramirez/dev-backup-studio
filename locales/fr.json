@@ -252,8 +252,6 @@
   "Carpetas": "Dossiers",
   "Cambios": "Changements",
   "Progreso": "Progression",
-  "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas.": "Décochez les dossiers à ne pas copier. Dépliez pour choisir des sous-dossiers précis.",
-  "Restablecer": "Réinitialiser",
   "Volver a leer las carpetas del origen": "Relire les dossiers de la source",
   "Todos": "Tous",
   "Buscar ruta…": "Chercher un chemin…",
@@ -641,6 +639,21 @@
   "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "Gardez vos sauvegardes dans Personal Cloud Storage, sur votre réseau domestique, avec le code donné par son site. Sans mot de passe.",
   "Espera a que termine la copia en curso.": "Attendez la fin de la sauvegarde en cours.",
   "Conectado. Las copias se guardarán en {path}.": "Connecté. Les sauvegardes seront enregistrées dans {path}.",
-  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "Le code est correct, mais le dossier réseau n’a pas pu être ouvert. Cliquez sur « Connecter » pour réessayer : pas besoin d’un nouveau code."
+  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "Le code est correct, mais le dossier réseau n’a pas pu être ouvert. Cliquez sur « Connecter » pour réessayer : pas besoin d’un nouveau code.",
+  "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas, o selecciona varias (Ctrl o Mayús + clic) para marcarlas o desmarcarlas a la vez.": "Décochez les dossiers que vous ne voulez pas copier. Développez pour choisir des sous-dossiers précis, ou sélectionnez-en plusieurs (Ctrl ou Maj + clic) pour les cocher ou décocher d’un coup.",
+  "Marcar {n} seleccionada": [
+   "Cocher {n} sélectionné",
+   "Cocher {n} sélectionnés"
+  ],
+  "Desmarcar {n} seleccionada": [
+   "Décocher {n} sélectionné",
+   "Décocher {n} sélectionnés"
+  ],
+  "Incluye las carpetas seleccionadas y todo lo que tienen dentro.": "Inclut les dossiers sélectionnés et tout leur contenu.",
+  "Excluye las carpetas seleccionadas y todo lo que tienen dentro.": "Exclut les dossiers sélectionnés et tout leur contenu.",
+  "Marcar todo": "Tout cocher",
+  "Desmarcar todo": "Tout décocher",
+  "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).": "Inclut tous les dossiers (retire les exclusions manuelles ; les règles restent).",
+  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Exclut tous les dossiers. Les fichiers isolés à la racine de la source sont toujours copiés."
  }
 }

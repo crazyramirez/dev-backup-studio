@@ -38,304 +38,304 @@
  {
   "id": "Regla «{rule}»",
   "where": [
-   "backup_studio.py:1222"
+   "backup_studio.py:1268"
   ],
   "code": "status, color = _(\"Regla «{rule}»\").format(rule=rule), C[\"warn\"]"
  },
  {
   "id": "Excluida",
   "where": [
-   "backup_studio.py:1226"
+   "backup_studio.py:1272"
   ],
   "code": "status, color = (_(\"Excluida\"), C[\"err\"]) if manual else (\"\", C[\"text\"])"
  },
  {
   "id": "Plegar o desplegar",
   "where": [
-   "backup_studio.py:1422"
+   "backup_studio.py:1468"
   ],
   "code": "self.head.setToolTip(_(\"Plegar o desplegar\"))"
  },
  {
   "id": "Elegir carpeta…",
   "where": [
-   "backup_studio.py:1541"
+   "backup_studio.py:1587"
   ],
   "code": "self.btn.setToolTip(_(\"Elegir carpeta…\"))"
  },
  {
   "id": "Sin carpeta",
   "where": [
-   "backup_studio.py:1579"
+   "backup_studio.py:1625"
   ],
   "code": "self.info.setText(_(\"Sin carpeta\"))"
  },
  {
   "id": "Servidor de red no disponible",
   "where": [
-   "backup_studio.py:1588"
+   "backup_studio.py:1634"
   ],
   "code": "self.info.setText(_(\"Servidor de red no disponible\") if engine.is_network(path) else _(\"Unidad no conectada\"))"
  },
  {
   "id": "Unidad no conectada",
   "where": [
-   "backup_studio.py:1588"
+   "backup_studio.py:1634"
   ],
   "code": "self.info.setText(_(\"Servidor de red no disponible\") if engine.is_network(path) else _(\"Unidad no conectada\"))"
  },
  {
   "id": "se creará",
   "where": [
-   "backup_studio.py:1592"
+   "backup_studio.py:1638"
   ],
   "code": "note = \"\" if os.path.isdir(path) else (\"  ·  \" + _(\"se creará\"))"
  },
  {
   "id": "{root}  ·  {free} libres de {total}{note}",
   "where": [
-   "backup_studio.py:1593"
+   "backup_studio.py:1639"
   ],
   "code": "self.info.setText(_(\"{root}  ·  {free} libres de {total}{note}\").format(root=engine.vol_name(root), free=fmt_bytes(du.free), total=fmt_bytes(du.total), note=note))"
  },
  {
   "id": "Listo",
   "where": [
-   "backup_studio.py:1599"
+   "backup_studio.py:1645"
   ],
   "code": "\"idle\": (_(\"Listo\"), C[\"muted\"]), \"ready\": (_(\"Análisis listo\"), C[\"accent2\"]),"
  },
  {
   "id": "Análisis listo",
   "where": [
-   "backup_studio.py:1599"
+   "backup_studio.py:1645"
   ],
   "code": "\"idle\": (_(\"Listo\"), C[\"muted\"]), \"ready\": (_(\"Análisis listo\"), C[\"accent2\"]),"
  },
  {
   "id": "Analizando",
   "where": [
-   "backup_studio.py:1600"
+   "backup_studio.py:1646"
   ],
   "code": "\"scanning\": (_(\"Analizando\"), C[\"accent2\"]), \"copying\": (_(\"Sincronizando\"), C[\"accent\"]),"
  },
  {
   "id": "Sincronizando",
   "where": [
-   "backup_studio.py:1600",
-   "backup_studio.py:5007"
+   "backup_studio.py:1646",
+   "backup_studio.py:5084"
   ],
   "code": "\"scanning\": (_(\"Analizando\"), C[\"accent2\"]), \"copying\": (_(\"Sincronizando\"), C[\"accent\"]),"
  },
  {
   "id": "En pausa",
   "where": [
-   "backup_studio.py:1601",
-   "backup_studio.py:4755",
-   "backup_studio.py:5007"
+   "backup_studio.py:1647",
+   "backup_studio.py:4832",
+   "backup_studio.py:5084"
   ],
   "code": "\"paused\": (_(\"En pausa\"), C[\"warn\"]), \"done\": (_(\"Al día\"), C[\"ok\"]),"
  },
  {
   "id": "Al día",
   "where": [
-   "backup_studio.py:1601",
-   "backup_studio.py:5096",
-   "backup_studio.py:5172"
+   "backup_studio.py:1647",
+   "backup_studio.py:5173",
+   "backup_studio.py:5249"
   ],
   "code": "\"paused\": (_(\"En pausa\"), C[\"warn\"]), \"done\": (_(\"Al día\"), C[\"ok\"]),"
  },
  {
   "id": "Cancelado",
   "where": [
-   "backup_studio.py:1602",
-   "backup_studio.py:5172"
+   "backup_studio.py:1648",
+   "backup_studio.py:5249"
   ],
   "code": "\"cancelled\": (_(\"Cancelado\"), C[\"warn\"]), \"failed\": (_(\"Error\"), C[\"err\"]),"
  },
  {
   "id": "Error",
   "where": [
-   "backup_studio.py:1602"
+   "backup_studio.py:1648"
   ],
   "code": "\"cancelled\": (_(\"Cancelado\"), C[\"warn\"]), \"failed\": (_(\"Error\"), C[\"err\"]),"
  },
  {
   "id": "30 días",
   "where": [
-   "backup_studio.py:1607"
+   "backup_studio.py:1653"
   ],
   "code": "KEEP_OPTIONS = [(30, _(\"30 días\")), (90, _(\"90 días\")), (365, _(\"1 año\")), (0, _(\"Siempre\"))]"
  },
  {
   "id": "90 días",
   "where": [
-   "backup_studio.py:1607"
+   "backup_studio.py:1653"
   ],
   "code": "KEEP_OPTIONS = [(30, _(\"30 días\")), (90, _(\"90 días\")), (365, _(\"1 año\")), (0, _(\"Siempre\"))]"
  },
  {
   "id": "1 año",
   "where": [
-   "backup_studio.py:1607"
+   "backup_studio.py:1653"
   ],
   "code": "KEEP_OPTIONS = [(30, _(\"30 días\")), (90, _(\"90 días\")), (365, _(\"1 año\")), (0, _(\"Siempre\"))]"
  },
  {
   "id": "Siempre",
   "where": [
-   "backup_studio.py:1607"
+   "backup_studio.py:1653"
   ],
   "code": "KEEP_OPTIONS = [(30, _(\"30 días\")), (90, _(\"90 días\")), (365, _(\"1 año\")), (0, _(\"Siempre\"))]"
  },
  {
   "id": "Preguntar si sincronizar",
   "where": [
-   "backup_studio.py:1608"
+   "backup_studio.py:1654"
   ],
   "code": "CONNECT_ACTIONS = {\"ask\": _(\"Preguntar si sincronizar\"), \"auto\": _(\"Sincronizar sin preguntar\"), \"none\": _(\"Solo avisar\")}"
  },
  {
   "id": "Sincronizar sin preguntar",
   "where": [
-   "backup_studio.py:1608"
+   "backup_studio.py:1654"
   ],
   "code": "CONNECT_ACTIONS = {\"ask\": _(\"Preguntar si sincronizar\"), \"auto\": _(\"Sincronizar sin preguntar\"), \"none\": _(\"Solo avisar\")}"
  },
  {
   "id": "Solo avisar",
   "where": [
-   "backup_studio.py:1608"
+   "backup_studio.py:1654"
   ],
   "code": "CONNECT_ACTIONS = {\"ask\": _(\"Preguntar si sincronizar\"), \"auto\": _(\"Sincronizar sin preguntar\"), \"none\": _(\"Solo avisar\")}"
  },
  {
   "id": "Nuevo",
   "where": [
-   "backup_studio.py:1609"
+   "backup_studio.py:1655"
   ],
   "code": "KIND_INFO = {\"n\": (_(\"Nuevo\"), C[\"ok\"]), \"c\": (_(\"Modificado\"), C[\"accent2\"]),"
  },
  {
   "id": "Modificado",
   "where": [
-   "backup_studio.py:1609"
+   "backup_studio.py:1655"
   ],
   "code": "KIND_INFO = {\"n\": (_(\"Nuevo\"), C[\"ok\"]), \"c\": (_(\"Modificado\"), C[\"accent2\"]),"
  },
  {
   "id": "Movido",
   "where": [
-   "backup_studio.py:1610"
+   "backup_studio.py:1656"
   ],
   "code": "\"m\": (_(\"Movido\"), C[\"accent\"]), \"d\": (_(\"A versiones\"), C[\"warn\"])}"
  },
  {
   "id": "A versiones",
   "where": [
-   "backup_studio.py:1610",
-   "backup_studio.py:1860",
-   "backup_studio.py:3956",
-   "backup_studio.py:3889"
+   "backup_studio.py:1656",
+   "backup_studio.py:1906",
+   "backup_studio.py:4010",
+   "backup_studio.py:3943"
   ],
   "code": "\"m\": (_(\"Movido\"), C[\"accent\"]), \"d\": (_(\"A versiones\"), C[\"warn\"])}"
  },
  {
   "id": "El destino queda idéntico al origen. Lo modificado o borrado no se pierde: la versión anterior se guarda en .devbackup/versiones del disco de copia.",
   "where": [
-   "backup_studio.py:1612"
+   "backup_studio.py:1658"
   ],
   "code": "engine.MODE_MIRROR: _(\"El destino queda idéntico al origen. Lo modificado o borrado no se pierde: la versión \""
  },
  {
   "id": "Copia lo nuevo y lo modificado pero nunca quita nada del destino, aunque lo borres en el origen.",
   "where": [
-   "backup_studio.py:1614"
+   "backup_studio.py:1660"
   ],
   "code": "engine.MODE_UPDATE: _(\"Copia lo nuevo y lo modificado pero nunca quita nada del destino, aunque lo borres en \""
  },
  {
   "id": "Desactivada",
   "where": [
-   "backup_studio.py:1618"
+   "backup_studio.py:1664"
   ],
   "code": "SCRUB_OPTIONS = [(0, _(\"Desactivada\")), (120, _(\"2 min\")), (300, _(\"5 min\")), (900, _(\"15 min\")), (3600, _(\"1 hora\")),"
  },
  {
   "id": "2 min",
   "where": [
-   "backup_studio.py:1618"
+   "backup_studio.py:1664"
   ],
   "code": "SCRUB_OPTIONS = [(0, _(\"Desactivada\")), (120, _(\"2 min\")), (300, _(\"5 min\")), (900, _(\"15 min\")), (3600, _(\"1 hora\")),"
  },
  {
   "id": "5 min",
   "where": [
-   "backup_studio.py:1618"
+   "backup_studio.py:1664"
   ],
   "code": "SCRUB_OPTIONS = [(0, _(\"Desactivada\")), (120, _(\"2 min\")), (300, _(\"5 min\")), (900, _(\"15 min\")), (3600, _(\"1 hora\")),"
  },
  {
   "id": "15 min",
   "where": [
-   "backup_studio.py:1618"
+   "backup_studio.py:1664"
   ],
   "code": "SCRUB_OPTIONS = [(0, _(\"Desactivada\")), (120, _(\"2 min\")), (300, _(\"5 min\")), (900, _(\"15 min\")), (3600, _(\"1 hora\")),"
  },
  {
   "id": "1 hora",
   "where": [
-   "backup_studio.py:1618"
+   "backup_studio.py:1664"
   ],
   "code": "SCRUB_OPTIONS = [(0, _(\"Desactivada\")), (120, _(\"2 min\")), (300, _(\"5 min\")), (900, _(\"15 min\")), (3600, _(\"1 hora\")),"
  },
  {
   "id": "Hasta revisar todo",
   "where": [
-   "backup_studio.py:1619"
+   "backup_studio.py:1665"
   ],
   "code": "(-1, _(\"Hasta revisar todo\"))]"
  },
  {
   "id": "nunca",
   "where": [
-   "backup_studio.py:1629",
-   "backup_studio.py:1633"
+   "backup_studio.py:1675",
+   "backup_studio.py:1679"
   ],
   "code": "return _(\"nunca\")"
  },
  {
   "id": "hace un momento",
   "where": [
-   "backup_studio.py:1635"
+   "backup_studio.py:1681"
   ],
   "code": "return _(\"hace un momento\")"
  },
  {
   "id": "hace {sec} min",
   "where": [
-   "backup_studio.py:1637"
+   "backup_studio.py:1683"
   ],
   "code": "return _(\"hace {sec} min\").format(sec=int(sec // 60))"
  },
  {
   "id": "hace {sec} h",
   "where": [
-   "backup_studio.py:1639"
+   "backup_studio.py:1685"
   ],
   "code": "return _(\"hace {sec} h\").format(sec=int(sec // 3600))"
  },
  {
   "id": "ayer",
   "where": [
-   "backup_studio.py:1641"
+   "backup_studio.py:1687"
   ],
   "code": "return _(\"ayer\") if days == 1 else _n(\"hace {n} día\", \"hace {n} días\", days).format(n=days)"
  },
  {
   "id": "hace {n} día",
   "where": [
-   "backup_studio.py:1641"
+   "backup_studio.py:1687"
   ],
   "code": "return _(\"ayer\") if days == 1 else _n(\"hace {n} día\", \"hace {n} días\", days).format(n=days)",
   "plural": "hace {n} días"
@@ -343,718 +343,718 @@
  {
   "id": "TIPO",
   "where": [
-   "backup_studio.py:1745"
+   "backup_studio.py:1791"
   ],
   "code": "HEAD = [_(\"TIPO\"), _(\"RUTA\"), _(\"TAMAÑO\")]"
  },
  {
   "id": "RUTA",
   "where": [
-   "backup_studio.py:1745",
-   "backup_studio.py:4073"
+   "backup_studio.py:1791",
+   "backup_studio.py:4127"
   ],
   "code": "HEAD = [_(\"TIPO\"), _(\"RUTA\"), _(\"TAMAÑO\")]"
  },
  {
   "id": "TAMAÑO",
   "where": [
-   "backup_studio.py:1745"
+   "backup_studio.py:1791"
   ],
   "code": "HEAD = [_(\"TIPO\"), _(\"RUTA\"), _(\"TAMAÑO\")]"
  },
  {
   "id": "{path}\nantes en: {extra}",
   "where": [
-   "backup_studio.py:1777"
+   "backup_studio.py:1823"
   ],
   "code": "return _(\"{path}\\nantes en: {extra}\").format(path=path, extra=extra) if extra else path"
  },
  {
   "id": "Tu disco de copia está conectado",
   "where": [
-   "backup_studio.py:1836"
+   "backup_studio.py:1882"
   ],
   "code": "self.title = QLabel(_(\"Tu disco de copia está conectado\"))"
  },
  {
   "id": "Disco de copia",
   "where": [
-   "backup_studio.py:1838",
-   "backup_studio.py:3590",
-   "backup_studio.py:4282"
+   "backup_studio.py:1884",
+   "backup_studio.py:3637",
+   "backup_studio.py:4336"
   ],
   "code": "label = engine.volume_info(self.root)[0] or _(\"Disco de copia\")"
  },
  {
   "id": "{label}{where}  ·  última copia {v}  ·  {integrity_text}",
   "where": [
-   "backup_studio.py:1841"
+   "backup_studio.py:1887"
   ],
   "code": "sub = QLabel(_(\"{label}{where}  ·  última copia {v}  ·  {integrity_text}\").format(label=label, where=where, v=fmt_ago(last and last.get('fin')), integrity_text=win.integrity_text()))"
  },
  {
   "id": "Buscando cambios en {path}…",
   "where": [
-   "backup_studio.py:1848"
+   "backup_studio.py:1894"
   ],
   "code": "self.status = QLabel(_(\"Buscando cambios en {path}…\").format(path=win.src_card.path()))"
  },
  {
   "id": "Nuevos",
   "where": [
-   "backup_studio.py:1857",
-   "backup_studio.py:3953",
-   "backup_studio.py:3888",
-   "backup_studio.py:5258"
+   "backup_studio.py:1903",
+   "backup_studio.py:4007",
+   "backup_studio.py:3942",
+   "backup_studio.py:5335"
   ],
   "code": "self.t_new = Tile(_(\"Nuevos\"), G.ADD, C[\"ok\"])"
  },
  {
   "id": "Modificados",
   "where": [
-   "backup_studio.py:1858",
-   "backup_studio.py:3954",
-   "backup_studio.py:3888",
-   "backup_studio.py:5259"
+   "backup_studio.py:1904",
+   "backup_studio.py:4008",
+   "backup_studio.py:3942",
+   "backup_studio.py:5336"
   ],
   "code": "self.t_chg = Tile(_(\"Modificados\"), G.SYNC, C[\"accent2\"])"
  },
  {
   "id": "Movidos",
   "where": [
-   "backup_studio.py:1859",
-   "backup_studio.py:3955",
-   "backup_studio.py:3889"
+   "backup_studio.py:1905",
+   "backup_studio.py:4009",
+   "backup_studio.py:3943"
   ],
   "code": "self.t_mov = Tile(_(\"Movidos\"), G.NEXT, C[\"accent\"])"
  },
  {
   "id": "Ahora no",
   "where": [
-   "backup_studio.py:1874"
+   "backup_studio.py:1920"
   ],
   "code": "self.b_later = QPushButton(_(\"Ahora no\"))"
  },
  {
   "id": "Ver cambios",
   "where": [
-   "backup_studio.py:1875"
+   "backup_studio.py:1921"
   ],
   "code": "self.b_view = QPushButton((\"  \" + _(\"Ver cambios\")))"
  },
  {
   "id": "Sincronizar ahora",
   "where": [
-   "backup_studio.py:1877",
-   "backup_studio.py:3157",
-   "backup_studio.py:4339",
-   "backup_studio.py:5611",
-   "backup_studio.py:5491"
+   "backup_studio.py:1923",
+   "backup_studio.py:3204",
+   "backup_studio.py:4393",
+   "backup_studio.py:5688",
+   "backup_studio.py:5568"
   ],
   "code": "self.b_sync = QPushButton((\"  \" + _(\"Sincronizar ahora\")))"
  },
  {
   "id": "sin recopiar",
   "where": [
-   "backup_studio.py:1902"
+   "backup_studio.py:1948"
   ],
   "code": "self.t_mov.set(fmt_int(s.moved_files), fmt_bytes(s.moved_bytes) + (\" \" + _(\"sin recopiar\")))"
  },
  {
   "id": "borrados del origen",
   "where": [
-   "backup_studio.py:1903"
+   "backup_studio.py:1949"
   ],
   "code": "self.t_del.set(fmt_int(s.del_files), _(\"borrados del origen\"))"
  },
  {
   "id": "Buscando cambios…  {files_found} archivos revisados",
   "where": [
-   "backup_studio.py:1912"
+   "backup_studio.py:1958"
   ],
   "code": "self.status.setText(_(\"Buscando cambios…  {files_found} archivos revisados\").format(files_found=fmt_int(s.files_found)))"
  },
  {
   "id": "Todo está al día",
   "where": [
-   "backup_studio.py:1919"
+   "backup_studio.py:1965"
   ],
   "code": "self.title.setText(_(\"Todo está al día\"))"
  },
  {
   "id": "No hay nada que copiar desde la última vez  ·  {files_found} archivos revisados en {scan_end}",
   "where": [
-   "backup_studio.py:1920"
+   "backup_studio.py:1966"
   ],
   "code": "self.status.setText(_(\"No hay nada que copiar desde la última vez  ·  {files_found} archivos revisados en \""
  },
  {
   "id": "Comprobar integridad",
   "where": [
-   "backup_studio.py:1925"
+   "backup_studio.py:1971"
   ],
   "code": "self.b_sync.setText((\"  \" + _(\"Comprobar integridad\")))"
  },
  {
   "id": "{ops_total} cambios listos  ·  {plan_bytes} por copiar  ·  {skip_files} archivos sin cambios",
   "where": [
-   "backup_studio.py:1934"
+   "backup_studio.py:1980"
   ],
   "code": "self.status.setText(_(\"{ops_total} cambios listos  ·  {plan_bytes} por copiar  ·  {skip_files} archivos sin \""
  },
  {
   "id": "tiempo previsto ≈ {v}",
   "where": [
-   "backup_studio.py:1938"
+   "backup_studio.py:1984"
   ],
   "code": "note += (\"  ·  \" + _(\"tiempo previsto ≈ {v}\").format(v=fmt_human(max(1, eta))))"
  },
  {
   "id": "No se pudo completar el análisis.",
   "where": [
-   "backup_studio.py:1947"
+   "backup_studio.py:1993"
   ],
   "code": "self.status.setText((_(\"No se pudo completar el análisis.\") + \" \") + (job.fatal or \"\"))"
  },
  {
   "id": "Cerrar",
   "where": [
-   "backup_studio.py:1948",
-   "backup_studio.py:1929",
-   "backup_studio.py:1932"
+   "backup_studio.py:1994",
+   "backup_studio.py:1975",
+   "backup_studio.py:1978"
   ],
   "code": "self.b_later.setText(_(\"Cerrar\"))"
  },
  {
   "id": "Conectar con tu nube",
   "where": [
-   "backup_studio.py:1987"
+   "backup_studio.py:2034"
   ],
   "code": "title = QLabel(_(\"Conectar con tu nube\"))"
  },
  {
   "id": "En la web de tu nube abre Ajustes → «Copias de tus ordenadores» y pulsa «Conectar un ordenador». Escribe aquí el código que aparece.",
   "where": [
-   "backup_studio.py:1990"
+   "backup_studio.py:2037"
   ],
   "code": "intro = QLabel(_(\"En la web de tu nube abre Ajustes → «Copias de tus ordenadores» y pulsa «Conectar un \""
  },
  {
   "id": "Nube",
   "where": [
-   "backup_studio.py:1996"
+   "backup_studio.py:2043"
   ],
   "code": "lab_cloud = QLabel(_(\"Nube\"))"
  },
  {
   "id": "Buscando tu nube en la red…",
   "where": [
-   "backup_studio.py:2001"
+   "backup_studio.py:2048"
   ],
   "code": "self.cloud.lineEdit().setPlaceholderText(_(\"Buscando tu nube en la red…\"))"
  },
  {
   "id": "Código",
   "where": [
-   "backup_studio.py:2004"
+   "backup_studio.py:2051"
   ],
   "code": "lab_code = QLabel(_(\"Código\"))"
  },
  {
   "id": "Cancelar",
   "where": [
-   "backup_studio.py:2029",
-   "backup_studio.py:2254",
-   "backup_studio.py:4126",
-   "backup_studio.py:4588"
+   "backup_studio.py:2076",
+   "backup_studio.py:2301",
+   "backup_studio.py:4180",
+   "backup_studio.py:4665"
   ],
   "code": "self.b_cancel = QPushButton(_(\"Cancelar\"))"
  },
  {
   "id": "Conectar",
   "where": [
-   "backup_studio.py:2030"
+   "backup_studio.py:2077"
   ],
   "code": "self.b_go = QPushButton(\"  \" + _(\"Conectar\"))"
  },
  {
   "id": "Dirección de tu nube (p. ej. nube.local)",
   "where": [
-   "backup_studio.py:2067"
+   "backup_studio.py:2114"
   ],
   "code": "self.cloud.lineEdit().setPlaceholderText(_(\"Dirección de tu nube (p. ej. nube.local)\"))"
  },
  {
   "id": "No encuentro tu nube en la red. Escribe su dirección: la que usas en el navegador, sin «https://».",
   "where": [
-   "backup_studio.py:2070"
+   "backup_studio.py:2117"
   ],
   "code": "self.status.setText(_(\"No encuentro tu nube en la red. Escribe su dirección: la que usas en el \""
  },
  {
   "id": "Conectando con {host}…",
   "where": [
-   "backup_studio.py:2086"
+   "backup_studio.py:2133"
   ],
   "code": "self.status.setText(_(\"Conectando con {host}…\").format(host=host))"
  },
  {
   "id": "El código no es correcto o ha caducado. Pide uno nuevo en la web y vuelve a probar.",
   "where": [
-   "backup_studio.py:2109"
+   "backup_studio.py:2156"
   ],
   "code": "\"code\": _(\"El código no es correcto o ha caducado. Pide uno nuevo en la web y vuelve a probar.\"),"
  },
  {
   "id": "No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la misma red.",
   "where": [
-   "backup_studio.py:2110"
+   "backup_studio.py:2157"
   ],
   "code": "\"unreachable\": _(\"No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la \""
  },
  {
   "id": "La carpeta de red no está activada en tu nube.",
   "where": [
-   "backup_studio.py:2112"
+   "backup_studio.py:2159"
   ],
   "code": "\"unavailable\": _(\"La carpeta de red no está activada en tu nube.\"),"
  },
  {
   "id": "Demasiados intentos. Espera unos minutos y vuelve a probar.",
   "where": [
-   "backup_studio.py:2113"
+   "backup_studio.py:2160"
   ],
   "code": "\"busy\": _(\"Demasiados intentos. Espera unos minutos y vuelve a probar.\"),"
  },
  {
   "id": "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.",
   "where": [
-   "backup_studio.py:2114"
+   "backup_studio.py:2161"
   ],
   "code": "\"connect\": _(\"El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para \""
  },
  {
   "id": "Hay una versión nueva: {version}",
   "where": [
-   "backup_studio.py:2168"
+   "backup_studio.py:2215"
   ],
   "code": "title = QLabel(_(\"Hay una versión nueva: {version}\").format(version=rel.version))"
  },
  {
   "id": "publicada {isoformat}",
   "where": [
-   "backup_studio.py:2175"
+   "backup_studio.py:2222"
   ],
   "code": "when = (\"  ·  \" + _(\"publicada {isoformat}\").format(isoformat=fmt_ago(local.replace(tzinfo=None).isoformat())))"
  },
  {
   "id": "Tienes la {current_version}{when}{size}",
   "where": [
-   "backup_studio.py:2179"
+   "backup_studio.py:2226"
   ],
   "code": "sub = QLabel(_(\"Tienes la {current_version}{when}{size}\").format(current_version=CURRENT_VERSION, when=when, size=size))"
  },
  {
   "id": "Sin notas de versión.",
   "where": [
-   "backup_studio.py:2188"
+   "backup_studio.py:2235"
   ],
   "code": "notes.setMarkdown(rel.notes.strip() or _(\"Sin notas de versión.\"))"
  },
  {
   "id": "Omitir esta versión",
   "where": [
-   "backup_studio.py:2201"
+   "backup_studio.py:2248"
   ],
   "code": "self.b_skip = QPushButton(_(\"Omitir esta versión\"))"
  },
  {
   "id": "Más tarde",
   "where": [
-   "backup_studio.py:2205",
-   "backup_studio.py:2281"
+   "backup_studio.py:2252",
+   "backup_studio.py:2328"
   ],
   "code": "self.b_later = QPushButton(_(\"Más tarde\"))"
  },
  {
   "id": "Actualizar ahora",
   "where": [
-   "backup_studio.py:2215"
+   "backup_studio.py:2262"
   ],
   "code": "self.b_go.setText((\"  \" + _(\"Actualizar ahora\")))"
  },
  {
   "id": "se descarga el instalador, se comprueba su SHA-256 y se instala; la app se cierra y vuelve a abrirse sola.",
   "where": [
-   "backup_studio.py:2218"
+   "backup_studio.py:2265"
   ],
   "code": "how = (_(\"se descarga el instalador, se comprueba su SHA-256 y se instala; la app se cierra y vuelve a \""
  },
  {
   "id": "Al actualizar {how} Tus ajustes y copias no se tocan.",
   "where": [
-   "backup_studio.py:2220"
+   "backup_studio.py:2267"
   ],
   "code": "self.status.setText(_(\"Al actualizar {how} Tus ajustes y copias no se tocan.\").format(how=how))"
  },
  {
   "id": "Ver en GitHub",
   "where": [
-   "backup_studio.py:2222"
+   "backup_studio.py:2269"
   ],
   "code": "self.b_go.setText((\"  \" + _(\"Ver en GitHub\")))"
  },
  {
   "id": "Esta copia se ejecuta desde el código: actualízala con «git pull».",
   "where": [
-   "backup_studio.py:2225"
+   "backup_studio.py:2272"
   ],
   "code": "self.status.setText(_(\"Esta copia se ejecuta desde el código: actualízala con «git pull».\")"
  },
  {
   "id": "No hay instalador para este sistema en esta versión.",
   "where": [
-   "backup_studio.py:2226"
+   "backup_studio.py:2273"
   ],
   "code": "if not FROZEN else _(\"No hay instalador para este sistema en esta versión.\"))"
  },
  {
   "id": "Hay una sincronización en marcha: podrás actualizar en cuanto termine.",
   "where": [
-   "backup_studio.py:2240"
+   "backup_studio.py:2287"
   ],
   "code": "self.status.setText(_(\"Hay una sincronización en marcha: podrás actualizar en cuanto termine.\"))"
  },
  {
   "id": "Descargando {asset_name}…",
   "where": [
-   "backup_studio.py:2257"
+   "backup_studio.py:2304"
   ],
   "code": "self.status.setText(_(\"Descargando {asset_name}…\").format(asset_name=self.rel.asset_name))"
  },
  {
   "id": "Descargando {asset_name}…  {done} de {total}",
   "where": [
-   "backup_studio.py:2271"
+   "backup_studio.py:2318"
   ],
   "code": "self.status.setText(_(\"Descargando {asset_name}…  {done} de {total}\").format(asset_name=self.rel.asset_name, done=fmt_bytes(done), total=fmt_bytes(total)))"
  },
  {
   "id": "No se pudo descargar la actualización: {error}",
   "where": [
-   "backup_studio.py:2278"
+   "backup_studio.py:2325"
   ],
   "code": "self.status.setText(_(\"No se pudo descargar la actualización: {error}\").format(error=error))"
  },
  {
   "id": "Descarga comprobada con SHA-256. Instalando: la app se cerrará y volverá a abrirse…",
   "where": [
-   "backup_studio.py:2285"
+   "backup_studio.py:2332"
   ],
   "code": "self.status.setText(_(\"Descarga comprobada con SHA-256. Instalando: la app se cerrará y volverá a abrirse…\"))"
  },
  {
   "id": "No se pudo lanzar el instalador: {exc}",
   "where": [
-   "backup_studio.py:2289"
+   "backup_studio.py:2336"
   ],
   "code": "self.status.setText(_(\"No se pudo lanzar el instalador: {exc}\").format(exc=exc))"
  },
  {
   "id": "la barra de menús",
   "where": [
-   "backup_studio.py:2306"
+   "backup_studio.py:2353"
   ],
   "code": "tray = _(\"la barra de menús\") if IS_MAC else _(\"la bandeja\")"
  },
  {
   "id": "la bandeja",
   "where": [
-   "backup_studio.py:2306"
+   "backup_studio.py:2353"
   ],
   "code": "tray = _(\"la barra de menús\") if IS_MAC else _(\"la bandeja\")"
  },
  {
   "id": "Guía rápida",
   "where": [
-   "backup_studio.py:2308",
-   "backup_studio.py:2525",
-   "backup_studio.py:2891",
-   "backup_studio.py:4340"
+   "backup_studio.py:2355",
+   "backup_studio.py:2572",
+   "backup_studio.py:2938",
+   "backup_studio.py:4394"
   ],
   "code": "{\"image\": \"1-bienvenida\", \"glyph\": G.SPARK, \"eyebrow\": _(\"Guía rápida\"),"
  },
  {
   "id": "Tus proyectos, siempre a salvo",
   "where": [
-   "backup_studio.py:2309"
+   "backup_studio.py:2356"
   ],
   "code": "\"title\": _(\"Tus proyectos, siempre a salvo\"),"
  },
  {
   "id": "Copia tu carpeta de proyectos a un disco externo en cuatro pasos: rápido, comprobado y con historial de versiones.",
   "where": [
-   "backup_studio.py:2310"
+   "backup_studio.py:2357"
   ],
   "code": "\"text\": _(\"Copia tu carpeta de proyectos a un disco externo en cuatro pasos: rápido, comprobado y con \""
  },
  {
   "id": "Verificado con SHA-256",
   "where": [
-   "backup_studio.py:2312"
+   "backup_studio.py:2359"
   ],
   "code": "\"chips\": [(G.SHIELD, _(\"Verificado con SHA-256\")), (G.CLOCK, _(\"Versiones de lo que cambias\")),"
  },
  {
   "id": "Versiones de lo que cambias",
   "where": [
-   "backup_studio.py:2312"
+   "backup_studio.py:2359"
   ],
   "code": "\"chips\": [(G.SHIELD, _(\"Verificado con SHA-256\")), (G.CLOCK, _(\"Versiones de lo que cambias\")),"
  },
  {
   "id": "Detecta movidos",
   "where": [
-   "backup_studio.py:2313"
+   "backup_studio.py:2360"
   ],
   "code": "(G.NEXT, _(\"Detecta movidos\"))]},"
  },
  {
   "id": "Elige origen y destino",
   "where": [
-   "backup_studio.py:2314"
+   "backup_studio.py:2361"
   ],
   "code": "{\"image\": \"2-origen-destino\", \"glyph\": G.FOLDER, \"title\": _(\"Elige origen y destino\"),"
  },
  {
   "id": "El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo.",
   "where": [
-   "backup_studio.py:2315"
+   "backup_studio.py:2362"
   ],
   "code": "\"text\": _(\"El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo.\"),"
  },
  {
   "id": "Una carpeta o un disco entero",
   "where": [
-   "backup_studio.py:2316"
+   "backup_studio.py:2363"
   ],
   "code": "\"chips\": [(G.FOLDER, _(\"Una carpeta o un disco entero\")), (G.DRIVE, _(\"Lo reconoce aunque cambie de letra\"))]},"
  },
  {
   "id": "Lo reconoce aunque cambie de letra",
   "where": [
-   "backup_studio.py:2316"
+   "backup_studio.py:2363"
   ],
   "code": "\"chips\": [(G.FOLDER, _(\"Una carpeta o un disco entero\")), (G.DRIVE, _(\"Lo reconoce aunque cambie de letra\"))]},"
  },
  {
   "id": "Decide qué se copia",
   "where": [
-   "backup_studio.py:2317"
+   "backup_studio.py:2364"
   ],
   "code": "{\"image\": \"3-que-copiar\", \"glyph\": G.FILTER, \"title\": _(\"Decide qué se copia\"),"
  },
  {
   "id": "Desmarca carpetas en el árbol o exclúyelas por nombre, en cualquier nivel de cada proyecto.",
   "where": [
-   "backup_studio.py:2318"
+   "backup_studio.py:2365"
   ],
   "code": "\"text\": _(\"Desmarca carpetas en el árbol o exclúyelas por nombre, en cualquier nivel de cada proyecto.\"),"
  },
  {
   "id": "node_modules, .venv, dist…",
   "where": [
-   "backup_studio.py:2319"
+   "backup_studio.py:2366"
   ],
   "code": "\"chips\": [(G.FILTER, _(\"node_modules, .venv, dist…\")), (G.TREE, _(\"Se recuerda para la próxima\"))]},"
  },
  {
   "id": "Se recuerda para la próxima",
   "where": [
-   "backup_studio.py:2319"
+   "backup_studio.py:2366"
   ],
   "code": "\"chips\": [(G.FILTER, _(\"node_modules, .venv, dist…\")), (G.TREE, _(\"Se recuerda para la próxima\"))]},"
  },
  {
   "id": "Analiza y sincroniza",
   "where": [
-   "backup_studio.py:2320"
+   "backup_studio.py:2367"
   ],
   "code": "{\"image\": \"4-sincroniza\", \"glyph\": G.PLAY, \"title\": _(\"Analiza y sincroniza\"),"
  },
  {
   "id": "Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia y lo comprueba.",
   "where": [
-   "backup_studio.py:2321"
+   "backup_studio.py:2368"
   ],
   "code": "\"text\": _(\"Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia y lo \""
  },
  {
   "id": "Revisa antes de copiar",
   "where": [
-   "backup_studio.py:2323"
+   "backup_studio.py:2370"
   ],
   "code": "\"chips\": [(G.SEARCH, _(\"Revisa antes de copiar\")), (G.SHIELD, _(\"Cada archivo verificado\")),"
  },
  {
   "id": "Cada archivo verificado",
   "where": [
-   "backup_studio.py:2323"
+   "backup_studio.py:2370"
   ],
   "code": "\"chips\": [(G.SEARCH, _(\"Revisa antes de copiar\")), (G.SHIELD, _(\"Cada archivo verificado\")),"
  },
  {
   "id": "Lo borrado va a versiones",
   "where": [
-   "backup_studio.py:2324"
+   "backup_studio.py:2371"
   ],
   "code": "(G.CLOCK, _(\"Lo borrado va a versiones\"))]},"
  },
  {
   "id": "Conecta el disco y listo",
   "where": [
-   "backup_studio.py:2325"
+   "backup_studio.py:2372"
   ],
   "code": "{\"image\": \"5-conecta\", \"glyph\": G.BELL, \"title\": _(\"Conecta el disco y listo\"),"
  },
  {
   "id": "Desde {tray} vigila el disco y te recuerda copiar si llevas días con cambios sin guardar. Al enchufarlo, sincronizas con un clic.",
   "where": [
-   "backup_studio.py:2326"
+   "backup_studio.py:2373"
   ],
   "code": "\"text\": _(\"Desde {tray} vigila el disco y te recuerda copiar si llevas días con cambios sin guardar. \""
  },
  {
   "id": "Vigila en segundo plano",
   "where": [
-   "backup_studio.py:2328"
+   "backup_studio.py:2375"
   ],
   "code": "\"chips\": [(G.SYNC, _(\"Vigila en segundo plano\")), (G.BELL, _(\"Te recuerda copiar\")),"
  },
  {
   "id": "Te recuerda copiar",
   "where": [
-   "backup_studio.py:2328"
+   "backup_studio.py:2375"
   ],
   "code": "\"chips\": [(G.SYNC, _(\"Vigila en segundo plano\")), (G.BELL, _(\"Te recuerda copiar\")),"
  },
  {
   "id": "Sin suspensión al copiar",
   "where": [
-   "backup_studio.py:2329"
+   "backup_studio.py:2376"
   ],
   "code": "(G.POWER, _(\"Sin suspensión al copiar\"))]},"
  },
  {
   "id": "Cerrar la guía  (Esc)",
   "where": [
-   "backup_studio.py:2531"
+   "backup_studio.py:2578"
   ],
   "code": "self.close_btn.setToolTip(_(\"Cerrar la guía  (Esc)\"))"
  },
  {
   "id": "Cerrar la guía",
   "where": [
-   "backup_studio.py:2532"
+   "backup_studio.py:2579"
   ],
   "code": "self.close_btn.setAccessibleName(_(\"Cerrar la guía\"))"
  },
  {
   "id": "Saltar la guía",
   "where": [
-   "backup_studio.py:2533"
+   "backup_studio.py:2580"
   ],
   "code": "self.skip_btn = QPushButton(_(\"Saltar la guía\"), self)"
  },
  {
   "id": "Atrás",
   "where": [
-   "backup_studio.py:2536"
+   "backup_studio.py:2583"
   ],
   "code": "self.back_btn = QPushButton((\"  \" + _(\"Atrás\")), self)"
  },
  {
   "id": "Siguiente",
   "where": [
-   "backup_studio.py:2617"
+   "backup_studio.py:2664"
   ],
   "code": "self.next_btn.setText((_(\"Empezar\") + \"  \") if last else (_(\"Siguiente\") + \"  \"))"
  },
  {
   "id": "Paso {i} de {last}",
   "where": [
-   "backup_studio.py:2627"
+   "backup_studio.py:2674"
   ],
   "code": "return self.steps[i].get(\"eyebrow\") or _(\"Paso {i} de {last}\").format(i=i, last=self.last)"
  },
  {
   "id": "Vuelve a verla con",
   "where": [
-   "backup_studio.py:2854"
+   "backup_studio.py:2901"
   ],
   "code": "for kind, label in ((\"t\", _(\"Vuelve a verla con\")), (\"k\", _(\"Guía\")), (\"t\", _(\"o\")), (\"k\", help_key())):"
  },
  {
   "id": "Guía",
   "where": [
-   "backup_studio.py:2854",
-   "backup_studio.py:3445"
+   "backup_studio.py:2901",
+   "backup_studio.py:3492"
   ],
   "code": "for kind, label in ((\"t\", _(\"Vuelve a verla con\")), (\"k\", _(\"Guía\")), (\"t\", _(\"o\")), (\"k\", help_key())):"
  },
  {
   "id": "o",
   "where": [
-   "backup_studio.py:2854"
+   "backup_studio.py:2901"
   ],
   "code": "for kind, label in ((\"t\", _(\"Vuelve a verla con\")), (\"k\", _(\"Guía\")), (\"t\", _(\"o\")), (\"k\", help_key())):"
  },
  {
   "id": "1 día",
   "where": [
-   "backup_studio.py:3022"
+   "backup_studio.py:3069"
   ],
   "code": "REMIND_OPTIONS = [(1, _(\"1 día\")), (2, _(\"2 días\")), (3, _(\"3 días\")), (7, _(\"1 semana\")), (14, _(\"2 semanas\"))]"
  },
  {
   "id": "2 días",
   "where": [
-   "backup_studio.py:3022"
+   "backup_studio.py:3069"
   ],
   "code": "REMIND_OPTIONS = [(1, _(\"1 día\")), (2, _(\"2 días\")), (3, _(\"3 días\")), (7, _(\"1 semana\")), (14, _(\"2 semanas\"))]"
  },
  {
   "id": "3 días",
   "where": [
-   "backup_studio.py:3022"
+   "backup_studio.py:3069"
   ],
   "code": "REMIND_OPTIONS = [(1, _(\"1 día\")), (2, _(\"2 días\")), (3, _(\"3 días\")), (7, _(\"1 semana\")), (14, _(\"2 semanas\"))]"
  },
  {
   "id": "1 semana",
   "where": [
-   "backup_studio.py:3022"
+   "backup_studio.py:3069"
   ],
   "code": "REMIND_OPTIONS = [(1, _(\"1 día\")), (2, _(\"2 días\")), (3, _(\"3 días\")), (7, _(\"1 semana\")), (14, _(\"2 semanas\"))]"
  },
  {
   "id": "2 semanas",
   "where": [
-   "backup_studio.py:3022"
+   "backup_studio.py:3069"
   ],
   "code": "REMIND_OPTIONS = [(1, _(\"1 día\")), (2, _(\"2 días\")), (3, _(\"3 días\")), (7, _(\"1 semana\")), (14, _(\"2 semanas\"))]"
  },
  {
   "id": "{days} días",
   "where": [
-   "backup_studio.py:3026"
+   "backup_studio.py:3073"
   ],
   "code": "return dict(REMIND_OPTIONS).get(days) or _(\"{days} días\").format(days=days)"
  },
  {
   "id": "{n} archivo sin copiar",
   "where": [
-   "backup_studio.py:3035"
+   "backup_studio.py:3082"
   ],
   "code": "return _n(\"{n} archivo sin copiar\", \"{n} archivos sin copiar\", files).format(n=fmt_int(files))",
   "plural": "{n} archivos sin copiar"
@@ -1062,35 +1062,35 @@
  {
   "id": "borrados o movidos sin copiar",
   "where": [
-   "backup_studio.py:3036"
+   "backup_studio.py:3083"
   ],
   "code": "return _(\"borrados o movidos sin copiar\") if dirs else \"\""
  },
  {
   "id": "EN USO",
   "where": [
-   "backup_studio.py:3103"
+   "backup_studio.py:3150"
   ],
   "code": "tag = QLabel(_(\"EN USO\"))"
  },
  {
   "id": "Es el origen y el destino que tienes elegidos ahora",
   "where": [
-   "backup_studio.py:3105"
+   "backup_studio.py:3152"
   ],
   "code": "tag.setToolTip(_(\"Es el origen y el destino que tienes elegidos ahora\"))"
  },
  {
   "id": "Opciones de esta copia",
   "where": [
-   "backup_studio.py:3117"
+   "backup_studio.py:3164"
   ],
   "code": "self.more.setToolTip(_(\"Opciones de esta copia\"))"
  },
  {
   "id": "{n} copia completa",
   "where": [
-   "backup_studio.py:3124"
+   "backup_studio.py:3171"
   ],
   "code": "+ _n(\"{n} copia completa\", \"{n} copias completas\", copies).format(n=copies)",
   "plural": "{n} copias completas"
@@ -1098,612 +1098,612 @@
  {
   "id": "última {when}",
   "where": [
-   "backup_studio.py:3125"
+   "backup_studio.py:3172"
   ],
   "code": "+ \"  ·  \" + _(\"última {when}\").format(when=it.get(\"last_ok\", \"\").replace(\"T\", \" \")))"
  },
  {
   "id": "Recordar mañana",
   "where": [
-   "backup_studio.py:3160"
+   "backup_studio.py:3207"
   ],
   "code": "self.later = QPushButton(_(\"Recordar mañana\"))"
  },
  {
   "id": "Actualizado a la versión {app_version}",
   "where": [
-   "backup_studio.py:3311"
+   "backup_studio.py:3358"
   ],
   "code": "self._log(_(\"Actualizado a la versión {app_version}\").format(app_version=APP_VERSION), C[\"ok\"])"
  },
  {
   "id": "Actualizado a la versión {app_version}.",
   "where": [
-   "backup_studio.py:3312"
+   "backup_studio.py:3359"
   ],
   "code": "QTimer.singleShot(1500, lambda: self._notify(APP_NAME, _(\"Actualizado a la versión {app_version}.\").format(app_version=APP_VERSION)))"
  },
  {
   "id": "Consultando GitHub…",
   "where": [
-   "backup_studio.py:3332"
+   "backup_studio.py:3379"
   ],
   "code": "self.update_status.setText(_(\"Consultando GitHub…\"))"
  },
  {
   "id": "No se pudo consultar GitHub: {error}",
   "where": [
-   "backup_studio.py:3338"
+   "backup_studio.py:3385"
   ],
   "code": "self.update_status.setText(_(\"No se pudo consultar GitHub: {error}\").format(error=error))"
  },
  {
   "id": "No se pudo consultar si hay versiones nuevas.\n\n{error}",
   "where": [
-   "backup_studio.py:3340"
+   "backup_studio.py:3387"
   ],
   "code": "QMessageBox.warning(self, APP_NAME, _(\"No se pudo consultar si hay versiones nuevas.\\n\\n{error}\").format(error=error))"
  },
  {
   "id": "Tienes la última versión ({current_version}).",
   "where": [
-   "backup_studio.py:3349"
+   "backup_studio.py:3396"
   ],
   "code": "QMessageBox.information(self, APP_NAME, _(\"Tienes la última versión ({current_version}).\").format(current_version=CURRENT_VERSION))"
  },
  {
   "id": "{app_name} {version}: te preguntaré al terminar la copia.",
   "where": [
-   "backup_studio.py:3358"
+   "backup_studio.py:3405"
   ],
   "code": "self._notify(_(\"Versión nueva disponible\"), _(\"{app_name} {version}: te preguntaré al terminar la copia.\").format(app_name=APP_NAME, version=rel.version))"
  },
  {
   "id": "Versión nueva disponible",
   "where": [
-   "backup_studio.py:3360",
-   "backup_studio.py:3358"
+   "backup_studio.py:3407",
+   "backup_studio.py:3405"
   ],
   "code": "self._notify(_(\"Versión nueva disponible\"), _(\"{app_name} {version} está lista para instalar.\").format(app_name=APP_NAME, version=rel.version))"
  },
  {
   "id": "{app_name} {version} está lista para instalar.",
   "where": [
-   "backup_studio.py:3360"
+   "backup_studio.py:3407"
   ],
   "code": "self._notify(_(\"Versión nueva disponible\"), _(\"{app_name} {version} está lista para instalar.\").format(app_name=APP_NAME, version=rel.version))"
  },
  {
   "id": "Versión instalada: {current_version}",
   "where": [
-   "backup_studio.py:3369"
+   "backup_studio.py:3416"
   ],
   "code": "parts = [_(\"Versión instalada: {current_version}\").format(current_version=CURRENT_VERSION)]"
  },
  {
   "id": "(omitida)",
   "where": [
-   "backup_studio.py:3371"
+   "backup_studio.py:3418"
   ],
   "code": "skipped = (\"  \" + _(\"(omitida)\")) if rel.version == self.update_skip else \"\""
  },
  {
   "id": "nueva disponible: {version}{skipped}",
   "where": [
-   "backup_studio.py:3372"
+   "backup_studio.py:3419"
   ],
   "code": "parts.append(_(\"nueva disponible: {version}{skipped}\").format(version=rel.version, skipped=skipped))"
  },
  {
   "id": "al día · comprobado {update_checked}",
   "where": [
-   "backup_studio.py:3374"
+   "backup_studio.py:3421"
   ],
   "code": "parts.append(_(\"al día · comprobado {update_checked}\").format(update_checked=fmt_ago(self.update_checked)))"
  },
  {
   "id": "búsqueda automática desactivada",
   "where": [
-   "backup_studio.py:3376"
+   "backup_studio.py:3423"
   ],
   "code": "parts.append(_(\"búsqueda automática desactivada\"))"
  },
  {
   "id": "Sincronización de proyectos  ·  detecta cambios, movidos y borrados  ·  guarda versiones",
   "where": [
-   "backup_studio.py:3425"
+   "backup_studio.py:3472"
   ],
   "code": "sub = QLabel(_(\"Sincronización de proyectos  ·  detecta cambios, movidos y borrados  ·  guarda versiones\"))"
  },
  {
   "id": "Guía rápida  ({help_key})",
   "where": [
-   "backup_studio.py:3449"
+   "backup_studio.py:3496"
   ],
   "code": "self.btn_help.setToolTip(_(\"Guía rápida  ({help_key})\").format(help_key=help_key()))"
  },
  {
   "id": "Copia",
   "where": [
-   "backup_studio.py:3488"
+   "backup_studio.py:3535"
   ],
   "code": "group(_(\"Copia\"), first=True)"
  },
  {
   "id": "Origen",
   "where": [
-   "backup_studio.py:3491",
-   "backup_studio.py:5243"
+   "backup_studio.py:3538",
+   "backup_studio.py:5320"
   ],
   "code": "self.src_card = PathCard(_(\"Origen\"), G.FOLDER, _(\"Carpeta de origen\"), frameless=True)"
  },
  {
   "id": "Carpeta de origen",
   "where": [
-   "backup_studio.py:3491"
+   "backup_studio.py:3538"
   ],
   "code": "self.src_card = PathCard(_(\"Origen\"), G.FOLDER, _(\"Carpeta de origen\"), frameless=True)"
  },
  {
   "id": "Destino",
   "where": [
-   "backup_studio.py:3492",
-   "backup_studio.py:5244"
+   "backup_studio.py:3539",
+   "backup_studio.py:5321"
   ],
   "code": "self.dst_card = PathCard(_(\"Destino\"), G.DRIVE, _(\"Carpeta de destino\"), frameless=True)"
  },
  {
   "id": "Carpeta de destino",
   "where": [
-   "backup_studio.py:3492"
+   "backup_studio.py:3539"
   ],
   "code": "self.dst_card = PathCard(_(\"Destino\"), G.DRIVE, _(\"Carpeta de destino\"), frameless=True)"
  },
  {
   "id": "Conectar con mi nube…",
   "where": [
-   "backup_studio.py:3498"
+   "backup_studio.py:3545"
   ],
   "code": "self.cloud_btn = QPushButton(\"  \" + _(\"Conectar con mi nube…\"))"
  },
  {
   "id": "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.",
   "where": [
-   "backup_studio.py:3501"
+   "backup_studio.py:3548"
   ],
   "code": "self.cloud_btn.setToolTip(_(\"Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código \""
  },
  {
   "id": "Qué se copia",
   "where": [
-   "backup_studio.py:3510"
+   "backup_studio.py:3557"
   ],
   "code": "group(_(\"Qué se copia\"))"
  },
  {
   "id": "Excluir carpetas",
   "where": [
-   "backup_studio.py:3511"
+   "backup_studio.py:3558"
   ],
   "code": "rules = section(\"reglas\", _(\"Excluir carpetas\"), G.FILTER)"
  },
  {
   "id": "Se omiten en cualquier nivel de cada proyecto, en origen y destino. Admite comodines (*.egg-info).",
   "where": [
-   "backup_studio.py:3512"
+   "backup_studio.py:3559"
   ],
   "code": "hint = QLabel(_(\"Se omiten en cualquier nivel de cada proyecto, en origen y destino. Admite comodines \""
  },
  {
   "id": "Clic para activar o desactivar una regla · clic derecho en una regla propia para quitarla",
   "where": [
-   "backup_studio.py:3518"
+   "backup_studio.py:3565"
   ],
   "code": "self.chips_box.setToolTip(_(\"Clic para activar o desactivar una regla · clic derecho en una regla propia \""
  },
  {
   "id": "Añadir regla…  (p. ej. Library)",
   "where": [
-   "backup_studio.py:3525"
+   "backup_studio.py:3572"
   ],
   "code": "self.rule_edit.setPlaceholderText(_(\"Añadir regla…  (p. ej. Library)\"))"
  },
  {
   "id": "Añadir regla",
   "where": [
-   "backup_studio.py:3531"
+   "backup_studio.py:3578"
   ],
   "code": "add_btn.setToolTip(_(\"Añadir regla\"))"
  },
  {
   "id": "Cómo se copia",
   "where": [
-   "backup_studio.py:3540"
+   "backup_studio.py:3587"
   ],
   "code": "group(_(\"Cómo se copia\"))"
  },
  {
   "id": "Modo y versiones",
   "where": [
-   "backup_studio.py:3541"
+   "backup_studio.py:3588"
   ],
   "code": "opts = section(\"modo\", _(\"Modo y versiones\"), G.GEAR)"
  },
  {
   "id": "Conservar versiones",
   "where": [
-   "backup_studio.py:3554"
+   "backup_studio.py:3601"
   ],
   "code": "opts.body.addWidget(combo_row(_(\"Conservar versiones\"), _(\"De lo que modificas o borras\"), self.keep_combo))"
  },
  {
   "id": "De lo que modificas o borras",
   "where": [
-   "backup_studio.py:3554"
+   "backup_studio.py:3601"
   ],
   "code": "opts.body.addWidget(combo_row(_(\"Conservar versiones\"), _(\"De lo que modificas o borras\"), self.keep_combo))"
  },
  {
   "id": "Hilos de copia",
   "where": [
-   "backup_studio.py:3558"
+   "backup_studio.py:3605"
   ],
   "code": "opts.body.addWidget(combo_row(_(\"Hilos de copia\"), _(\"Archivos que se copian a la vez\"), self.threads_spin, 96))"
  },
  {
   "id": "Archivos que se copian a la vez",
   "where": [
-   "backup_studio.py:3558"
+   "backup_studio.py:3605"
   ],
   "code": "opts.body.addWidget(combo_row(_(\"Hilos de copia\"), _(\"Archivos que se copian a la vez\"), self.threads_spin, 96))"
  },
  {
   "id": "Revisar todo el destino",
   "where": [
-   "backup_studio.py:3562"
+   "backup_studio.py:3609"
   ],
   "code": "_(\"Revisar todo el destino\"), _(\"En el próximo análisis (si no, cada 7 días)\"), self.full_box,"
  },
  {
   "id": "En el próximo análisis (si no, cada 7 días)",
   "where": [
-   "backup_studio.py:3562"
+   "backup_studio.py:3609"
   ],
   "code": "_(\"Revisar todo el destino\"), _(\"En el próximo análisis (si no, cada 7 días)\"), self.full_box,"
  },
  {
   "id": "Normalmente el análisis usa el índice de la última copia y no relee el disco. Cambio = distinto tamaño o fecha de modificación (al nanosegundo en NTFS y APFS).",
   "where": [
-   "backup_studio.py:3563"
+   "backup_studio.py:3610"
   ],
   "code": "_(\"Normalmente el análisis usa el índice de la última copia y no relee el disco. Cambio = distinto \""
  },
  {
   "id": "Integridad",
   "where": [
-   "backup_studio.py:3566"
+   "backup_studio.py:3613"
   ],
   "code": "integ = section(\"integridad\", _(\"Integridad\"), G.SHIELD)"
  },
  {
   "id": "Verificar cada copia",
   "where": [
-   "backup_studio.py:3569"
+   "backup_studio.py:3616"
   ],
   "code": "integ.body.addWidget(SettingRow(_(\"Verificar cada copia\"), _(\"Relee el disco y compara su SHA-256\"),"
  },
  {
   "id": "Relee el disco y compara su SHA-256",
   "where": [
-   "backup_studio.py:3569"
+   "backup_studio.py:3616"
   ],
   "code": "integ.body.addWidget(SettingRow(_(\"Verificar cada copia\"), _(\"Relee el disco y compara su SHA-256\"),"
  },
  {
   "id": "Revisar el disco",
   "where": [
-   "backup_studio.py:3575"
+   "backup_studio.py:3622"
   ],
   "code": "_(\"Revisar el disco\"), _(\"Tras sincronizar, busca corrupción silenciosa\"), self.scrub_combo,"
  },
  {
   "id": "Tras sincronizar, busca corrupción silenciosa",
   "where": [
-   "backup_studio.py:3575"
+   "backup_studio.py:3622"
   ],
   "code": "_(\"Revisar el disco\"), _(\"Tras sincronizar, busca corrupción silenciosa\"), self.scrub_combo,"
  },
  {
   "id": "Comprueba una tanda de archivos ya copiados durante el tiempo elegido: primero los nunca comprobados y luego los de hace más de 30 días. Si el dañado es el destino, lo repara.",
   "where": [
-   "backup_studio.py:3576"
+   "backup_studio.py:3623"
   ],
   "code": "tip=_(\"Comprueba una tanda de archivos ya copiados durante el tiempo elegido: primero los nunca \""
  },
  {
   "id": "Comprobar todo el disco ahora",
   "where": [
-   "backup_studio.py:3582"
+   "backup_studio.py:3629"
   ],
   "code": "self.btn_scrub = QPushButton((\"  \" + _(\"Comprobar todo el disco ahora\")))"
  },
  {
   "id": "Automático",
   "where": [
-   "backup_studio.py:3589"
+   "backup_studio.py:3636"
   ],
   "code": "group(_(\"Automático\"))"
  },
  {
   "id": "Se inicia con Windows, en la bandeja",
   "where": [
-   "backup_studio.py:3595"
+   "backup_studio.py:3642"
   ],
   "code": "where = _(\"Se inicia con Windows, en la bandeja\") if IS_WIN else _(\"Se inicia con la sesión, en la barra de menús\")"
  },
  {
   "id": "Se inicia con la sesión, en la barra de menús",
   "where": [
-   "backup_studio.py:3595"
+   "backup_studio.py:3642"
   ],
   "code": "where = _(\"Se inicia con Windows, en la bandeja\") if IS_WIN else _(\"Se inicia con la sesión, en la barra de menús\")"
  },
  {
   "id": "Vigilar en segundo plano",
   "where": [
-   "backup_studio.py:3598"
+   "backup_studio.py:3645"
   ],
   "code": "disk.body.addWidget(SettingRow(_(\"Vigilar en segundo plano\"), where, self.watch_box))"
  },
  {
   "id": "Al conectar el disco",
   "where": [
-   "backup_studio.py:3603"
+   "backup_studio.py:3650"
   ],
   "code": "disk.body.addWidget(QLabel(_(\"Al conectar el disco\"), objectName=\"fieldLabel\"))"
  },
  {
   "id": "Recordatorios",
   "where": [
-   "backup_studio.py:3607"
+   "backup_studio.py:3654"
   ],
   "code": "rem = section(\"recordatorios\", _(\"Recordatorios\"), G.BELL)"
  },
  {
   "id": "Recordarme hacer copia",
   "where": [
-   "backup_studio.py:3610"
+   "backup_studio.py:3657"
   ],
   "code": "rem.body.addWidget(SettingRow(_(\"Recordarme hacer copia\"), _(\"Solo si hay cambios sin copiar, una vez por periodo\"),"
  },
  {
   "id": "Solo si hay cambios sin copiar, una vez por periodo",
   "where": [
-   "backup_studio.py:3610"
+   "backup_studio.py:3657"
   ],
   "code": "rem.body.addWidget(SettingRow(_(\"Recordarme hacer copia\"), _(\"Solo si hay cambios sin copiar, una vez por periodo\"),"
  },
  {
   "id": "Avisar después de",
   "where": [
-   "backup_studio.py:3616"
+   "backup_studio.py:3663"
   ],
   "code": "rem.body.addWidget(combo_row(_(\"Avisar después de\"), _(\"Días sin copia con cambios\"), self.remind_combo))"
  },
  {
   "id": "Días sin copia con cambios",
   "where": [
-   "backup_studio.py:3616"
+   "backup_studio.py:3663"
   ],
   "code": "rem.body.addWidget(combo_row(_(\"Avisar después de\"), _(\"Días sin copia con cambios\"), self.remind_combo))"
  },
  {
   "id": "con Windows",
   "where": [
-   "backup_studio.py:3617"
+   "backup_studio.py:3664"
   ],
   "code": "where = _(\"con Windows\") if IS_WIN else _(\"al iniciar sesión\")"
  },
  {
   "id": "al iniciar sesión",
   "where": [
-   "backup_studio.py:3617"
+   "backup_studio.py:3664"
   ],
   "code": "where = _(\"con Windows\") if IS_WIN else _(\"al iniciar sesión\")"
  },
  {
   "id": "Iniciarla {where} en segundo plano",
   "where": [
-   "backup_studio.py:3618"
+   "backup_studio.py:3665"
   ],
   "code": "link_text = html.escape(_(\"Iniciarla {where} en segundo plano\").format(where=where))"
  },
  {
   "id": "Con la app cerrada no puede avisarte.",
   "where": [
-   "backup_studio.py:3620"
+   "backup_studio.py:3667"
   ],
   "code": "self.remind_tray_hint = QLabel(html.escape(_(\"Con la app cerrada no puede avisarte.\")) + \" \" + link)"
  },
  {
   "id": "Copias habituales",
   "where": [
-   "backup_studio.py:3626"
+   "backup_studio.py:3673"
   ],
   "code": "cl.addWidget(QLabel(_(\"Copias habituales\"), objectName=\"fieldLabel\"))"
  },
  {
   "id": "Comprobar ahora",
   "where": [
-   "backup_studio.py:3628"
+   "backup_studio.py:3675"
   ],
   "code": "self.btn_remind_check = QPushButton(_(\"Comprobar ahora\"))"
  },
  {
   "id": "Mira ya si hay cambios sin copiar en todas las copias habituales",
   "where": [
-   "backup_studio.py:3631"
+   "backup_studio.py:3678"
   ],
   "code": "self.btn_remind_check.setToolTip(_(\"Mira ya si hay cambios sin copiar en todas las copias habituales\"))"
  },
  {
   "id": "Aún no hay ninguna: cada sincronización completa se añade sola, con su origen y su disco.",
   "where": [
-   "backup_studio.py:3641"
+   "backup_studio.py:3688"
   ],
   "code": "self.remind_empty = QLabel(_(\"Aún no hay ninguna: cada sincronización completa se añade sola, con su origen \""
  },
  {
   "id": "Sistema",
   "where": [
-   "backup_studio.py:3652"
+   "backup_studio.py:3699"
   ],
   "code": "group(_(\"Sistema\"))"
  },
  {
   "id": "Energía",
   "where": [
-   "backup_studio.py:3653"
+   "backup_studio.py:3700"
   ],
   "code": "power = section(\"energia\", _(\"Energía\"), G.POWER)"
  },
  {
   "id": "El Mac no reposa por inactividad ni duerme los discos (la pantalla sí puede apagarse), y cerrar la app, la sesión o apagar pide confirmación. Si se duerme igualmente, la copia espera al disco y sigue sola.",
   "where": [
-   "backup_studio.py:3658"
+   "backup_studio.py:3705"
   ],
   "code": "how = (_(\"El Mac no reposa por inactividad ni duerme los discos (la pantalla sí puede apagarse), y \""
  },
  {
   "id": "El equipo no se suspende por inactividad (la pantalla sí puede apagarse), el disco USB no se duerme y Windows avisa si intentas apagar o reiniciar. Si se suspende igualmente (tapa, botón), la copia se pausa y sigue sola al volver.",
   "where": [
-   "backup_studio.py:3662"
+   "backup_studio.py:3709"
   ],
   "code": "how = (_(\"El equipo no se suspende por inactividad (la pantalla sí puede apagarse), el disco USB no \""
  },
  {
   "id": "Equipo y disco despiertos",
   "where": [
-   "backup_studio.py:3665"
+   "backup_studio.py:3712"
   ],
   "code": "power.body.addWidget(SettingRow(_(\"Equipo y disco despiertos\"), _(\"Mientras analiza o sincroniza\"),"
  },
  {
   "id": "Mientras analiza o sincroniza",
   "where": [
-   "backup_studio.py:3665"
+   "backup_studio.py:3712"
   ],
   "code": "power.body.addWidget(SettingRow(_(\"Equipo y disco despiertos\"), _(\"Mientras analiza o sincroniza\"),"
  },
  {
   "id": "Idioma",
   "where": [
-   "backup_studio.py:3674"
+   "backup_studio.py:3721"
   ],
   "code": "lang = section(\"idioma\", _(\"Idioma\"), G.GLOBE)"
  },
  {
   "id": "Automático ({name})",
   "where": [
-   "backup_studio.py:3676"
+   "backup_studio.py:3723"
   ],
   "code": "self.lang_combo.addItem(_(\"Automático ({name})\").format(name=i18n.LANGS[i18n.system_language()]), \"auto\")"
  },
  {
   "id": "Idioma de la app",
   "where": [
-   "backup_studio.py:3680"
+   "backup_studio.py:3727"
   ],
   "code": "lang.body.addWidget(combo_row(_(\"Idioma de la app\"), _(\"Automático: el del sistema\"), self.lang_combo, 170))"
  },
  {
   "id": "Automático: el del sistema",
   "where": [
-   "backup_studio.py:3680"
+   "backup_studio.py:3727"
   ],
   "code": "lang.body.addWidget(combo_row(_(\"Idioma de la app\"), _(\"Automático: el del sistema\"), self.lang_combo, 170))"
  },
  {
   "id": "Actualizaciones",
   "where": [
-   "backup_studio.py:3695"
+   "backup_studio.py:3742"
   ],
   "code": "upd = section(\"actualizaciones\", _(\"Actualizaciones\"), G.DOWNLOAD)"
  },
  {
   "id": "Buscar versiones nuevas",
   "where": [
-   "backup_studio.py:3698"
+   "backup_studio.py:3745"
   ],
   "code": "upd.body.addWidget(SettingRow(_(\"Buscar versiones nuevas\"), _(\"En GitHub; pregunta antes de instalar\"),"
  },
  {
   "id": "En GitHub; pregunta antes de instalar",
   "where": [
-   "backup_studio.py:3698"
+   "backup_studio.py:3745"
   ],
   "code": "upd.body.addWidget(SettingRow(_(\"Buscar versiones nuevas\"), _(\"En GitHub; pregunta antes de instalar\"),"
  },
  {
   "id": "Buscar ahora",
   "where": [
-   "backup_studio.py:3704"
+   "backup_studio.py:3751"
   ],
   "code": "self.btn_update = QPushButton((\"  \" + _(\"Buscar ahora\")))"
  },
  {
   "id": "El idioma cambia al reiniciar la app. Tus ajustes y copias se conservan.",
   "where": [
-   "backup_studio.py:3733"
+   "backup_studio.py:3780"
   ],
   "code": "self.lang_note.setText(i18n.tr_in(target, \"El idioma cambia al reiniciar la app. Tus ajustes y copias \""
  },
  {
   "id": "Reiniciar ahora",
   "where": [
-   "backup_studio.py:3735"
+   "backup_studio.py:3782"
   ],
   "code": "self.btn_restart.setText(\"  \" + i18n.tr_in(target, \"Reiniciar ahora\"))"
  },
  {
   "id": "Hay una operación en curso: reinicia la app cuando termine.",
   "where": [
-   "backup_studio.py:3743"
+   "backup_studio.py:3790"
   ],
   "code": "QMessageBox.information(self, APP_NAME, _(\"Hay una operación en curso: reinicia la app cuando termine.\"))"
  },
  {
   "id": "No se pudo reiniciar la app. Ciérrala y vuelve a abrirla.",
   "where": [
-   "backup_studio.py:3755"
+   "backup_studio.py:3802"
   ],
   "code": "QMessageBox.warning(self, APP_NAME, _(\"No se pudo reiniciar la app. Ciérrala y vuelve a abrirla.\"))"
  },
  {
   "id": "y {rules} más",
   "where": [
-   "backup_studio.py:3772"
+   "backup_studio.py:3819"
   ],
   "code": "more = (\" \" + _(\"y {rules} más\").format(rules=len(rules) - 3)) if len(rules) > 3 else \"\""
  },
  {
   "id": "Ninguna regla activa: se copia todo",
   "where": [
-   "backup_studio.py:3775"
+   "backup_studio.py:3822"
   ],
   "code": "sec[\"reglas\"].set_summary(_(\"Ninguna regla activa: se copia todo\"))"
  },
  {
   "id": "Espejo con versiones",
   "where": [
-   "backup_studio.py:3776"
+   "backup_studio.py:3823"
   ],
   "code": "mode = {engine.MODE_MIRROR: _(\"Espejo con versiones\"), engine.MODE_UPDATE: _(\"Solo añadir y actualizar\")}.get("
  },
  {
   "id": "Solo añadir y actualizar",
   "where": [
-   "backup_studio.py:3776",
+   "backup_studio.py:3823",
    "engine.py:89"
   ],
   "code": "mode = {engine.MODE_MIRROR: _(\"Espejo con versiones\"), engine.MODE_UPDATE: _(\"Solo añadir y actualizar\")}.get("
@@ -1711,63 +1711,63 @@
  {
   "id": "{mode}  ·  versiones {lower}  ·  {value} hilos",
   "where": [
-   "backup_studio.py:3778"
+   "backup_studio.py:3825"
   ],
   "code": "sec[\"modo\"].set_summary(_(\"{mode}  ·  versiones {lower}  ·  {value} hilos\").format(mode=mode, lower=self.keep_combo.currentText().lower(), value=self.threads_spin.value()))"
  },
  {
   "id": "SHA-256 en cada copia",
   "where": [
-   "backup_studio.py:3781"
+   "backup_studio.py:3828"
   ],
   "code": "(_(\"SHA-256 en cada copia\") if self.verify_box.isChecked() else _(\"Sin verificar al copiar\")) + \"  ·  \""
  },
  {
   "id": "Sin verificar al copiar",
   "where": [
-   "backup_studio.py:3781"
+   "backup_studio.py:3828"
   ],
   "code": "(_(\"SHA-256 en cada copia\") if self.verify_box.isChecked() else _(\"Sin verificar al copiar\")) + \"  ·  \""
  },
  {
   "id": "sin revisión",
   "where": [
-   "backup_studio.py:3782"
+   "backup_studio.py:3829"
   ],
   "code": "+ (_(\"revisión {period}\").format(period=self.scrub_combo.currentText()) if scrub else _(\"sin revisión\")))"
  },
  {
   "id": "revisión {period}",
   "where": [
-   "backup_studio.py:3782"
+   "backup_studio.py:3829"
   ],
   "code": "+ (_(\"revisión {period}\").format(period=self.scrub_combo.currentText()) if scrub else _(\"sin revisión\")))"
  },
  {
   "id": "Vigilando",
   "where": [
-   "backup_studio.py:3783"
+   "backup_studio.py:3830"
   ],
   "code": "sec[\"disco\"].set_summary((_(\"Vigilando\") if self.watch_box.isChecked() else _(\"Sin vigilar\"))"
  },
  {
   "id": "Sin vigilar",
   "where": [
-   "backup_studio.py:3783"
+   "backup_studio.py:3830"
   ],
   "code": "sec[\"disco\"].set_summary((_(\"Vigilando\") if self.watch_box.isChecked() else _(\"Sin vigilar\"))"
  },
  {
   "id": "Tras {period}",
   "where": [
-   "backup_studio.py:3788"
+   "backup_studio.py:3835"
   ],
   "code": "text = (_(\"Tras {period}\").format(period=self.remind_combo.currentText()) + \"  ·  \""
  },
  {
   "id": "{n} copia habitual",
   "where": [
-   "backup_studio.py:3789"
+   "backup_studio.py:3836"
   ],
   "code": "+ _n(\"{n} copia habitual\", \"{n} copias habituales\", n).format(n=n))",
   "plural": "{n} copias habituales"
@@ -1775,251 +1775,244 @@
  {
   "id": "{alerts} con cambios sin copiar",
   "where": [
-   "backup_studio.py:3791"
+   "backup_studio.py:3838"
   ],
   "code": "text += (\"  ·  \" + _(\"{alerts} con cambios sin copiar\").format(alerts=alerts))"
  },
  {
   "id": "Desactivados",
   "where": [
-   "backup_studio.py:3794"
+   "backup_studio.py:3841"
   ],
   "code": "sec[\"recordatorios\"].set_summary(_(\"Desactivados\"))"
  },
  {
   "id": "Sin suspensión mientras copia",
   "where": [
-   "backup_studio.py:3795"
+   "backup_studio.py:3842"
   ],
   "code": "sec[\"energia\"].set_summary(_(\"Sin suspensión mientras copia\") if self.awake_box.isChecked() else _(\"Desactivado\"))"
  },
  {
   "id": "Desactivado",
   "where": [
-   "backup_studio.py:3795"
+   "backup_studio.py:3842"
   ],
   "code": "sec[\"energia\"].set_summary(_(\"Sin suspensión mientras copia\") if self.awake_box.isChecked() else _(\"Desactivado\"))"
  },
  {
   "id": "Automático · {name}",
   "where": [
-   "backup_studio.py:3798"
+   "backup_studio.py:3845"
   ],
   "code": "sec[\"idioma\"].set_summary(_(\"Automático · {name}\").format(name=name) if choice == \"auto\" else name)"
  },
  {
   "id": "automáticas",
   "where": [
-   "backup_studio.py:3799"
+   "backup_studio.py:3846"
   ],
   "code": "sec[\"actualizaciones\"].set_summary(f\"v{APP_VERSION}  ·  \" + (_(\"automáticas\") if self.update_box.isChecked()"
  },
  {
   "id": "solo a mano",
   "where": [
-   "backup_studio.py:3800"
+   "backup_studio.py:3847"
   ],
   "code": "else _(\"solo a mano\")))"
  },
  {
   "id": "Carpetas",
   "where": [
-   "backup_studio.py:3813"
+   "backup_studio.py:3860"
   ],
   "code": "for i, (text, glyph) in enumerate([(_(\"Carpetas\"), G.TREE), (_(\"Cambios\"), G.SYNC),"
  },
  {
   "id": "Cambios",
   "where": [
-   "backup_studio.py:3813"
+   "backup_studio.py:3860"
   ],
   "code": "for i, (text, glyph) in enumerate([(_(\"Carpetas\"), G.TREE), (_(\"Cambios\"), G.SYNC),"
  },
  {
   "id": "Progreso",
   "where": [
-   "backup_studio.py:3814"
+   "backup_studio.py:3861"
   ],
   "code": "(_(\"Progreso\"), G.SPEED), (_(\"Incidencias\"), G.WARN)]):"
  },
  {
-  "id": "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas.",
+  "id": "Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas, o selecciona varias (Ctrl o Mayús + clic) para marcarlas o desmarcarlas a la vez.",
   "where": [
-   "backup_studio.py:3853"
+   "backup_studio.py:3900"
   ],
-  "code": "msg = QLabel(_(\"Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas.\"))"
- },
- {
-  "id": "Restablecer",
-  "where": [
-   "backup_studio.py:3860"
-  ],
-  "code": "reset = QPushButton(_(\"Restablecer\"))"
+  "code": "msg = QLabel(_(\"Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas, o \""
  },
  {
   "id": "Volver a leer las carpetas del origen",
   "where": [
-   "backup_studio.py:3866"
+   "backup_studio.py:3917"
   ],
   "code": "reload_btn.setToolTip(_(\"Volver a leer las carpetas del origen\"))"
  },
  {
   "id": "Todos",
   "where": [
-   "backup_studio.py:3888"
+   "backup_studio.py:3942"
   ],
   "code": "for key, text in [(None, _(\"Todos\")), (\"n\", _(\"Nuevos\")), (\"c\", _(\"Modificados\")),"
  },
  {
   "id": "Buscar ruta…",
   "where": [
-   "backup_studio.py:3902"
+   "backup_studio.py:3956"
   ],
   "code": "self.change_search.setPlaceholderText(_(\"Buscar ruta…\"))"
  },
  {
   "id": "Pulsa «Analizar» para ver exactamente qué se va a copiar, mover o guardar en versiones antes de tocar nada.",
   "where": [
-   "backup_studio.py:3929",
-   "backup_studio.py:4569"
+   "backup_studio.py:3983",
+   "backup_studio.py:4646"
   ],
   "code": "self.changes_empty = QLabel(_(\"Pulsa «Analizar» para ver exactamente qué se va a copiar, mover o guardar \""
  },
  {
   "id": "Resumen de la copia",
   "where": [
-   "backup_studio.py:3952"
+   "backup_studio.py:4006"
   ],
   "code": "self.summary_card = Card(_(\"Resumen de la copia\"), G.DONE)"
  },
  {
   "id": "Carpetas nuevas",
   "where": [
-   "backup_studio.py:3957"
+   "backup_studio.py:4011"
   ],
   "code": "self.s_dirs_new = Tile(_(\"Carpetas nuevas\"), G.FOLDER, C[\"folder\"])"
  },
  {
   "id": "Carpetas quitadas",
   "where": [
-   "backup_studio.py:3958",
-   "backup_studio.py:5270"
+   "backup_studio.py:4012",
+   "backup_studio.py:5347"
   ],
   "code": "self.s_dirs_gone = Tile(_(\"Carpetas quitadas\"), G.FOLDER, C[\"muted\"])"
  },
  {
   "id": "Sin cambios",
   "where": [
-   "backup_studio.py:3959",
-   "backup_studio.py:3987",
-   "backup_studio.py:5257"
+   "backup_studio.py:4013",
+   "backup_studio.py:4041",
+   "backup_studio.py:5334"
   ],
   "code": "self.s_same = Tile(_(\"Sin cambios\"), G.CHECK, C[\"ok\"])"
  },
  {
   "id": "Verificados",
   "where": [
-   "backup_studio.py:3960"
+   "backup_studio.py:4014"
   ],
   "code": "self.s_checked = Tile(_(\"Verificados\"), G.SHIELD, C[\"accent2\"])"
  },
  {
   "id": "Transcurrido",
   "where": [
-   "backup_studio.py:3981"
+   "backup_studio.py:4035"
   ],
   "code": "self.t_elapsed = Tile(_(\"Transcurrido\"), G.TIMER, C[\"accent2\"])"
  },
  {
   "id": "Restante",
   "where": [
-   "backup_studio.py:3982"
+   "backup_studio.py:4036"
   ],
   "code": "self.t_left = Tile(_(\"Restante\"), G.CLOCK, C[\"accent2\"])"
  },
  {
   "id": "Velocidad",
   "where": [
-   "backup_studio.py:3983"
+   "backup_studio.py:4037"
   ],
   "code": "self.t_speed = Tile(_(\"Velocidad\"), G.SPEED, C[\"accent2\"])"
  },
  {
   "id": "Fin estimado",
   "where": [
-   "backup_studio.py:3984"
+   "backup_studio.py:4038"
   ],
   "code": "self.t_eta = Tile(_(\"Fin estimado\"), G.FLAG, C[\"accent2\"])"
  },
  {
   "id": "Copiado",
   "where": [
-   "backup_studio.py:3985"
+   "backup_studio.py:4039"
   ],
   "code": "self.t_copied = Tile(_(\"Copiado\"), G.COPY, C[\"accent\"])"
  },
  {
   "id": "Archivos",
   "where": [
-   "backup_studio.py:3986",
-   "backup_studio.py:3997"
+   "backup_studio.py:4040",
+   "backup_studio.py:4051"
   ],
   "code": "self.t_files = Tile(_(\"Archivos\"), G.DOC, C[\"accent\"])"
  },
  {
   "id": "Errores",
   "where": [
-   "backup_studio.py:3988"
+   "backup_studio.py:4042"
   ],
   "code": "self.t_errors = Tile(_(\"Errores\"), G.WARN, C[\"accent\"])"
  },
  {
   "id": "Datos",
   "where": [
-   "backup_studio.py:3995"
+   "backup_studio.py:4049"
   ],
   "code": "self.bar_bytes, self.bar_bytes_val = self._bar_row(bars.body, _(\"Datos\"))"
  },
  {
   "id": "En curso",
   "where": [
-   "backup_studio.py:4008"
+   "backup_studio.py:4062"
   ],
   "code": "self.active_card = Card(_(\"En curso\"), G.SYNC)"
  },
  {
   "id": "Sin incidencias",
   "where": [
-   "backup_studio.py:4063",
-   "backup_studio.py:4097"
+   "backup_studio.py:4117",
+   "backup_studio.py:4151"
   ],
   "code": "self.issues_label = QLabel(_(\"Sin incidencias\"))"
  },
  {
   "id": "Exportar…",
   "where": [
-   "backup_studio.py:4066"
+   "backup_studio.py:4120"
   ],
   "code": "self.btn_export = QPushButton(_(\"Exportar…\"))"
  },
  {
   "id": "MOTIVO",
   "where": [
-   "backup_studio.py:4073"
+   "backup_studio.py:4127"
   ],
   "code": "self.issues.setHorizontalHeaderLabels([_(\"RUTA\"), _(\"MOTIVO\")])"
  },
  {
   "id": "Ningún archivo ha dado problemas.\nSi alguno no se puede leer o copiar, aparece aquí y la copia sigue con el resto.",
   "where": [
-   "backup_studio.py:4083"
+   "backup_studio.py:4137"
   ],
   "code": "empty = QLabel(_(\"Ningún archivo ha dado problemas.\\nSi alguno no se puede leer o copiar, aparece aquí y la \""
  },
  {
   "id": "{n} incidencia: archivos que no se pudieron leer o copiar. El resto sigue adelante.",
   "where": [
-   "backup_studio.py:4098"
+   "backup_studio.py:4152"
   ],
   "code": "_n(\"{n} incidencia: archivos que no se pudieron leer o copiar. El resto sigue \"",
   "plural": "{n} incidencias: archivos que no se pudieron leer o copiar. El resto sigue adelante."
@@ -2027,194 +2020,252 @@
  {
   "id": "Abrir destino",
   "where": [
-   "backup_studio.py:4123"
+   "backup_studio.py:4177"
   ],
   "code": "self.btn_open = button(_(\"Abrir destino\"), G.OPEN)"
  },
  {
   "id": "Analizar",
   "where": [
-   "backup_studio.py:4124"
+   "backup_studio.py:4178"
   ],
   "code": "self.btn_scan = button(_(\"Analizar\"), G.SEARCH)"
  },
  {
   "id": "Pausar",
   "where": [
-   "backup_studio.py:4125",
-   "backup_studio.py:4594"
+   "backup_studio.py:4179",
+   "backup_studio.py:4671"
   ],
   "code": "self.btn_pause = button(_(\"Pausar\"), G.PAUSE)"
  },
  {
   "id": "Sincronizar",
   "where": [
-   "backup_studio.py:4127",
-   "backup_studio.py:4600",
-   "backup_studio.py:6092"
+   "backup_studio.py:4181",
+   "backup_studio.py:4677",
+   "backup_studio.py:6178"
   ],
   "code": "self.btn_start = button(_(\"Sincronizar\"), G.PLAY, \"primary\", \"#FFFFFF\")"
  },
  {
   "id": "{label}{where} registrado  ·  última copia {v}",
   "where": [
-   "backup_studio.py:4285"
+   "backup_studio.py:4339"
   ],
   "code": "self.disk_status.setText(_(\"{label}{where} registrado  ·  última copia {v}\").format(label=label, where=where, v=fmt_ago(last and last.get('fin'))))"
  },
  {
   "id": "Disco registrado, ahora desconectado. Al conectarlo se reconoce aunque cambie de letra o de nombre.",
   "where": [
-   "backup_studio.py:4287"
+   "backup_studio.py:4341"
   ],
   "code": "self.disk_status.setText(_(\"Disco registrado, ahora desconectado. Al conectarlo se reconoce aunque \""
  },
  {
   "id": "El disco se registra en la primera sincronización (se crea una carpeta oculta .devbackup en su raíz).",
   "where": [
-   "backup_studio.py:4290"
+   "backup_studio.py:4344"
   ],
   "code": "self.disk_status.setText(_(\"El disco se registra en la primera sincronización (se crea una carpeta \""
  },
  {
   "id": "integridad: aún sin comprobar",
   "where": [
-   "backup_studio.py:4304"
+   "backup_studio.py:4358"
   ],
   "code": "return _(\"integridad: aún sin comprobar\") if not long else \\"
  },
  {
   "id": "Aún no hay nada comprobado. Se empieza con la próxima sincronización.",
   "where": [
-   "backup_studio.py:4305"
+   "backup_studio.py:4359"
   ],
   "code": "_(\"Aún no hay nada comprobado. Se empieza con la próxima sincronización.\")"
  },
  {
   "id": "integridad: sin datos",
   "where": [
-   "backup_studio.py:4313"
+   "backup_studio.py:4367"
   ],
   "code": "return _(\"integridad: sin datos\")"
  },
  {
   "id": "integridad comprobada en el {frac} del disco",
   "where": [
-   "backup_studio.py:4316"
+   "backup_studio.py:4370"
   ],
   "code": "return _(\"integridad comprobada en el {frac} del disco\").format(frac=pct(frac))"
  },
  {
   "id": "faltan {total}; se van revisando tras cada sincronización, empezando por los nunca comprobados",
   "where": [
-   "backup_studio.py:4317"
+   "backup_studio.py:4371"
   ],
   "code": "rest = \"\" if covered >= total else ((\"  ·  \" + _(\"faltan {total}; se van revisando tras cada sincronización, empezando por los nunca \""
  },
  {
   "id": "Contenido comprobado: {covered} de {total} archivos ({frac}){rest}.",
   "where": [
-   "backup_studio.py:4319"
+   "backup_studio.py:4373"
   ],
   "code": "return _(\"Contenido comprobado: {covered} de {total} archivos ({frac}){rest}.\").format(covered=fmt_int(covered), total=fmt_int(total), frac=pct(frac), rest=rest)"
  },
  {
   "id": "No se pudo configurar el arranque automático:\n{exc}",
   "where": [
-   "backup_studio.py:4325"
+   "backup_studio.py:4379"
   ],
   "code": "QMessageBox.warning(self, APP_NAME, _(\"No se pudo configurar el arranque automático:\\n{exc}\").format(exc=exc))"
  },
  {
   "id": "Abrir",
   "where": [
-   "backup_studio.py:4338"
+   "backup_studio.py:4392"
   ],
   "code": "menu.addAction(glyph_icon(G.OPEN, C[\"text\"], 14), _(\"Abrir\"), self._show_window)"
  },
  {
   "id": "Salir",
   "where": [
-   "backup_studio.py:4342"
+   "backup_studio.py:4396"
   ],
   "code": "menu.addAction(glyph_icon(G.CLOSE, C[\"text\"], 14), _(\"Salir\"), self._quit)"
  },
  {
   "id": "{app_name} · vigilando el disco de copia",
   "where": [
-   "backup_studio.py:4347"
+   "backup_studio.py:4401"
   ],
   "code": "self.tray.setToolTip(_(\"{app_name} · vigilando el disco de copia\").format(app_name=APP_NAME))"
  },
  {
   "id": "Disco de copia conectado",
   "where": [
-   "backup_studio.py:4421",
-   "backup_studio.py:4425"
+   "backup_studio.py:4475",
+   "backup_studio.py:4479"
   ],
   "code": "self._notify(_(\"Disco de copia conectado\"), _(\"{new_dst} listo. Abre {app_name} para sincronizar.\").format(new_dst=new_dst, app_name=APP_NAME))"
  },
  {
   "id": "{new_dst} listo. Abre {app_name} para sincronizar.",
   "where": [
-   "backup_studio.py:4421"
+   "backup_studio.py:4475"
   ],
   "code": "self._notify(_(\"Disco de copia conectado\"), _(\"{new_dst} listo. Abre {app_name} para sincronizar.\").format(new_dst=new_dst, app_name=APP_NAME))"
  },
  {
   "id": "Sincronizando…",
   "where": [
-   "backup_studio.py:4425"
+   "backup_studio.py:4479"
   ],
   "code": "self._notify(_(\"Disco de copia conectado\"), _(\"Sincronizando…\"))"
  },
  {
   "id": "Regla propia · clic derecho para quitarla",
   "where": [
-   "backup_studio.py:4451"
+   "backup_studio.py:4505"
   ],
   "code": "chip.setToolTip(_(\"Regla propia · clic derecho para quitarla\"))"
  },
  {
   "id": "Quitar «{name}»",
   "where": [
-   "backup_studio.py:4478"
+   "backup_studio.py:4532"
   ],
   "code": "act = menu.addAction(glyph_icon(G.CLOSE, C[\"err\"], 12), _(\"Quitar «{name}»\").format(name=name))"
  },
  {
   "id": "{n} carpetas de primer nivel",
   "where": [
-   "backup_studio.py:4495"
+   "backup_studio.py:4549"
   ],
   "code": "+ (\"  ·  \" + _(\"{n} carpetas de primer nivel\").format(n=fmt_int(n))))"
  },
  {
   "id": "Espera a que termine la copia en curso.",
   "where": [
-   "backup_studio.py:4510"
+   "backup_studio.py:4564"
   ],
   "code": "QMessageBox.information(self, APP_NAME, _(\"Espera a que termine la copia en curso.\"))"
  },
  {
   "id": "Conectado. Las copias se guardarán en {path}.",
   "where": [
-   "backup_studio.py:4518"
+   "backup_studio.py:4572"
   ],
   "code": "QMessageBox.information(self, APP_NAME, _(\"Conectado. Las copias se guardarán en {path}.\").format(path=dlg.result_path))"
  },
  {
   "id": "{n} excluida a mano",
   "where": [
-   "backup_studio.py:4522"
+   "backup_studio.py:4576"
   ],
   "code": "self.excl_count.setText(_n(\"{n} excluida a mano\", \"{n} excluidas a mano\", n).format(n=n) if n else \"\")",
   "plural": "{n} excluidas a mano"
  },
  {
+  "id": "Marcar {n} seleccionada",
+  "where": [
+   "backup_studio.py:4591"
+  ],
+  "code": "self.b_check_all.setText(_n(\"Marcar {n} seleccionada\", \"Marcar {n} seleccionadas\", n).format(n=n))",
+  "plural": "Marcar {n} seleccionadas"
+ },
+ {
+  "id": "Desmarcar {n} seleccionada",
+  "where": [
+   "backup_studio.py:4592"
+  ],
+  "code": "self.b_uncheck_all.setText(_n(\"Desmarcar {n} seleccionada\", \"Desmarcar {n} seleccionadas\", n).format(n=n))",
+  "plural": "Desmarcar {n} seleccionadas"
+ },
+ {
+  "id": "Incluye las carpetas seleccionadas y todo lo que tienen dentro.",
+  "where": [
+   "backup_studio.py:4593"
+  ],
+  "code": "tip_on = _(\"Incluye las carpetas seleccionadas y todo lo que tienen dentro.\")"
+ },
+ {
+  "id": "Excluye las carpetas seleccionadas y todo lo que tienen dentro.",
+  "where": [
+   "backup_studio.py:4594"
+  ],
+  "code": "tip_off = _(\"Excluye las carpetas seleccionadas y todo lo que tienen dentro.\")"
+ },
+ {
+  "id": "Marcar todo",
+  "where": [
+   "backup_studio.py:4596"
+  ],
+  "code": "self.b_check_all.setText(_(\"Marcar todo\"))"
+ },
+ {
+  "id": "Desmarcar todo",
+  "where": [
+   "backup_studio.py:4597"
+  ],
+  "code": "self.b_uncheck_all.setText(_(\"Desmarcar todo\"))"
+ },
+ {
+  "id": "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).",
+  "where": [
+   "backup_studio.py:4598"
+  ],
+  "code": "tip_on = _(\"Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).\")"
+ },
+ {
+  "id": "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.",
+  "where": [
+   "backup_studio.py:4599"
+  ],
+  "code": "tip_off = _(\"Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.\")"
+ },
+ {
   "id": "{n} regla activa",
   "where": [
-   "backup_studio.py:4546"
+   "backup_studio.py:4623"
   ],
   "code": "_n(\"{n} regla activa\", \"{n} reglas activas\", len(rules)).format(n=len(rules))]",
   "plural": "{n} reglas activas"
@@ -2222,7 +2273,7 @@
  {
   "id": "{n} carpeta excluida a mano",
   "where": [
-   "backup_studio.py:4548"
+   "backup_studio.py:4625"
   ],
   "code": "parts.append(_n(\"{n} carpeta excluida a mano\", \"{n} carpetas excluidas a mano\", manual).format(n=manual))",
   "plural": "{n} carpetas excluidas a mano"
@@ -2230,8 +2281,8 @@
  {
   "id": "{n} hilo",
   "where": [
-   "backup_studio.py:4549",
-   "backup_studio.py:6092"
+   "backup_studio.py:4626",
+   "backup_studio.py:6178"
   ],
   "code": "parts.append(_n(\"{n} hilo\", \"{n} hilos\", self.threads_spin.value()).format(n=self.threads_spin.value()))",
   "plural": "{n} hilos"
@@ -2239,28 +2290,28 @@
  {
   "id": "Todo está al día: no hay nada que copiar, mover ni guardar en versiones.",
   "where": [
-   "backup_studio.py:4567"
+   "backup_studio.py:4644"
   ],
   "code": "self.changes_empty.setText(_(\"Todo está al día: no hay nada que copiar, mover ni guardar en versiones.\"))"
  },
  {
   "id": "Omitir revisión",
   "where": [
-   "backup_studio.py:4588"
+   "backup_studio.py:4665"
   ],
   "code": "self.btn_cancel.setText((\"  \" + _(\"Omitir revisión\")) if scrubbing else (\"  \" + _(\"Cancelar\")))"
  },
  {
   "id": "Reanudar",
   "where": [
-   "backup_studio.py:4591"
+   "backup_studio.py:4668"
   ],
   "code": "self.btn_pause.setText((\"  \" + _(\"Reanudar\")))"
  },
  {
   "id": "Sincronizar {n} cambio",
   "where": [
-   "backup_studio.py:4598"
+   "backup_studio.py:4675"
   ],
   "code": "self.btn_start.setText(\"  \" + _n(\"Sincronizar {n} cambio\", \"Sincronizar {n} cambios\", n).format(n=fmt_int(n)))",
   "plural": "Sincronizar {n} cambios"
@@ -2268,435 +2319,435 @@
  {
   "id": "Comprobando",
   "where": [
-   "backup_studio.py:4603"
+   "backup_studio.py:4680"
   ],
   "code": "text, color = _(\"Comprobando\"), C[\"accent2\"]"
  },
  {
   "id": "el destino",
   "where": [
-   "backup_studio.py:4621"
+   "backup_studio.py:4698"
   ],
   "code": "dst = self.dst_card.path() or _(\"el destino\")"
  },
  {
   "id": "Listo para sincronizar",
   "where": [
-   "backup_studio.py:4622"
+   "backup_studio.py:4699"
   ],
   "code": "self.banner.set(\"info\", _(\"Listo para sincronizar\"),"
  },
  {
   "id": "«Analizar» enseña qué ha cambiado sin tocar nada. «Sincronizar» deja {dst} igual que el origen: copia lo nuevo y lo modificado, mueve lo renombrado y guarda en versiones lo que borres.",
   "where": [
-   "backup_studio.py:4623"
+   "backup_studio.py:4700"
   ],
   "code": "_(\"«Analizar» enseña qué ha cambiado sin tocar nada. «Sincronizar» deja {dst} igual que el \""
  },
  {
   "id": "La carpeta de origen no existe.",
   "where": [
-   "backup_studio.py:4630"
+   "backup_studio.py:4707"
   ],
   "code": "return _(\"La carpeta de origen no existe.\")"
  },
  {
   "id": "Elige una carpeta de destino.",
   "where": [
-   "backup_studio.py:4632"
+   "backup_studio.py:4709"
   ],
   "code": "return _(\"Elige una carpeta de destino.\")"
  },
  {
   "id": "El origen y el destino son la misma carpeta.",
   "where": [
-   "backup_studio.py:4635"
+   "backup_studio.py:4712"
   ],
   "code": "return _(\"El origen y el destino son la misma carpeta.\")"
  },
  {
   "id": "El destino no puede estar dentro del origen.",
   "where": [
-   "backup_studio.py:4637"
+   "backup_studio.py:4714"
   ],
   "code": "return _(\"El destino no puede estar dentro del origen.\")"
  },
  {
   "id": "No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y en la misma red.",
   "where": [
-   "backup_studio.py:4640"
+   "backup_studio.py:4717"
   ],
   "code": "return _(\"No se llega a la carpeta de red {dst}. Comprueba que el servidor está encendido y \""
  },
  {
   "id": "El disco de {dst} no está conectado.",
   "where": [
-   "backup_studio.py:4642"
+   "backup_studio.py:4719"
   ],
   "code": "return _(\"El disco de {dst} no está conectado.\").format(dst=dst)"
  },
  {
   "id": "Análisis iniciado  ·  {src}  →  {dst}",
   "where": [
-   "backup_studio.py:4676"
+   "backup_studio.py:4753"
   ],
   "code": "self._log(_(\"Análisis iniciado  ·  {src}  →  {dst}\").format(src=src, dst=dst), C[\"accent2\"])"
  },
  {
   "id": "Modo: {lower}  ·  reglas: {v}  ·  excluidas a mano: {excluded}",
   "where": [
-   "backup_studio.py:4677"
+   "backup_studio.py:4754"
   ],
   "code": "self._log(_(\"Modo: {lower}  ·  reglas: {v}  ·  excluidas a mano: {excluded}\").format(lower=_(engine.MODES[job.mode]).lower(), v=', '.join(job.patterns) or _(\"ninguna\"), excluded=len(job.excluded)))"
  },
  {
   "id": "Incidencias",
   "where": [
-   "backup_studio.py:4721",
-   "backup_studio.py:5274",
-   "backup_studio.py:3814"
+   "backup_studio.py:4798",
+   "backup_studio.py:5351",
+   "backup_studio.py:3861"
   ],
   "code": "self.seg_buttons[PAGE_ISSUES].setText((\"  \" + _(\"Incidencias\")))"
  },
  {
   "id": "Reanudado",
   "where": [
-   "backup_studio.py:4751"
+   "backup_studio.py:4828"
   ],
   "code": "self._log(_(\"Reanudado\"))"
  },
  {
   "id": "Revisión de integridad omitida: la sincronización ya estaba completa.",
   "where": [
-   "backup_studio.py:4764"
+   "backup_studio.py:4841"
   ],
   "code": "self._log(_(\"Revisión de integridad omitida: la sincronización ya estaba completa.\"), C[\"warn\"])"
  },
  {
   "id": "la sincronización",
   "where": [
-   "backup_studio.py:4766"
+   "backup_studio.py:4843"
   ],
   "code": "what = _(\"la sincronización\") if self.job.phase == \"copying\" else _(\"el análisis\")"
  },
  {
   "id": "el análisis",
   "where": [
-   "backup_studio.py:4766"
+   "backup_studio.py:4843"
   ],
   "code": "what = _(\"la sincronización\") if self.job.phase == \"copying\" else _(\"el análisis\")"
  },
  {
   "id": "¿Cancelar {what}?\n\nLo que ya se haya copiado se conserva; el archivo a medias se descarta.",
   "where": [
-   "backup_studio.py:4767"
+   "backup_studio.py:4844"
   ],
   "code": "ans = QMessageBox.question(self, APP_NAME, _(\"¿Cancelar {what}?\\n\\nLo que ya se haya copiado se conserva; el archivo a medias se descarta.\").format(what=what))"
  },
  {
   "id": "Cancelando…",
   "where": [
-   "backup_studio.py:4770"
+   "backup_studio.py:4847"
   ],
   "code": "self._log(_(\"Cancelando…\"), C[\"warn\"])"
  },
  {
   "id": "{new_files} nuevos ({new_bytes})  ·  {changed_files} modificados ({changed_bytes})  ·  {moved_files} movidos  ·  {del_files} a versiones  ·  {skip_files} sin cambios",
   "where": [
-   "backup_studio.py:4812"
+   "backup_studio.py:4889"
   ],
   "code": "return (_(\"{new_files} nuevos ({new_bytes})  ·  {changed_files} modificados ({changed_bytes})  ·  \""
  },
  {
   "id": "archivos revisados",
   "where": [
-   "backup_studio.py:4820"
+   "backup_studio.py:4897"
   ],
   "code": "self.ring.set_text(fmt_int(s.files_found), _(\"archivos revisados\"), _(\"ANALIZANDO\"))"
  },
  {
   "id": "ANALIZANDO",
   "where": [
-   "backup_studio.py:4820"
+   "backup_studio.py:4897"
   ],
   "code": "self.ring.set_text(fmt_int(s.files_found), _(\"archivos revisados\"), _(\"ANALIZANDO\"))"
  },
  {
   "id": "Analizando el origen con el índice de la última copia…",
   "where": [
-   "backup_studio.py:4821"
+   "backup_studio.py:4898"
   ],
   "code": "title = _(\"Analizando el origen con el índice de la última copia…\") if s.fast else _(\"Analizando origen y destino…\")"
  },
  {
   "id": "Analizando origen y destino…",
   "where": [
-   "backup_studio.py:4821"
+   "backup_studio.py:4898"
   ],
   "code": "title = _(\"Analizando el origen con el índice de la última copia…\") if s.fast else _(\"Analizando origen y destino…\")"
  },
  {
   "id": "{dirs_scanned} carpetas  ·",
   "where": [
-   "backup_studio.py:4822"
+   "backup_studio.py:4899"
   ],
   "code": "self.banner.set(\"run\", title, (_(\"{dirs_scanned} carpetas  ·\").format(dirs_scanned=fmt_int(s.dirs_scanned)) + \"  \") + self._plan_text(s), G.SEARCH)"
  },
  {
   "id": "desde las {op_wall:%H:%M:%S}",
   "where": [
-   "backup_studio.py:4823",
-   "backup_studio.py:4953"
+   "backup_studio.py:4900",
+   "backup_studio.py:5030"
   ],
   "code": "self.t_elapsed.set(fmt_clock(elapsed), _(\"desde las {op_wall:%H:%M:%S}\").format(op_wall=self._op_wall))"
  },
  {
   "id": "se calcula al terminar el análisis",
   "where": [
-   "backup_studio.py:4824"
+   "backup_studio.py:4901"
   ],
   "code": "self.t_left.set(\"—\", _(\"se calcula al terminar el análisis\"))"
  },
  {
   "id": "archivos revisados por segundo",
   "where": [
-   "backup_studio.py:4825"
+   "backup_studio.py:4902"
   ],
   "code": "self.t_speed.set(f\"{fmt_int(s.files_found / active)}/s\", _(\"archivos revisados por segundo\"))"
  },
  {
   "id": "{new_bytes} por copiar",
   "where": [
-   "backup_studio.py:4827"
+   "backup_studio.py:4904"
   ],
   "code": "self.t_copied.set(\"0 B\", _(\"{new_bytes} por copiar\").format(new_bytes=fmt_bytes(s.new_bytes + s.changed_bytes)))"
  },
  {
   "id": "{new_files} por copiar",
   "where": [
-   "backup_studio.py:4828"
+   "backup_studio.py:4905"
   ],
   "code": "self.t_files.set(\"0\", _(\"{new_files} por copiar\").format(new_files=fmt_int(s.new_files + s.changed_files)))"
  },
  {
   "id": "{skip_bytes} ya al día",
   "where": [
-   "backup_studio.py:4829",
-   "backup_studio.py:4990",
-   "backup_studio.py:5115",
-   "backup_studio.py:5203"
+   "backup_studio.py:4906",
+   "backup_studio.py:5067",
+   "backup_studio.py:5192",
+   "backup_studio.py:5280"
   ],
   "code": "self.t_skipped.set(fmt_int(s.skip_files), _(\"{skip_bytes} ya al día\").format(skip_bytes=fmt_bytes(s.skip_bytes)))"
  },
  {
   "id": "Analizando… · {app_name}",
   "where": [
-   "backup_studio.py:4832"
+   "backup_studio.py:4909"
   ],
   "code": "self.setWindowTitle(_(\"Analizando… · {app_name}\").format(app_name=APP_NAME))"
  },
  {
   "id": "Sincronización iniciada con {threads} hilos  ·  {ops_total} cambios  ·  {plan_bytes} por copiar",
   "where": [
-   "backup_studio.py:4838"
+   "backup_studio.py:4915"
   ],
   "code": "self._log(_(\"Sincronización iniciada con {threads} hilos  ·  {ops_total} cambios  ·  {plan_bytes} por \""
  },
  {
   "id": "Sincronizando  {src}  →  {dst}",
   "where": [
-   "backup_studio.py:4843"
+   "backup_studio.py:4920"
   ],
   "code": "self.banner.set(\"run\", _(\"Sincronizando  {src}  →  {dst}\").format(src=job.src, dst=job.dst),"
  },
  {
   "id": "análisis en {scan_end}",
   "where": [
-   "backup_studio.py:4844"
+   "backup_studio.py:4921"
   ],
   "code": "self._plan_text(s) + (\"  ·  \" + _(\"análisis en {scan_end}\").format(scan_end=fmt_clock(s.scan_end - s.scan_start, ms=True))),"
  },
  {
   "id": "como mucho {scrub_seconds}",
   "where": [
-   "backup_studio.py:4855"
+   "backup_studio.py:4932"
   ],
   "code": "limit = (_(\"como mucho {scrub_seconds}\").format(scrub_seconds=fmt_human(job.scrub_seconds)) if job.scrub_seconds > 0"
  },
  {
   "id": "todo el disco, sin límite de tiempo",
   "where": [
-   "backup_studio.py:4856"
+   "backup_studio.py:4933"
   ],
   "code": "else _(\"todo el disco, sin límite de tiempo\"))"
  },
  {
   "id": "Sincronización completada. Revisión de integridad: {scrub_due} archivos pendientes de comprobar ({limit}).",
   "where": [
-   "backup_studio.py:4857"
+   "backup_studio.py:4934"
   ],
   "code": "self._log(_(\"Sincronización completada. Revisión de integridad: {scrub_due} archivos pendientes de \""
  },
  {
   "id": "Sincronización completada  ·  revisando la integridad del disco",
   "where": [
-   "backup_studio.py:4859"
+   "backup_studio.py:4936"
   ],
   "code": "self.banner.set(\"run\", _(\"Sincronización completada  ·  revisando la integridad del disco\"),"
  },
  {
   "id": "Relee del disco una tanda de archivos ya copiados para detectar daños silenciosos ({limit}). La copia ya está completa: puedes terminar ahora con «Omitir revisión».",
   "where": [
-   "backup_studio.py:4860"
+   "backup_studio.py:4937"
   ],
   "code": "_(\"Relee del disco una tanda de archivos ya copiados para detectar daños silenciosos \""
  },
  {
   "id": "Quitando temporales de copias interrumpidas…",
   "where": [
-   "backup_studio.py:4879"
+   "backup_studio.py:4956"
   ],
   "code": "\"limpieza\": _(\"Quitando temporales de copias interrumpidas…\"),"
  },
  {
   "id": "Creando carpetas nuevas en el destino…  {dirs_created} / {dirs_to_create}",
   "where": [
-   "backup_studio.py:4880"
+   "backup_studio.py:4957"
   ],
   "code": "\"carpetas\": _(\"Creando carpetas nuevas en el destino…  {dirs_created} / {dirs_to_create}\").format(dirs_created=fmt_int(s.dirs_created), dirs_to_create=fmt_int(s.dirs_to_create)),"
  },
  {
   "id": "Moviendo archivos renombrados o movidos…  {moves_done} / {moved_files}",
   "where": [
-   "backup_studio.py:4881"
+   "backup_studio.py:4958"
   ],
   "code": "\"moviendo\": _(\"Moviendo archivos renombrados o movidos…  {moves_done} / {moved_files}\").format(moves_done=fmt_int(s.moves_done), moved_files=fmt_int(s.moved_files)),"
  },
  {
   "id": "Guardando en versiones lo borrado del origen…  {deletes_done} / {del_files}",
   "where": [
-   "backup_studio.py:4882"
+   "backup_studio.py:4959"
   ],
   "code": "\"versionando\": _(\"Guardando en versiones lo borrado del origen…  {deletes_done} / {del_files}\").format(deletes_done=fmt_int(s.deletes_done), del_files=fmt_int(s.del_files)),"
  },
  {
   "id": "Quitando versiones más antiguas que el plazo elegido…",
   "where": [
-   "backup_studio.py:4883"
+   "backup_studio.py:4960"
   ],
   "code": "\"purgando\": _(\"Quitando versiones más antiguas que el plazo elegido…\"),"
  },
  {
   "id": "Guardando el índice para que el próximo análisis sea rápido…",
   "where": [
-   "backup_studio.py:4884"
+   "backup_studio.py:4961"
   ],
   "code": "\"índice\": _(\"Guardando el índice para que el próximo análisis sea rápido…\"),"
  },
  {
   "id": "Comprobando la integridad del disco…  {scrub_files} archivos ({scrub_bytes})  ·  {scrub_repaired} reparados  ·  {scrub_alerts} avisos",
   "where": [
-   "backup_studio.py:4890"
+   "backup_studio.py:4967"
   ],
   "code": "text = (_(\"Comprobando la integridad del disco…  {scrub_files} archivos ({scrub_bytes})  ·  \""
  },
  {
   "id": "{v} de revisión restantes",
   "where": [
-   "backup_studio.py:4894"
+   "backup_studio.py:4971"
   ],
   "code": "text += (\"  ·  \" + _(\"{v} de revisión restantes\").format(v=fmt_human(max(0, left))))"
  },
  {
   "id": "COMPLETADO",
   "where": [
-   "backup_studio.py:4939",
-   "backup_studio.py:5134"
+   "backup_studio.py:5016",
+   "backup_studio.py:5211"
   ],
   "code": "caption = _(\"COMPLETADO\") if job.phase == \"done\" else _(\"CANCELADO\")"
  },
  {
   "id": "CANCELADO",
   "where": [
-   "backup_studio.py:4939",
-   "backup_studio.py:5064"
+   "backup_studio.py:5016",
+   "backup_studio.py:5141"
   ],
   "code": "caption = _(\"COMPLETADO\") if job.phase == \"done\" else _(\"CANCELADO\")"
  },
  {
   "id": "ESPERANDO AL DISCO",
   "where": [
-   "backup_studio.py:4941"
+   "backup_studio.py:5018"
   ],
   "code": "caption = (_(\"ESPERANDO AL DISCO\") if s.disk_lost_at else _(\"EN PAUSA\") if paused"
  },
  {
   "id": "EN PAUSA",
   "where": [
-   "backup_studio.py:4941"
+   "backup_studio.py:5018"
   ],
   "code": "caption = (_(\"ESPERANDO AL DISCO\") if s.disk_lost_at else _(\"EN PAUSA\") if paused"
  },
  {
   "id": "COMPROBANDO",
   "where": [
-   "backup_studio.py:4942"
+   "backup_studio.py:5019"
   ],
   "code": "else _(\"COMPROBANDO\") if s.step == \"verificando\" else _(\"SINCRONIZANDO\"))"
  },
  {
   "id": "SINCRONIZANDO",
   "where": [
-   "backup_studio.py:4942"
+   "backup_studio.py:5019"
   ],
   "code": "else _(\"COMPROBANDO\") if s.step == \"verificando\" else _(\"SINCRONIZANDO\"))"
  },
  {
   "id": "sincronizado · revisando integridad",
   "where": [
-   "backup_studio.py:4943"
+   "backup_studio.py:5020"
   ],
   "code": "self.ring.set_text(pct(frac), _(\"sincronizado · revisando integridad\") if scrubbing"
  },
  {
   "id": "{done} de {total}",
   "where": [
-   "backup_studio.py:4944"
+   "backup_studio.py:5021"
   ],
   "code": "else _(\"{done} de {total}\").format(done=fmt_bytes(s.bytes_done),"
  },
  {
   "id": "terminado",
   "where": [
-   "backup_studio.py:4955"
+   "backup_studio.py:5032"
   ],
   "code": "self.t_left.set(\"00:00:00\", _(\"terminado\"), C[\"ok\"] if job.phase == \"done\" else None)"
  },
  {
   "id": "hora de fin real",
   "where": [
-   "backup_studio.py:4956"
+   "backup_studio.py:5033"
   ],
   "code": "self.t_eta.set(datetime.now().strftime(\"%H:%M:%S\"), _(\"hora de fin real\"))"
  },
  {
   "id": "archivos por revisar de {scrub_due}",
   "where": [
-   "backup_studio.py:4961"
+   "backup_studio.py:5038"
   ],
   "code": "_(\"archivos por revisar de {scrub_due}\").format(scrub_due=fmt_int(s.scrub_due)))"
  },
  {
   "id": "revisión sin límite de tiempo",
   "where": [
-   "backup_studio.py:4962"
+   "backup_studio.py:5039"
   ],
   "code": "self.t_eta.set(\"—\", _(\"revisión sin límite de tiempo\"))"
  },
  {
   "id": "revisión de integridad",
   "where": [
-   "backup_studio.py:4964",
+   "backup_studio.py:5041",
    "engine.py:1775"
   ],
   "code": "self.t_left.set(fmt_clock(left), _(\"revisión de integridad\"))"
@@ -2704,365 +2755,365 @@
  {
   "id": "fin de la revisión (como mucho)",
   "where": [
-   "backup_studio.py:4966"
+   "backup_studio.py:5043"
   ],
   "code": "_(\"fin de la revisión (como mucho)\"))"
  },
  {
   "id": "esperando al disco",
   "where": [
-   "backup_studio.py:4968"
+   "backup_studio.py:5045"
   ],
   "code": "why = _(\"esperando al disco\") if s.disk_lost_at else _(\"en pausa\")"
  },
  {
   "id": "midiendo velocidad",
   "where": [
-   "backup_studio.py:4972"
+   "backup_studio.py:5049"
   ],
   "code": "self.t_left.set(\"…\", _(\"midiendo velocidad\"))"
  },
  {
   "id": "hoy",
   "where": [
-   "backup_studio.py:4978"
+   "backup_studio.py:5055"
   ],
   "code": "when = _(\"hoy\") if day.days == 0 else _(\"mañana\") if day.days == 1 else fin.strftime(_(\"%d/%m/%Y\"))"
  },
  {
   "id": "mañana",
   "where": [
-   "backup_studio.py:4978"
+   "backup_studio.py:5055"
   ],
   "code": "when = _(\"hoy\") if day.days == 0 else _(\"mañana\") if day.days == 1 else fin.strftime(_(\"%d/%m/%Y\"))"
  },
  {
   "id": "%d/%m/%Y",
   "where": [
-   "backup_studio.py:4978"
+   "backup_studio.py:5055"
   ],
   "code": "when = _(\"hoy\") if day.days == 0 else _(\"mañana\") if day.days == 1 else fin.strftime(_(\"%d/%m/%Y\"))"
  },
  {
   "id": "media de la copia",
   "where": [
-   "backup_studio.py:4981"
+   "backup_studio.py:5058"
   ],
   "code": "self.t_speed.set(fmt_speed(avg), _(\"media de la copia\"))"
  },
  {
   "id": "lectura de comprobación",
   "where": [
-   "backup_studio.py:4984"
+   "backup_studio.py:5061"
   ],
   "code": "self.t_speed.set(fmt_speed(s.scrub_bytes / span) if span else \"—\", _(\"lectura de comprobación\"))"
  },
  {
   "id": "{n} archivos/s",
   "where": [
-   "backup_studio.py:4986"
+   "backup_studio.py:5063"
   ],
   "code": "self.t_speed.set(fmt_speed(speed) if not paused else \"—\", _(\"{n} archivos/s\").format(n=fmt_int(fps)))"
  },
  {
   "id": "de {total}",
   "where": [
-   "backup_studio.py:4987",
-   "backup_studio.py:5113",
-   "backup_studio.py:5114"
+   "backup_studio.py:5064",
+   "backup_studio.py:5190",
+   "backup_studio.py:5191"
   ],
   "code": "self.t_copied.set(fmt_bytes(s.bytes_done), _(\"de {total}\").format(total=fmt_bytes(s.plan_bytes)))"
  },
  {
   "id": "de {ops_total}  ·  {pending} pendientes",
   "where": [
-   "backup_studio.py:4989"
+   "backup_studio.py:5066"
   ],
   "code": "self.t_files.set(fmt_int(handled), _(\"de {ops_total}  ·  {pending} pendientes\").format(ops_total=fmt_int(s.ops_total), pending=fmt_int(pending)))"
  },
  {
   "id": "Comprobando integridad",
   "where": [
-   "backup_studio.py:5007"
+   "backup_studio.py:5084"
   ],
   "code": "doing = _(\"En pausa\") if paused else _(\"Comprobando integridad\") if scrubbing else _(\"Sincronizando\")"
  },
  {
   "id": "ver pestaña Incidencias",
   "where": [
-   "backup_studio.py:5016"
+   "backup_studio.py:5093"
   ],
   "code": "self.t_errors.set(fmt_int(s.errors), _(\"ver pestaña Incidencias\"), C[\"err\"])"
  },
  {
   "id": "sin incidencias",
   "where": [
-   "backup_studio.py:5018"
+   "backup_studio.py:5095"
   ],
   "code": "self.t_errors.set(\"0\", _(\"sin incidencias\"), C[\"ok\"])"
  },
  {
   "id": "… más incidencias en la pestaña Incidencias",
   "where": [
-   "backup_studio.py:5042"
+   "backup_studio.py:5119"
   ],
   "code": "self._log(_(\"… más incidencias en la pestaña Incidencias\"), C[\"err\"])"
  },
  {
   "id": "Incidencias  ({total})",
   "where": [
-   "backup_studio.py:5044"
+   "backup_studio.py:5121"
   ],
   "code": "self.seg_buttons[PAGE_ISSUES].setText((\"  \" + _(\"Incidencias  ({total})\").format(total=fmt_int(total))))"
  },
  {
   "id": "Análisis completado en {scan_end}  ·  {files_found} archivos ({bytes_found})  ·",
   "where": [
-   "backup_studio.py:5048"
+   "backup_studio.py:5125"
   ],
   "code": "self._log((_(\"Análisis completado en {scan_end}  ·  {files_found} archivos ({bytes_found})  ·\").format(scan_end=fmt_clock(s.scan_end - s.scan_start, ms=True), files_found=fmt_int(s.files_found), bytes"
  },
  {
   "id": "excluidas {excluded_rule}",
   "where": [
-   "backup_studio.py:5049"
+   "backup_studio.py:5126"
   ],
   "code": "+ (\"  ·  \" + _(\"excluidas {excluded_rule}\").format(excluded_rule=fmt_int(s.excluded_rule + s.excluded_manual)))"
  },
  {
   "id": "enlaces omitidos {links_skipped}",
   "where": [
-   "backup_studio.py:5050"
+   "backup_studio.py:5127"
   ],
   "code": "+ ((\"  ·  \" + _(\"enlaces omitidos {links_skipped}\").format(links_skipped=fmt_int(s.links_skipped))) if s.links_skipped else \"\"), C[\"ok\"])"
  },
  {
   "id": "análisis interrumpido",
   "where": [
-   "backup_studio.py:5064"
+   "backup_studio.py:5141"
   ],
   "code": "self.ring.set_text(\"—\", _(\"análisis interrumpido\"), _(\"CANCELADO\"))"
  },
  {
   "id": "Análisis cancelado",
   "where": [
-   "backup_studio.py:5065",
-   "backup_studio.py:5067"
+   "backup_studio.py:5142",
+   "backup_studio.py:5144"
   ],
   "code": "self.banner.set(\"warn\", _(\"Análisis cancelado\"), _(\"No se ha tocado nada. Pulsa Analizar o Sincronizar \""
  },
  {
   "id": "No se ha tocado nada. Pulsa Analizar o Sincronizar para empezar de nuevo.",
   "where": [
-   "backup_studio.py:5065"
+   "backup_studio.py:5142"
   ],
   "code": "self.banner.set(\"warn\", _(\"Análisis cancelado\"), _(\"No se ha tocado nada. Pulsa Analizar o Sincronizar \""
  },
  {
   "id": "La operación se detuvo por un error",
   "where": [
-   "backup_studio.py:5071"
+   "backup_studio.py:5148"
   ],
   "code": "self.banner.set(\"err\", _(\"La operación se detuvo por un error\"), job.fatal or _(\"Error desconocido\"), G.ERROR)"
  },
  {
   "id": "Error desconocido",
   "where": [
-   "backup_studio.py:5071"
+   "backup_studio.py:5148"
   ],
   "code": "self.banner.set(\"err\", _(\"La operación se detuvo por un error\"), job.fatal or _(\"Error desconocido\"), G.ERROR)"
  },
  {
   "id": "Error: {fatal}",
   "where": [
-   "backup_studio.py:5072"
+   "backup_studio.py:5149"
   ],
   "code": "self._log(_(\"Error: {fatal}\").format(fatal=job.fatal), C[\"err\"])"
  },
  {
   "id": "{files_found} archivos en origen ({bytes_found})  ·",
   "where": [
-   "backup_studio.py:5092"
+   "backup_studio.py:5169"
   ],
   "code": "detail = ((_(\"{files_found} archivos en origen ({bytes_found})  ·\").format(files_found=fmt_int(s.files_found), bytes_found=fmt_bytes(s.bytes_found)) + \"  \") + self._plan_text(s)"
  },
  {
   "id": "libre en destino {free}\n{index_note}",
   "where": [
-   "backup_studio.py:5093"
+   "backup_studio.py:5170"
   ],
   "code": "+ (\"  ·  \" + _(\"libre en destino {free}\\n{index_note}\").format(free=fmt_bytes(free), index_note=job.index_note)))"
  },
  {
   "id": "no hay nada que copiar",
   "where": [
-   "backup_studio.py:5096"
+   "backup_studio.py:5173"
   ],
   "code": "self.ring.set_text(_(\"Al día\"), _(\"no hay nada que copiar\"), _(\"ANÁLISIS\"))"
  },
  {
   "id": "ANÁLISIS",
   "where": [
-   "backup_studio.py:5096",
-   "backup_studio.py:5100",
-   "backup_studio.py:5105"
+   "backup_studio.py:5173",
+   "backup_studio.py:5177",
+   "backup_studio.py:5182"
   ],
   "code": "self.ring.set_text(_(\"Al día\"), _(\"no hay nada que copiar\"), _(\"ANÁLISIS\"))"
  },
  {
   "id": "Todo está al día  ·  análisis en {scan}",
   "where": [
-   "backup_studio.py:5097"
+   "backup_studio.py:5174"
   ],
   "code": "self.banner.set(\"ok\", _(\"Todo está al día  ·  análisis en {scan}\").format(scan=fmt_clock(scan, ms=True)), detail, G.DONE)"
  },
  {
   "id": "cambios por aplicar",
   "where": [
-   "backup_studio.py:5100",
-   "backup_studio.py:5105"
+   "backup_studio.py:5177",
+   "backup_studio.py:5182"
   ],
   "code": "self.ring.set_text(fmt_int(s.ops_total), _(\"cambios por aplicar\"), _(\"ANÁLISIS\"))"
  },
  {
   "id": "No hay espacio suficiente en el destino",
   "where": [
-   "backup_studio.py:5101"
+   "backup_studio.py:5178"
   ],
   "code": "self.banner.set(\"warn\", _(\"No hay espacio suficiente en el destino\"),"
  },
  {
   "id": "faltan {plan_bytes}",
   "where": [
-   "backup_studio.py:5102"
+   "backup_studio.py:5179"
   ],
   "code": "detail + (\"  ·  \" + _(\"faltan {plan_bytes}\").format(plan_bytes=fmt_bytes(s.plan_bytes - free))), G.WARN)"
  },
  {
   "id": "Análisis completado en {scan}  ·  revisa la pestaña Cambios o pulsa «Sincronizar»",
   "where": [
-   "backup_studio.py:5106"
+   "backup_studio.py:5183"
   ],
   "code": "self.banner.set(\"info\", _(\"Análisis completado en {scan}  ·  revisa la pestaña Cambios o pulsa «Sincronizar»\").format(scan=fmt_clock(scan, ms=True)), detail, G.CHECK)"
  },
  {
   "id": "duración del análisis",
   "where": [
-   "backup_studio.py:5107"
+   "backup_studio.py:5184"
   ],
   "code": "self.t_elapsed.set(fmt_clock(scan, ms=True), _(\"duración del análisis\"))"
  },
  {
   "id": "previsto según la última copia",
   "where": [
-   "backup_studio.py:5110"
+   "backup_studio.py:5187"
   ],
   "code": "_(\"previsto según la última copia\") if eta is not None else _(\"se mide al copiar\"))"
  },
  {
   "id": "se mide al copiar",
   "where": [
-   "backup_studio.py:5110"
+   "backup_studio.py:5187"
   ],
   "code": "_(\"previsto según la última copia\") if eta is not None else _(\"se mide al copiar\"))"
  },
  {
   "id": "{size} copiados",
   "where": [
-   "backup_studio.py:5133"
+   "backup_studio.py:5210"
   ],
   "code": "self.ring.set_text(f\"100{i18n.numbers()[2]}%\", _(\"{size} copiados\").format(size=fmt_bytes(s.bytes_done)),"
  },
  {
   "id": "CON INCIDENCIAS",
   "where": [
-   "backup_studio.py:5134"
+   "backup_studio.py:5211"
   ],
   "code": "_(\"COMPLETADO\") if not s.errors else _(\"CON INCIDENCIAS\"))"
  },
  {
   "id": "{files_done} copiados ({bytes_done})",
   "where": [
-   "backup_studio.py:5139"
+   "backup_studio.py:5216"
   ],
   "code": "parts = [_(\"{files_done} copiados ({bytes_done})\").format(files_done=fmt_int(s.files_done), bytes_done=fmt_bytes(s.bytes_done)),"
  },
  {
   "id": "{n} movidos",
   "where": [
-   "backup_studio.py:5140"
+   "backup_studio.py:5217"
   ],
   "code": "_(\"{n} movidos\").format(n=fmt_int(s.moves_done)), _(\"{versions_saved} versiones guardadas\").format(versions_saved=fmt_int(s.versions_saved)),"
  },
  {
   "id": "{versions_saved} versiones guardadas",
   "where": [
-   "backup_studio.py:5140"
+   "backup_studio.py:5217"
   ],
   "code": "_(\"{n} movidos\").format(n=fmt_int(s.moves_done)), _(\"{versions_saved} versiones guardadas\").format(versions_saved=fmt_int(s.versions_saved)),"
  },
  {
   "id": "{skip_files} sin cambios",
   "where": [
-   "backup_studio.py:5141"
+   "backup_studio.py:5218"
   ],
   "code": "_(\"{skip_files} sin cambios\").format(skip_files=fmt_int(s.skip_files)), _(\"media {speed}\").format(speed=fmt_speed(avg)),"
  },
  {
   "id": "media {speed}",
   "where": [
-   "backup_studio.py:5141"
+   "backup_studio.py:5218"
   ],
   "code": "_(\"{skip_files} sin cambios\").format(skip_files=fmt_int(s.skip_files)), _(\"media {speed}\").format(speed=fmt_speed(avg)),"
  },
  {
   "id": "análisis {scan}",
   "where": [
-   "backup_studio.py:5142",
-   "backup_studio.py:5211"
+   "backup_studio.py:5219",
+   "backup_studio.py:5288"
   ],
   "code": "_(\"análisis {scan}\").format(scan=fmt_clock(scan, ms=True)), _(\"copia {time}\").format(time=fmt_clock(copy, ms=True))]"
  },
  {
   "id": "copia {time}",
   "where": [
-   "backup_studio.py:5142",
-   "backup_studio.py:5212"
+   "backup_studio.py:5219",
+   "backup_studio.py:5289"
   ],
   "code": "_(\"análisis {scan}\").format(scan=fmt_clock(scan, ms=True)), _(\"copia {time}\").format(time=fmt_clock(copy, ms=True))]"
  },
  {
   "id": "{versions_purged} versiones antiguas retiradas",
   "where": [
-   "backup_studio.py:5144"
+   "backup_studio.py:5221"
   ],
   "code": "parts.append(_(\"{versions_purged} versiones antiguas retiradas\").format(versions_purged=fmt_int(s.versions_purged)))"
  },
  {
   "id": "{verified_copies} copias verificadas con SHA-256",
   "where": [
-   "backup_studio.py:5146"
+   "backup_studio.py:5223"
   ],
   "code": "parts.append(_(\"{verified_copies} copias verificadas con SHA-256\").format(verified_copies=fmt_int(s.verified_copies)))"
  },
  {
   "id": "integridad: {scrub_files} revisados, {scrub_repaired} reparados, {scrub_alerts} avisos · disco comprobado al {cover}",
   "where": [
-   "backup_studio.py:5149"
+   "backup_studio.py:5226"
   ],
   "code": "parts.append(_(\"integridad: {scrub_files} revisados, {scrub_repaired} reparados, {scrub_alerts} avisos · \""
  },
  {
   "id": "en pausa {paused_total}",
   "where": [
-   "backup_studio.py:5152"
+   "backup_studio.py:5229"
   ],
   "code": "parts.append(_(\"en pausa {paused_total}\").format(paused_total=fmt_clock(self._paused_total, ms=True)))"
  },
  {
   "id": "{n} incidencia",
   "where": [
-   "backup_studio.py:5153"
+   "backup_studio.py:5230"
   ],
   "code": "issues = _n(\"{n} incidencia\", \"{n} incidencias\", s.errors).format(n=fmt_int(s.errors))",
   "plural": "{n} incidencias"
@@ -3070,182 +3121,182 @@
  {
   "id": "Ver registro",
   "where": [
-   "backup_studio.py:5156"
+   "backup_studio.py:5233"
   ],
   "code": "action = (_(\"Ver registro\"), self._open_log) if self._last_log else None"
  },
  {
   "id": "{src}  →  {dst}  ·  {bytes_done} copiados  ·  media {avg}",
   "where": [
-   "backup_studio.py:5157"
+   "backup_studio.py:5234"
   ],
   "code": "brief = _(\"{src}  →  {dst}  ·  {bytes_done} copiados  ·  media {avg}\").format(src=job.src, dst=job.dst, bytes_done=fmt_bytes(s.bytes_done), avg=fmt_speed(avg))"
  },
  {
   "id": "Sincronización cancelada tras {total}",
   "where": [
-   "backup_studio.py:5159"
+   "backup_studio.py:5236"
   ],
   "code": "self.banner.set(\"warn\", _(\"Sincronización cancelada tras {total}\").format(total=fmt_clock(total, ms=True)),"
  },
  {
   "id": "lo copiado se conserva; vuelve a pulsar Sincronizar para continuar",
   "where": [
-   "backup_studio.py:5160"
+   "backup_studio.py:5237"
   ],
   "code": "brief + (\"  ·  \" + _(\"lo copiado se conserva; vuelve a pulsar Sincronizar para continuar\")),"
  },
  {
   "id": "Sincronización cancelada",
   "where": [
-   "backup_studio.py:5162"
+   "backup_studio.py:5239"
   ],
   "code": "self._log(_(\"Sincronización cancelada\"), C[\"warn\"])"
  },
  {
   "id": "Sincronización terminada en {total} con {issues}",
   "where": [
-   "backup_studio.py:5164"
+   "backup_studio.py:5241"
   ],
   "code": "self.banner.set(\"warn\", _(\"Sincronización terminada en {total} con {issues}\").format(total=fmt_clock(total, ms=True), issues=issues),"
  },
  {
   "id": "detalles en la pestaña Incidencias",
   "where": [
-   "backup_studio.py:5165"
+   "backup_studio.py:5242"
   ],
   "code": "brief + (\"  ·  \" + _(\"detalles en la pestaña Incidencias\")), G.WARN, action)"
  },
  {
   "id": "Sincronización completada en {total}",
   "where": [
-   "backup_studio.py:5167"
+   "backup_studio.py:5244"
   ],
   "code": "self.banner.set(\"ok\", _(\"Sincronización completada en {total}\").format(total=fmt_clock(total, ms=True)), brief, G.DONE, action)"
  },
  {
   "id": "Fin  ·  duración total {total}  ·",
   "where": [
-   "backup_studio.py:5168"
+   "backup_studio.py:5245"
   ],
   "code": "self._log((_(\"Fin  ·  duración total {total}  ·\").format(total=fmt_clock(total, ms=True)) + \"  \") + \"  ·  \".join(parts),"
  },
  {
   "id": "Registro guardado en {last_log}",
   "where": [
-   "backup_studio.py:5171"
+   "backup_studio.py:5248"
   ],
   "code": "self._log(_(\"Registro guardado en {last_log}\").format(last_log=self._last_log))"
  },
  {
   "id": "Copia terminada",
   "where": [
-   "backup_studio.py:5177"
+   "backup_studio.py:5254"
   ],
   "code": "self._notify(_(\"Copia terminada con {issues}\").format(issues=issues) if s.errors else _(\"Copia terminada\"),"
  },
  {
   "id": "Copia terminada con {issues}",
   "where": [
-   "backup_studio.py:5177"
+   "backup_studio.py:5254"
   ],
   "code": "self._notify(_(\"Copia terminada con {issues}\").format(issues=issues) if s.errors else _(\"Copia terminada\"),"
  },
  {
   "id": "{new_done} nuevos · {changed_done} modificados · {moves_done} movidos · {deletes_done} a versiones · {dirs_created} carpetas nuevas · {total}",
   "where": [
-   "backup_studio.py:5178"
+   "backup_studio.py:5255"
   ],
   "code": "_(\"{new_done} nuevos · {changed_done} modificados · {moves_done} movidos · {deletes_done} a \""
  },
  {
   "id": "de {planned} previstos",
   "where": [
-   "backup_studio.py:5193"
+   "backup_studio.py:5270"
   ],
   "code": "return _(\"de {planned} previstos\").format(planned=fmt_int(planned)) if done != planned else \"\""
  },
  {
   "id": "renombrados o movidos, sin copiar",
   "where": [
-   "backup_studio.py:5198"
+   "backup_studio.py:5275"
   ],
   "code": "self.s_moved.set(fmt_int(s.moves_done), _(\"renombrados o movidos, sin copiar\"))"
  },
  {
   "id": "borrados del origen, guardados",
   "where": [
-   "backup_studio.py:5199"
+   "backup_studio.py:5276"
   ],
   "code": "self.s_versions.set(fmt_int(s.deletes_done), _(\"borrados del origen, guardados\")"
  },
  {
   "id": "{versions_purged} antiguos retirados",
   "where": [
-   "backup_studio.py:5200"
+   "backup_studio.py:5277"
   ],
   "code": "+ ((\" · \" + _(\"{versions_purged} antiguos retirados\").format(versions_purged=fmt_int(s.versions_purged))) if s.versions_purged else \"\"))"
  },
  {
   "id": "creadas en el destino",
   "where": [
-   "backup_studio.py:5201"
+   "backup_studio.py:5278"
   ],
   "code": "self.s_dirs_new.set(fmt_int(s.dirs_created), _(\"creadas en el destino\"))"
  },
  {
   "id": "ya no estaban en el origen",
   "where": [
-   "backup_studio.py:5202"
+   "backup_studio.py:5279"
   ],
   "code": "self.s_dirs_gone.set(fmt_int(s.dirs_removed), _(\"ya no estaban en el origen\"))"
  },
  {
   "id": "{scrub_files} revisados, {scrub_repaired} reparados",
   "where": [
-   "backup_studio.py:5205"
+   "backup_studio.py:5282"
   ],
   "code": "extra = ((\" · \" + _(\"{scrub_files} revisados, {scrub_repaired} reparados\").format(scrub_files=fmt_int(s.scrub_files), scrub_repaired=fmt_int(s.scrub_repaired)))"
  },
  {
   "id": "SHA-256 releyendo el disco",
   "where": [
-   "backup_studio.py:5207"
+   "backup_studio.py:5284"
   ],
   "code": "self.s_checked.set(fmt_int(s.verified_copies), _(\"SHA-256 releyendo el disco\") + extra)"
  },
  {
   "id": "verificación desactivada",
   "where": [
-   "backup_studio.py:5209"
+   "backup_studio.py:5286"
   ],
   "code": "self.s_checked.set(\"—\", _(\"verificación desactivada\"))"
  },
  {
   "id": "Duración {total}",
   "where": [
-   "backup_studio.py:5211"
+   "backup_studio.py:5288"
   ],
   "code": "bits = [_(\"Duración {total}\").format(total=fmt_clock(total, ms=True)), _(\"análisis {scan}\").format(scan=fmt_clock(scan, ms=True)),"
  },
  {
   "id": "{bytes_done} copiados a {avg}",
   "where": [
-   "backup_studio.py:5212"
+   "backup_studio.py:5289"
   ],
   "code": "_(\"copia {time}\").format(time=fmt_clock(copy, ms=True)), _(\"{bytes_done} copiados a {avg}\").format(bytes_done=fmt_bytes(s.bytes_done), avg=fmt_speed(avg))]"
  },
  {
   "id": "{failed} sin copiar",
   "where": [
-   "backup_studio.py:5214"
+   "backup_studio.py:5291"
   ],
   "code": "bits.append(_(\"{failed} sin copiar\").format(failed=fmt_int(failed)))"
  },
  {
   "id": "{n} incidencia (pestaña Incidencias)",
   "where": [
-   "backup_studio.py:5216"
+   "backup_studio.py:5293"
   ],
   "code": "bits.append(_n(\"{n} incidencia (pestaña Incidencias)\", \"{n} incidencias (pestaña Incidencias)\",",
   "plural": "{n} incidencias (pestaña Incidencias)"
@@ -3253,7 +3304,7 @@
  {
   "id": "esperó al disco {n} vez ({time})",
   "where": [
-   "backup_studio.py:5219"
+   "backup_studio.py:5296"
   ],
   "code": "bits.append(_n(\"esperó al disco {n} vez ({time})\", \"esperó al disco {n} veces ({time})\",",
   "plural": "esperó al disco {n} veces ({time})"
@@ -3261,339 +3312,339 @@
  {
   "id": "cancelada: lo copiado se conserva",
   "where": [
-   "backup_studio.py:5222"
+   "backup_studio.py:5299"
   ],
   "code": "bits.append(_(\"cancelada: lo copiado se conserva\"))"
  },
  {
   "id": "ninguna",
   "where": [
-   "backup_studio.py:5236",
-   "backup_studio.py:4677"
+   "backup_studio.py:5313",
+   "backup_studio.py:4754"
   ],
   "code": "rules = \", \".join(job.patterns) or _(\"ninguna\")"
  },
  {
   "id": "{app_name} — informe de sincronización",
   "where": [
-   "backup_studio.py:5238"
+   "backup_studio.py:5315"
   ],
   "code": "_(\"{app_name} — informe de sincronización\").format(app_name=APP_NAME),"
  },
  {
   "id": "Inicio",
   "where": [
-   "backup_studio.py:5240"
+   "backup_studio.py:5317"
   ],
   "code": "row(_(\"Inicio\"), f\"{self._op_wall:%Y-%m-%d %H:%M:%S}\"),"
  },
  {
   "id": "Fin",
   "where": [
-   "backup_studio.py:5241"
+   "backup_studio.py:5318"
   ],
   "code": "row(_(\"Fin\"), f\"{datetime.now():%Y-%m-%d %H:%M:%S}\"),"
  },
  {
   "id": "Resultado",
   "where": [
-   "backup_studio.py:5242"
+   "backup_studio.py:5319"
   ],
   "code": "row(_(\"Resultado\"), PILL[phase][0]),"
  },
  {
   "id": "Reglas",
   "where": [
-   "backup_studio.py:5245"
+   "backup_studio.py:5322"
   ],
   "code": "row(_(\"Reglas\"), rules),"
  },
  {
   "id": "Modo",
   "where": [
-   "backup_studio.py:5246"
+   "backup_studio.py:5323"
   ],
   "code": "row(_(\"Modo\"), _(engine.MODES[job.mode])),"
  },
  {
   "id": "Análisis",
   "where": [
-   "backup_studio.py:5247"
+   "backup_studio.py:5324"
   ],
   "code": "row(_(\"Análisis\"), job.index_note),"
  },
  {
   "id": "Hilos",
   "where": [
-   "backup_studio.py:5248"
+   "backup_studio.py:5325"
   ],
   "code": "row(_(\"Hilos\"), job.threads),"
  },
  {
   "id": "Duración total",
   "where": [
-   "backup_studio.py:5250"
+   "backup_studio.py:5327"
   ],
   "code": "row(_(\"Duración total\"), fmt_clock(end - self._op_start, ms=True)),"
  },
  {
   "id": "análisis",
   "where": [
-   "backup_studio.py:5251"
+   "backup_studio.py:5328"
   ],
   "code": "row(\"  \" + _(\"análisis\"), fmt_clock(s.scan_end - s.scan_start, ms=True)),"
  },
  {
   "id": "copia",
   "where": [
-   "backup_studio.py:5252"
+   "backup_studio.py:5329"
   ],
   "code": "row(\"  \" + _(\"copia\"), fmt_clock(end - s.copy_start, ms=True) if s.copy_start else \"—\"),"
  },
  {
   "id": "en pausa",
   "where": [
-   "backup_studio.py:5253",
-   "backup_studio.py:4968"
+   "backup_studio.py:5330",
+   "backup_studio.py:5045"
   ],
   "code": "row(\"  \" + _(\"en pausa\"), fmt_clock(self._paused_total, ms=True)),"
  },
  {
   "id": "Carpetas analizadas",
   "where": [
-   "backup_studio.py:5255"
+   "backup_studio.py:5332"
   ],
   "code": "row(_(\"Carpetas analizadas\"), fmt_int(s.dirs_scanned)),"
  },
  {
   "id": "Archivos en origen",
   "where": [
-   "backup_studio.py:5256"
+   "backup_studio.py:5333"
   ],
   "code": "row(_(\"Archivos en origen\"), f\"{fmt_int(s.files_found)}  ({fmt_bytes(s.bytes_found)})\"),"
  },
  {
   "id": "Movidos/renombrados",
   "where": [
-   "backup_studio.py:5260"
+   "backup_studio.py:5337"
   ],
   "code": "row(_(\"Movidos/renombrados\"), _(\"{n} ({size}), hechos {done}\").format("
  },
  {
   "id": "{n} ({size}), hechos {done}",
   "where": [
-   "backup_studio.py:5260",
-   "backup_studio.py:5262"
+   "backup_studio.py:5337",
+   "backup_studio.py:5339"
   ],
   "code": "row(_(\"Movidos/renombrados\"), _(\"{n} ({size}), hechos {done}\").format("
  },
  {
   "id": "Borrados → versiones",
   "where": [
-   "backup_studio.py:5262"
+   "backup_studio.py:5339"
   ],
   "code": "row(_(\"Borrados → versiones\"), _(\"{n} ({size}), hechos {done}\").format("
  },
  {
   "id": "Copiados",
   "where": [
-   "backup_studio.py:5264"
+   "backup_studio.py:5341"
   ],
   "code": "row(_(\"Copiados\"), f\"{fmt_int(s.files_done)}  ({fmt_bytes(s.bytes_done)})\"),"
  },
  {
   "id": "Fallidos",
   "where": [
-   "backup_studio.py:5265"
+   "backup_studio.py:5342"
   ],
   "code": "row(_(\"Fallidos\"), fmt_int(s.files_failed + s.other_failed)),"
  },
  {
   "id": "Versiones guardadas",
   "where": [
-   "backup_studio.py:5266"
+   "backup_studio.py:5343"
   ],
   "code": "row(_(\"Versiones guardadas\"), _(\"{n}  (en {path})\").format("
  },
  {
   "id": "{n}  (en {path})",
   "where": [
-   "backup_studio.py:5266"
+   "backup_studio.py:5343"
   ],
   "code": "row(_(\"Versiones guardadas\"), _(\"{n}  (en {path})\").format("
  },
  {
   "id": "Versiones retiradas",
   "where": [
-   "backup_studio.py:5268"
+   "backup_studio.py:5345"
   ],
   "code": "row(_(\"Versiones retiradas\"), fmt_int(s.versions_purged)),"
  },
  {
   "id": "Carpetas creadas",
   "where": [
-   "backup_studio.py:5269"
+   "backup_studio.py:5346"
   ],
   "code": "row(_(\"Carpetas creadas\"), fmt_int(s.dirs_created)),"
  },
  {
   "id": "Carpetas excluidas",
   "where": [
-   "backup_studio.py:5271"
+   "backup_studio.py:5348"
   ],
   "code": "row(_(\"Carpetas excluidas\"), _(\"{rule} por regla, {manual} a mano\").format("
  },
  {
   "id": "{rule} por regla, {manual} a mano",
   "where": [
-   "backup_studio.py:5271"
+   "backup_studio.py:5348"
   ],
   "code": "row(_(\"Carpetas excluidas\"), _(\"{rule} por regla, {manual} a mano\").format("
  },
  {
   "id": "Enlaces omitidos",
   "where": [
-   "backup_studio.py:5273"
+   "backup_studio.py:5350"
   ],
   "code": "row(_(\"Enlaces omitidos\"), fmt_int(s.links_skipped)),"
  },
  {
   "id": "Copias verificadas",
   "where": [
-   "backup_studio.py:5276"
+   "backup_studio.py:5353"
   ],
   "code": "row(_(\"Copias verificadas\"), _(\"{n} (SHA-256 releyendo el disco), reintentos {retries}\").format("
  },
  {
   "id": "{n} (SHA-256 releyendo el disco), reintentos {retries}",
   "where": [
-   "backup_studio.py:5276"
+   "backup_studio.py:5353"
   ],
   "code": "row(_(\"Copias verificadas\"), _(\"{n} (SHA-256 releyendo el disco), reintentos {retries}\").format("
  },
  {
   "id": "desactivado",
   "where": [
-   "backup_studio.py:5277"
+   "backup_studio.py:5354"
   ],
   "code": "n=fmt_int(s.verified_copies), retries=fmt_int(s.verify_retries)) if job.verify else _(\"desactivado\")),"
  },
  {
   "id": "Revisión integridad",
   "where": [
-   "backup_studio.py:5278"
+   "backup_studio.py:5355"
   ],
   "code": "row(_(\"Revisión integridad\"), _(\"{n} archivos ({size}), {repaired} reparados, {alerts} avisos\").format("
  },
  {
   "id": "{n} archivos ({size}), {repaired} reparados, {alerts} avisos",
   "where": [
-   "backup_studio.py:5278"
+   "backup_studio.py:5355"
   ],
   "code": "row(_(\"Revisión integridad\"), _(\"{n} archivos ({size}), {repaired} reparados, {alerts} avisos\").format("
  },
  {
   "id": "Cobertura del disco",
   "where": [
-   "backup_studio.py:5281"
+   "backup_studio.py:5358"
   ],
   "code": "row(_(\"Cobertura del disco\"), _(\"{n} de {total} archivos comprobados\").format("
  },
  {
   "id": "{n} de {total} archivos comprobados",
   "where": [
-   "backup_studio.py:5281"
+   "backup_studio.py:5358"
   ],
   "code": "row(_(\"Cobertura del disco\"), _(\"{n} de {total} archivos comprobados\").format("
  },
  {
   "id": "INCIDENCIAS",
   "where": [
-   "backup_studio.py:5285"
+   "backup_studio.py:5362"
   ],
   "code": "lines += [\"\", _(\"INCIDENCIAS\"), \"-\" * 60] + [f\"{p}\\t{m}\" for p, m in job.errors]"
  },
  {
   "id": "MOVIDOS",
   "where": [
-   "backup_studio.py:5288"
+   "backup_studio.py:5365"
   ],
   "code": "lines += [\"\", _(\"MOVIDOS\"), \"-\" * 60] + [f\"{old[dcut:]}  →  {item[0][cut:]}\" for old, item in job.moves]"
  },
  {
   "id": "BORRADOS DEL ORIGEN (GUARDADOS EN VERSIONES)",
   "where": [
-   "backup_studio.py:5290"
+   "backup_studio.py:5367"
   ],
   "code": "lines += [\"\", _(\"BORRADOS DEL ORIGEN (GUARDADOS EN VERSIONES)\"), \"-\" * 60] + [p[dcut:] for p, _s, _m in job.deletes]"
  },
  {
   "id": "No hay incidencias que exportar.",
   "where": [
-   "backup_studio.py:5304"
+   "backup_studio.py:5381"
   ],
   "code": "QMessageBox.information(self, APP_NAME, _(\"No hay incidencias que exportar.\"))"
  },
  {
   "id": "Exportar incidencias",
   "where": [
-   "backup_studio.py:5306"
+   "backup_studio.py:5383"
   ],
   "code": "path, _flt = QFileDialog.getSaveFileName(self, _(\"Exportar incidencias\"),"
  },
  {
   "id": "Texto (*.txt)",
   "where": [
-   "backup_studio.py:5307"
+   "backup_studio.py:5384"
   ],
   "code": "os.path.join(LOG_DIR, \"incidencias.txt\"), _(\"Texto (*.txt)\"))"
  },
  {
   "id": "última copia {v}",
   "where": [
-   "backup_studio.py:5419"
+   "backup_studio.py:5496"
   ],
   "code": "ago = _(\"última copia {v}\").format(v=fmt_ago(it.get('last_ok')))"
  },
  {
   "id": "{ago}  ·  sin aviso",
   "where": [
-   "backup_studio.py:5421"
+   "backup_studio.py:5498"
   ],
   "code": "return _(\"{ago}  ·  sin aviso\").format(ago=ago), C[\"faint\"]"
  },
  {
   "id": "origen no disponible  ·  {ago}",
   "where": [
-   "backup_studio.py:5423"
+   "backup_studio.py:5500"
   ],
   "code": "return _(\"origen no disponible  ·  {ago}\").format(ago=ago), C[\"faint\"]"
  },
  {
   "id": "al día  ·  {ago}",
   "where": [
-   "backup_studio.py:5428"
+   "backup_studio.py:5505"
   ],
   "code": "return _(\"al día  ·  {ago}\").format(ago=ago), C[\"ok\"]"
  },
  {
   "id": "Comprobando cambios…",
   "where": [
-   "backup_studio.py:5454"
+   "backup_studio.py:5531"
   ],
   "code": "self.remind_status.setText(_(\"Comprobando cambios…\"))"
  },
  {
   "id": "Comprobado {checked}",
   "where": [
-   "backup_studio.py:5456"
+   "backup_studio.py:5533"
   ],
   "code": "self.remind_status.setText(_(\"Comprobado {checked}\").format(checked=fmt_ago(checked)) if checked else \"\")"
  },
  {
   "id": "{n} copia con cambios sin copiar",
   "where": [
-   "backup_studio.py:5467"
+   "backup_studio.py:5544"
   ],
   "code": "tip += \" · \" + _n(\"{n} copia con cambios sin copiar\", \"{n} copias con cambios sin copiar\",",
   "plural": "{n} copias con cambios sin copiar"
@@ -3601,21 +3652,21 @@
  {
   "id": "Tienes cambios sin copiar en {it}",
   "where": [
-   "backup_studio.py:5478"
+   "backup_studio.py:5555"
   ],
   "code": "title = _(\"Tienes cambios sin copiar en {it}\").format(it=reminders.short_name(it['src']))"
  },
  {
   "id": "{changes} desde tu última copia en {disk}, {ago}.",
   "where": [
-   "backup_studio.py:5480"
+   "backup_studio.py:5557"
   ],
   "code": "text = _(\"{changes} desde tu última copia en {disk}, {ago}.\").format("
  },
  {
   "id": "Tienes cambios sin copiar en {n} copia",
   "where": [
-   "backup_studio.py:5483"
+   "backup_studio.py:5560"
   ],
   "code": "title = _n(\"Tienes cambios sin copiar en {n} copia\", \"Tienes cambios sin copiar en {n} copias\",",
   "plural": "Tienes cambios sin copiar en {n} copias"
@@ -3623,380 +3674,380 @@
  {
   "id": "con cambios",
   "where": [
-   "backup_studio.py:5486"
+   "backup_studio.py:5563"
   ],
   "code": "f\"{short_changes(a.get('pending')) or _('con cambios')}\" for a in alerts[:3])"
  },
  {
   "id": "{target} está conectado.",
   "where": [
-   "backup_studio.py:5490"
+   "backup_studio.py:5567"
   ],
   "code": "text += (\"  \" + _(\"{target} está conectado.\").format(target=self._nb_label(target)))"
  },
  {
   "id": "Sincronizar {target}",
   "where": [
-   "backup_studio.py:5492"
+   "backup_studio.py:5569"
   ],
   "code": "else (\"  \" + _(\"Sincronizar {target}\").format(target=reminders.short_name(target['src']))))"
  },
  {
   "id": "Conecta {it} para copiarlos.",
   "where": [
-   "backup_studio.py:5496"
+   "backup_studio.py:5573"
   ],
   "code": "text += (\"  \" + _(\"Conecta {it} para copiarlos.\").format(it=self._nb_label(it))) if len(alerts) == 1 \\"
  },
  {
   "id": "Conecta el disco de copia para guardarlos.",
   "where": [
-   "backup_studio.py:5497"
+   "backup_studio.py:5574"
   ],
   "code": "else (\"  \" + _(\"Conecta el disco de copia para guardarlos.\"))"
  },
  {
   "id": "Ocultar el aviso: vuelve dentro de {remind_days} si sigue sin copia",
   "where": [
-   "backup_studio.py:5501"
+   "backup_studio.py:5578"
   ],
   "code": "self.remind_bar.close_btn.setToolTip(_(\"Ocultar el aviso: vuelve dentro de {remind_days} si sigue sin copia\").format(remind_days=days_text(self._remind_days())))"
  },
  {
   "id": "{changes} en {folder} desde tu última copia ({ago}).",
   "where": [
-   "backup_studio.py:5539"
+   "backup_studio.py:5616"
   ],
   "code": "body = _(\"{changes} en {folder} desde tu última copia ({ago}).\").format("
  },
  {
   "id": "{label} está conectado: pulsa para sincronizar.",
   "where": [
-   "backup_studio.py:5542"
+   "backup_studio.py:5619"
   ],
   "code": "body += _(\"{label} está conectado: pulsa para sincronizar.\").format(label=label) if self._pair_dest(it) \\"
  },
  {
   "id": "Conecta {label} para copiarlos.",
   "where": [
-   "backup_studio.py:5543"
+   "backup_studio.py:5620"
   ],
   "code": "else _(\"Conecta {label} para copiarlos.\").format(label=label)"
  },
  {
   "id": "Pulsa para verlos.",
   "where": [
-   "backup_studio.py:5546"
+   "backup_studio.py:5623"
   ],
   "code": "for it in items[:3]) + \". \" + _(\"Pulsa para verlos.\")"
  },
  {
   "id": "Tienes cambios sin copiar",
   "where": [
-   "backup_studio.py:5548"
+   "backup_studio.py:5625"
   ],
   "code": "self.tray.showMessage(_(\"Tienes cambios sin copiar\"), body, app_icon(), 20000)"
  },
  {
   "id": "Conecta {it} para copiar {it2}.",
   "where": [
-   "backup_studio.py:5587"
+   "backup_studio.py:5664"
   ],
   "code": "QMessageBox.information(self, APP_NAME, _(\"Conecta {it} para copiar {it2}.\").format(it=self._pair_label(it), it2=reminders.short_name(it['src'])))"
  },
  {
   "id": "Sincronizar  (conecta {it})",
   "where": [
-   "backup_studio.py:5611"
+   "backup_studio.py:5688"
   ],
   "code": "_(\"Sincronizar ahora\") if dest else _(\"Sincronizar  (conecta {it})\").format(it=self._pair_label(it)))"
  },
  {
   "id": "Usar esta copia",
   "where": [
-   "backup_studio.py:5615"
+   "backup_studio.py:5692"
   ],
   "code": "a_use = menu.addAction(glyph_icon(G.SYNC, C[\"text\"], 14), _(\"Usar esta copia\"))"
  },
  {
   "id": "Comprobar cambios ahora",
   "where": [
-   "backup_studio.py:5617"
+   "backup_studio.py:5694"
   ],
   "code": "a_check = menu.addAction(glyph_icon(G.SEARCH, C[\"text\"], 14), _(\"Comprobar cambios ahora\"))"
  },
  {
   "id": "Avisarme de esta copia",
   "where": [
-   "backup_studio.py:5620"
+   "backup_studio.py:5697"
   ],
   "code": "a_remind = menu.addAction(glyph_icon(G.BELL, C[\"text\"], 14), _(\"Avisarme de esta copia\"))"
  },
  {
   "id": "Quitar de la lista",
   "where": [
-   "backup_studio.py:5623"
+   "backup_studio.py:5700"
   ],
   "code": "a_forget = menu.addAction(glyph_icon(G.CLOSE, C[\"text\"], 14), _(\"Quitar de la lista\"))"
  },
  {
   "id": "Vuelve a aparecer si la sincronizas otra vez",
   "where": [
-   "backup_studio.py:5624"
+   "backup_studio.py:5701"
   ],
   "code": "a_forget.setToolTip(_(\"Vuelve a aparecer si la sincronizas otra vez\"))"
  },
  {
   "id": "La sincronización sigue en marcha.",
   "where": [
-   "backup_studio.py:5696"
+   "backup_studio.py:5773"
   ],
   "code": "extra = (\" \" + _(\"La sincronización sigue en marcha.\")) if self._state in RUNNING else \"\""
  },
  {
   "id": "Sigo en la bandeja vigilando tu disco de copia.",
   "where": [
-   "backup_studio.py:5697"
+   "backup_studio.py:5774"
   ],
   "code": "self._notify(APP_NAME, _(\"Sigo en la bandeja vigilando tu disco de copia.\") + extra)"
  },
  {
   "id": "Hay una operación en curso. ¿Cancelarla y salir?\n\nLo ya copiado se conserva.",
   "where": [
-   "backup_studio.py:5700"
+   "backup_studio.py:5777"
   ],
   "code": "ans = QMessageBox.question(self, APP_NAME, _(\"Hay una operación en curso. ¿Cancelarla y salir?\\n\\n\""
  },
  {
   "id": "Pausa de más de {pause_grace} min: el equipo ya puede suspenderse. Al reanudar se vuelve a mantener despierto.",
   "where": [
-   "backup_studio.py:5730"
+   "backup_studio.py:5807"
   ],
   "code": "self._log(_(\"Pausa de más de {pause_grace} min: el equipo ya puede suspenderse. Al reanudar se vuelve \""
  },
  {
   "id": "{app_name}: copia de seguridad en curso ({src} → {dst})",
   "where": [
-   "backup_studio.py:5748"
+   "backup_studio.py:5825"
   ],
   "code": "self.guard.start(_(\"{app_name}: copia de seguridad en curso ({src} → {dst})\").format(app_name=APP_NAME, src=job.src, dst=job.dst), root, activity)"
  },
  {
   "id": "Copia de seguridad en curso ({src} → {dst}). Si apagas ahora se interrumpe; lo ya copiado se conserva.",
   "where": [
-   "backup_studio.py:5751"
+   "backup_studio.py:5828"
   ],
   "code": "_(\"Copia de seguridad en curso ({src} → {dst}). Si apagas ahora se interrumpe; lo ya copiado \""
  },
  {
   "id": "el equipo no se suspende ({v})",
   "where": [
-   "backup_studio.py:5755"
+   "backup_studio.py:5832"
   ],
   "code": "parts = [_(\"el equipo no se suspende ({v})\").format(v=_(self.guard.method) if self.guard.method else _(\"no disponible\"))]"
  },
  {
   "id": "latido al disco {root} si pasa {beat_seconds:.0f} s sin escribir",
   "where": [
-   "backup_studio.py:5757"
+   "backup_studio.py:5834"
   ],
   "code": "parts.append(_(\"latido al disco {root} si pasa {beat_seconds:.0f} s sin escribir\").format(root=engine.vol_name(root), beat_seconds=keepawake.BEAT_SECONDS))"
  },
  {
   "id": "apagar o reiniciar pide confirmación",
   "where": [
-   "backup_studio.py:5758"
+   "backup_studio.py:5835"
   ],
   "code": "parts.append(_(\"apagar o reiniciar pide confirmación\") if IS_WIN"
  },
  {
   "id": "cerrar sesión o apagar pide confirmación",
   "where": [
-   "backup_studio.py:5759"
+   "backup_studio.py:5836"
   ],
   "code": "else _(\"cerrar sesión o apagar pide confirmación\"))"
  },
  {
   "id": "Mientras dure:",
   "where": [
-   "backup_studio.py:5760"
+   "backup_studio.py:5837"
   ],
   "code": "self._log((_(\"Mientras dure:\") + \" \") + \"  ·  \".join(parts), C[\"muted\"])"
  },
  {
   "id": "⚠ No se pudo impedir la suspensión: {error}",
   "where": [
-   "backup_studio.py:5762"
+   "backup_studio.py:5839"
   ],
   "code": "self._log(_(\"⚠ No se pudo impedir la suspensión: {error}\").format(error=self.guard.error), C[\"warn\"])"
  },
  {
   "id": "Se activa al analizar o sincronizar y se desactiva al terminar.",
   "where": [
-   "backup_studio.py:5780"
+   "backup_studio.py:5857"
   ],
   "code": "self.awake_status.setText(_(\"Se activa al analizar o sincronizar y se desactiva al terminar.\"))"
  },
  {
   "id": "Desactivado: el equipo y el disco se suspenden con normalidad aunque haya una copia en curso.",
   "where": [
-   "backup_studio.py:5782"
+   "backup_studio.py:5859"
   ],
   "code": "self.awake_status.setText(_(\"Desactivado: el equipo y el disco se suspenden con normalidad \""
  },
  {
   "id": "Esperando al disco",
   "where": [
-   "backup_studio.py:5786"
+   "backup_studio.py:5863"
   ],
   "code": "color, text = C[\"warn\"], _(\"Esperando al disco\")"
  },
  {
   "id": "Sin suspensión · disco sin respuesta",
   "where": [
-   "backup_studio.py:5788"
+   "backup_studio.py:5865"
   ],
   "code": "color, text = C[\"warn\"], _(\"Sin suspensión · disco sin respuesta\")"
  },
  {
   "id": "Sin suspensión",
   "where": [
-   "backup_studio.py:5790"
+   "backup_studio.py:5867"
   ],
   "code": "color, text = C[\"ok\"], _(\"Sin suspensión\") + ((\" · \" + _(\"disco activo\")) if st[\"disk\"] else \"\")"
  },
  {
   "id": "disco activo",
   "where": [
-   "backup_studio.py:5790"
+   "backup_studio.py:5867"
   ],
   "code": "color, text = C[\"ok\"], _(\"Sin suspensión\") + ((\" · \" + _(\"disco activo\")) if st[\"disk\"] else \"\")"
  },
  {
   "id": "Equipo: no se suspende por inactividad ({v}).",
   "where": [
-   "backup_studio.py:5796"
+   "backup_studio.py:5873"
   ],
   "code": "lines = [_(\"Equipo: no se suspende por inactividad ({v}).\").format(v=_(st['method']) if st['method'] else _(\"no disponible\"))]"
  },
  {
   "id": "no disponible",
   "where": [
-   "backup_studio.py:5796",
-   "backup_studio.py:5755"
+   "backup_studio.py:5873",
+   "backup_studio.py:5832"
   ],
   "code": "lines = [_(\"Equipo: no se suspende por inactividad ({v}).\").format(v=_(st['method']) if st['method'] else _(\"no disponible\"))]"
  },
  {
   "id": "esperando a que vuelva el disco de copia",
   "where": [
-   "backup_studio.py:5799"
+   "backup_studio.py:5876"
   ],
   "code": "beat = _(\"esperando a que vuelva el disco de copia\")"
  },
  {
   "id": "sin respuesta del disco: {st}",
   "where": [
-   "backup_studio.py:5801"
+   "backup_studio.py:5878"
   ],
   "code": "beat = (_(\"sin respuesta del disco: {st}\").format(st=st['disk_error']) if st[\"disk_error\"]"
  },
  {
   "id": "último latido hace {time}",
   "where": [
-   "backup_studio.py:5802"
+   "backup_studio.py:5879"
   ],
   "code": "else _(\"último latido hace {time}\").format(time=fmt_human(time.time() - st['last_beat'])) if st[\"last_beat\"]"
  },
  {
   "id": "la copia mantiene el disco activo",
   "where": [
-   "backup_studio.py:5803"
+   "backup_studio.py:5880"
   ],
   "code": "else _(\"la copia mantiene el disco activo\"))"
  },
  {
   "id": "Disco de copia ({st}): {beat}.",
   "where": [
-   "backup_studio.py:5804"
+   "backup_studio.py:5881"
   ],
   "code": "lines.append(_(\"Disco de copia ({st}): {beat}.\").format(st=engine.vol_name(st['root']), beat=beat))"
  },
  {
   "id": "Apagar o reiniciar: Windows pide confirmación.",
   "where": [
-   "backup_studio.py:5805"
+   "backup_studio.py:5882"
   ],
   "code": "lines.append(_(\"Apagar o reiniciar: Windows pide confirmación.\") if IS_WIN"
  },
  {
   "id": "Cerrar sesión o apagar: pide confirmación.",
   "where": [
-   "backup_studio.py:5806"
+   "backup_studio.py:5883"
   ],
   "code": "else _(\"Cerrar sesión o apagar: pide confirmación.\"))"
  },
  {
   "id": "Activo desde las {since:%H:%M:%S}",
   "where": [
-   "backup_studio.py:5809"
+   "backup_studio.py:5886"
   ],
   "code": "since = _(\"Activo desde las {since:%H:%M:%S}\").format(since=datetime.fromtimestamp(self.guard.since)) if st[\"active\"] else \"\""
  },
  {
   "id": "El disco de copia no responde o se ha desconectado ({dst}). La copia espera a que vuelva y repite el archivo que estaba a medias: no se pierde nada.",
   "where": [
-   "backup_studio.py:5818"
+   "backup_studio.py:5895"
   ],
   "code": "self._log(_(\"El disco de copia no responde o se ha desconectado ({dst}). La copia espera a que vuelva \""
  },
  {
   "id": "El disco de copia se ha desconectado. Vuelve a conectarlo y la copia seguirá.",
   "where": [
-   "backup_studio.py:5820"
+   "backup_studio.py:5897"
   ],
   "code": "self._notify(APP_NAME, _(\"El disco de copia se ha desconectado. Vuelve a conectarlo y la copia seguirá.\"))"
  },
  {
   "id": "Disco de nuevo disponible: sigue la copia (en total {disk_wait_s} esperando).",
   "where": [
-   "backup_studio.py:5824"
+   "backup_studio.py:5901"
   ],
   "code": "self._log(_(\"Disco de nuevo disponible: sigue la copia (en total {disk_wait_s} esperando).\").format(disk_wait_s=fmt_human(s.disk_wait_s)), C[\"ok\"])"
  },
  {
   "id": "Apagado, reinicio o cierre de sesión retenido: hay una copia en curso.",
   "where": [
-   "backup_studio.py:5831"
+   "backup_studio.py:5908"
   ],
   "code": "self._log(_(\"Apagado, reinicio o cierre de sesión retenido: hay una copia en curso.\"), C[\"warn\"])"
  },
  {
   "id": "Hay una sincronización en curso. ¿Cancelarla y salir?\n\nLo ya copiado se conserva. Si ibas a apagar o cerrar sesión, elige No y espera a que termine.",
   "where": [
-   "backup_studio.py:5848"
+   "backup_studio.py:5925"
   ],
   "code": "self, APP_NAME, _(\"Hay una sincronización en curso. ¿Cancelarla y salir?\\n\\nLo ya copiado se \""
  },
  {
   "id": "El equipo se va a suspender: copia en pausa. Seguirá sola al volver.",
   "where": [
-   "backup_studio.py:5867"
+   "backup_studio.py:5944"
   ],
   "code": "self._log(_(\"El equipo se va a suspender: copia en pausa. Seguirá sola al volver.\"), C[\"warn\"])"
  },
  {
   "id": "Equipo reanudado",
   "where": [
-   "backup_studio.py:5873"
+   "backup_studio.py:5950"
   ],
   "code": "self._log(_(\"Equipo reanudado\"))"
  },
  {
   "id": "Empezar",
   "where": [
-   "backup_studio.py:6106",
-   "backup_studio.py:2617"
+   "backup_studio.py:6192",
+   "backup_studio.py:2664"
   ],
   "code": "assert tour.card.idx == steps - 1 and tour.card.next_btn.text().strip() == _(\"Empezar\")"
  },
@@ -4004,7 +4055,7 @@
   "id": "PREPARADO",
   "where": [
    "backup_studio.py:899",
-   "backup_studio.py:4710"
+   "backup_studio.py:4787"
   ],
   "code": "self.big, self.small, self.caption = pct(0), \"\", _(\"PREPARADO\")"
  },
