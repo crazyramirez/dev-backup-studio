@@ -619,10 +619,10 @@
   "No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la misma red.": "クラウドに接続できません。アドレスと、このパソコンが同じネットワークにあるかを確認してください。",
   "La carpeta de red no está activada en tu nube.": "クラウドでネットワークフォルダーが有効になっていません。",
   "Demasiados intentos. Espera unos minutos y vuelve a probar.": "試行回数が多すぎます。数分待ってから、もう一度お試しください。",
-  "El código es correcto, pero no se pudo abrir la carpeta de red.": "コードは正しいですが、ネットワークフォルダーを開けませんでした。",
   "Conectar con mi nube…": "クラウドに接続…",
   "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "ウェブに表示されるコードで、家庭内ネットワークの Personal Cloud Storage にバックアップを保存します。パスワードは不要です。",
   "Espera a que termine la copia en curso.": "実行中のバックアップが終わるまでお待ちください。",
-  "Conectado. Las copias se guardarán en {path}.": "接続しました。バックアップは {path} に保存されます。"
+  "Conectado. Las copias se guardarán en {path}.": "接続しました。バックアップは {path} に保存されます。",
+  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "コードは正しいですが、ネットワークフォルダーを開けませんでした。「接続」を押して再試行してください。新しいコードは不要です。"
  }
 }

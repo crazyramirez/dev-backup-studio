@@ -637,10 +637,10 @@
   "No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la misma red.": "Can’t reach the cloud. Check the address and that this computer is on the same network.",
   "La carpeta de red no está activada en tu nube.": "The network folder isn’t turned on in your cloud.",
   "Demasiados intentos. Espera unos minutos y vuelve a probar.": "Too many attempts. Wait a few minutes and try again.",
-  "El código es correcto, pero no se pudo abrir la carpeta de red.": "The code is right, but the network folder couldn’t be opened.",
   "Conectar con mi nube…": "Connect to my cloud…",
   "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "Keep your backups in Personal Cloud Storage, on your home network, with the code its website gives you. No passwords.",
   "Espera a que termine la copia en curso.": "Wait for the current backup to finish.",
-  "Conectado. Las copias se guardarán en {path}.": "Connected. Backups will be saved to {path}."
+  "Conectado. Las copias se guardarán en {path}.": "Connected. Backups will be saved to {path}.",
+  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "The code is right, but the network folder couldn’t be opened. Click “Connect” to try again: no new code needed."
  }
 }

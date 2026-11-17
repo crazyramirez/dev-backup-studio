@@ -637,10 +637,10 @@
   "No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la misma red.": "Impossible d’atteindre le cloud. Vérifiez l’adresse et que cet ordinateur est sur le même réseau.",
   "La carpeta de red no está activada en tu nube.": "Le dossier réseau n’est pas activé sur votre cloud.",
   "Demasiados intentos. Espera unos minutos y vuelve a probar.": "Trop de tentatives. Attendez quelques minutes et réessayez.",
-  "El código es correcto, pero no se pudo abrir la carpeta de red.": "Le code est correct, mais le dossier réseau n’a pas pu être ouvert.",
   "Conectar con mi nube…": "Se connecter à mon cloud…",
   "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "Gardez vos sauvegardes dans Personal Cloud Storage, sur votre réseau domestique, avec le code donné par son site. Sans mot de passe.",
   "Espera a que termine la copia en curso.": "Attendez la fin de la sauvegarde en cours.",
-  "Conectado. Las copias se guardarán en {path}.": "Connecté. Les sauvegardes seront enregistrées dans {path}."
+  "Conectado. Las copias se guardarán en {path}.": "Connecté. Les sauvegardes seront enregistrées dans {path}.",
+  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "Le code est correct, mais le dossier réseau n’a pas pu être ouvert. Cliquez sur « Connecter » pour réessayer : pas besoin d’un nouveau code."
  }
 }

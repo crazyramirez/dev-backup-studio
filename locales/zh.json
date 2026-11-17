@@ -619,10 +619,10 @@
   "No se puede llegar a la nube. Comprueba la dirección y que este ordenador está en la misma red.": "无法连接到云。请检查地址，并确认这台电脑在同一网络中。",
   "La carpeta de red no está activada en tu nube.": "你的云未启用网络文件夹。",
   "Demasiados intentos. Espera unos minutos y vuelve a probar.": "尝试次数过多。请等几分钟后再试。",
-  "El código es correcto, pero no se pudo abrir la carpeta de red.": "代码正确，但无法打开网络文件夹。",
   "Conectar con mi nube…": "连接到我的云…",
   "Guarda las copias en Personal Cloud Storage, en tu red de casa, con el código que te da su web. Sin contraseñas.": "用其网页给出的代码，把备份保存到家庭网络中的 Personal Cloud Storage。无需密码。",
   "Espera a que termine la copia en curso.": "请等待当前备份完成。",
-  "Conectado. Las copias se guardarán en {path}.": "已连接。备份将保存到 {path}。"
+  "Conectado. Las copias se guardarán en {path}.": "已连接。备份将保存到 {path}。",
+  "El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para reintentar: no hace falta otro código.": "代码正确，但无法打开网络文件夹。点击“连接”重试，无需新代码。"
  }
 }

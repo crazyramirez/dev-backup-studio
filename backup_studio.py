@@ -1976,6 +1976,7 @@ class PairDialog(QDialog):
         super().__init__(win)
         self.win = win
         self.result_path = ""
+        self._link: cloudlink.Link | None = None  # credenciales ya recibidas (el código se gasta)
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(app_icon())
         self.setMinimumWidth(520)
@@ -2059,7 +2060,8 @@ class PairDialog(QDialog):
         return cloudlink.normalize_host(self.cloud.currentText())
 
     def _update(self, *_args):
-        self.b_go.setEnabled(len(self._digits()) == 6 and bool(self._host()) and not self.busy.isVisible())
+        ready = len(self._digits()) == 6 or (self._link is not None and self._link.host == self._host())
+        self.b_go.setEnabled(ready and bool(self._host()) and not self.busy.isVisible())
 
     def _on_found(self, clouds: list):
         self.cloud.lineEdit().setPlaceholderText(_("Dirección de tu nube (p. ej. nube.local)"))
@@ -2085,7 +2087,12 @@ class PairDialog(QDialog):
 
         def work():
             try:
-                link = cloudlink.claim(host, code, cloudlink.device_name())
+                # el código se gasta al canjearlo: si lo que falló fue abrir la carpeta, se reintenta
+                # con lo ya recibido, sin pedir otro código
+                link = self._link if self._link and self._link.host == host else None
+                if link is None:
+                    link = cloudlink.claim(host, code, cloudlink.device_name())
+                    self._link = link
                 self.done.emit(cloudlink.connect(link))
             except cloudlink.LinkError as exc:
                 self.failed.emit(exc.kind, exc.detail)
@@ -2104,7 +2111,8 @@ class PairDialog(QDialog):
                              "misma red."),
             "unavailable": _("La carpeta de red no está activada en tu nube."),
             "busy": _("Demasiados intentos. Espera unos minutos y vuelve a probar."),
-            "connect": _("El código es correcto, pero no se pudo abrir la carpeta de red."),
+            "connect": _("El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para "
+                         "reintentar: no hace falta otro código."),
         }.get(kind, kind)
         self.status.setText(text + (f"  ({detail})" if detail and kind in ("unreachable", "connect") else ""))
         if kind == "code":
