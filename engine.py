@@ -51,6 +51,7 @@ import time
 import uuid
 
 from i18n import N_, _, _n
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -740,6 +741,129 @@ class IndexReader:
         self.con.close()
 
 
+# ── estimación del tiempo restante ──────────────────────────────────────────
+
+class Estimator:
+    """Tiempo restante con un modelo de coste que aprende de la propia copia.
+
+    Copiar cuesta  t = bytes · x + archivos · f : x son segundos por byte (la inversa de la velocidad
+    de datos) y f los segundos fijos de cada archivo (abrir, crear, cerrar, verificar, renombrar).
+    Con discos USB f es casi nada; por red o con miles de archivos pequeños es lo que manda, y un
+    coste fijo «de 1 MB por archivo» se equivoca por horas.
+
+    x y f se ajustan por mínimos cuadrados sobre tramos de unos segundos de copia, con olvido
+    exponencial (lo reciente pesa más: la red y el disco cambian). Al empezar se parte de lo
+    aprendido en la copia anterior al mismo destino (historial), con peso de unos pocos tramos, así
+    que la estimación es buena desde el principio y se afina con los datos reales.
+
+    El tiempo solo cuenta mientras se copia: las pausas y las esperas al disco no entran.
+    """
+
+    SPAN = 3.0           # segundos de copia por tramo
+    HALF_LIFE = 90.0     # los tramos de hace 90 s pesan la mitad
+    PRIOR_WEIGHT = 4.0   # el modelo anterior vale como 4 tramos
+    DEFAULT = {"s_byte": 1 / (60 * 1024 * 1024), "s_file": 0.004, "s_ren": 0.002}
+
+    def __init__(self, prior: dict | None = None):
+        base = dict(self.DEFAULT)
+        self.has_prior = False
+        if isinstance(prior, dict):
+            for k in base:
+                v = prior.get(k)
+                if isinstance(v, (int, float)) and v > 0:
+                    base[k] = float(v)
+                    self.has_prior = True
+        self.prior = base
+        self.x, self.f, self.ren = base["s_byte"], base["s_file"], base["s_ren"]
+        self.active = 0.0          # segundos de copia medidos
+        self._anchor = None        # (t, bytes, archivos) del inicio del tramo en curso
+        self._spans: deque = deque(maxlen=2000)
+        self._recent: deque = deque()  # (t, bytes, archivos) de los últimos segundos: velocidad
+        self._lock = threading.Lock()
+
+    def gap(self) -> None:
+        """Pausa o espera al disco: lo que pasa ahora no es tiempo de copia."""
+        with self._lock:
+            self._anchor = None
+            self._recent.clear()
+
+    def feed(self, t: float, bytes_done: int, files_done: int) -> None:
+        """t: segundos de copia activa acumulados (sin pausas); bytes y archivos, acumulados."""
+        with self._lock:
+            self.active = t
+            self._recent.append((t, bytes_done, files_done))
+            while len(self._recent) > 2 and t - self._recent[0][0] > 6.0:
+                self._recent.popleft()
+            if self._anchor is None:
+                self._anchor = (t, bytes_done, files_done)
+                return
+            t0, b0, f0 = self._anchor
+            if t - t0 < self.SPAN:
+                return
+            db, df = bytes_done - b0, files_done - f0
+            if db >= 0 and df >= 0:
+                self._spans.append((t, t - t0, float(db), float(df)))
+                self._fit(t)
+            self._anchor = (t, bytes_done, files_done)
+
+    def _fit(self, now: float) -> None:
+        """Mínimos cuadrados ponderados con el modelo anterior como ancla (regularización)."""
+        p = self.prior
+        # El modelo anterior entra como dos tramos ficticios (uno de solo datos y otro de solo
+        # archivos) del tamaño medio de los tramos reales: así pesa lo mismo que PRIOR_WEIGHT tramos,
+        # ni más ni menos, sea cual sea el ritmo de esta copia. Sin historial, casi nada.
+        n = len(self._spans)
+        ref_b = max(sum(sp[2] for sp in self._spans) / n, 1.0)
+        ref_f = max(sum(sp[3] for sp in self._spans) / n, 1.0)
+        w0 = self.PRIOR_WEIGHT if self.has_prior else 0.5
+        sbb, sbf, sff = w0 * ref_b * ref_b, 0.0, w0 * ref_f * ref_f
+        stb, stf = w0 * ref_b * (ref_b * p["s_byte"]), w0 * ref_f * (ref_f * p["s_file"])
+        for t, dt, db, df in self._spans:
+            w = 0.5 ** ((now - t) / self.HALF_LIFE)
+            sbb += w * db * db
+            sbf += w * db * df
+            sff += w * df * df
+            stb += w * dt * db
+            stf += w * dt * df
+        det = sbb * sff - sbf * sbf
+        if det <= 0:
+            return
+        x = (stb * sff - stf * sbf) / det
+        f = (stf * sbb - stb * sbf) / det
+        # sin valores imposibles: si uno sale negativo, el otro explica todo el tiempo
+        if x <= 0:
+            x, f = 1e-12, max(stf / sff, 0.0) if sff else self.f
+        elif f < 0:
+            x, f = max(stb / sbb, 1e-12) if sbb else self.x, 0.0
+        self.x, self.f = x, f
+
+    def learn_renames(self, seconds: float, count: int) -> None:
+        """Coste medido de mover o pasar a versiones (renombrados dentro del destino)."""
+        if count >= 20 and seconds > 0:
+            self.ren = seconds / count
+
+    def remaining(self, rem_bytes: int, rem_files: int, rem_renames: int = 0) -> float:
+        with self._lock:
+            return max(0.0, rem_bytes * self.x + rem_files * self.f + rem_renames * self.ren)
+
+    def confidence(self) -> float:
+        """0 al empezar sin historial; cerca de 1 con un par de minutos de copia medidos."""
+        seen = self.active + (60.0 if self.has_prior else 0.0)
+        return seen / (seen + 30.0)
+
+    def speed(self) -> tuple[float, float]:
+        """(bytes/s, archivos/s) de los últimos ~6 s de copia."""
+        with self._lock:
+            if len(self._recent) < 2:
+                return 0.0, 0.0
+            (t0, b0, f0), (t1, b1, f1) = self._recent[0], self._recent[-1]
+            dt = t1 - t0
+            return ((b1 - b0) / dt, (f1 - f0) / dt) if dt > 0.5 else (0.0, 0.0)
+
+    def model(self) -> dict:
+        return {"s_byte": self.x, "s_file": self.f, "s_ren": self.ren}
+
+
 # ── estadísticas ────────────────────────────────────────────────────────────
 
 @dataclass
@@ -857,6 +981,7 @@ class BackupJob:
         self.active: dict[int, list] = {}  # hilo -> [ruta, tamaño, transferido]
         self.summary: dict = {}
         self.scan_started_at: datetime | None = None
+        self.estimator: Estimator | None = None
         self._reset_plan()
 
         self._lock = threading.Lock()
@@ -1227,6 +1352,8 @@ class BackupJob:
         self.version_root = os.path.join(root, META_DIR, "versiones", self._started_at.strftime(STAMP_FMT),
                                          rel_to_volume(self.dst))
         self._move_ok = bytearray(len(self.moves))
+        self.estimator = Estimator((last_history(root) or {}).get("modelo"))
+        threading.Thread(target=self._measure, name="medidor", daemon=True).start()
 
         s.step = "limpieza"
         for path in self.junk:
@@ -1248,6 +1375,7 @@ class BackupJob:
                 break
 
         s.step = "moviendo"
+        t_moves = time.perf_counter()
         for k, (old, item) in enumerate(self.moves):
             if self._cancel.is_set():
                 break
@@ -1276,6 +1404,7 @@ class BackupJob:
                 s.new_bytes += item[1]
                 s.del_files += 1
                 s.del_bytes += item[1]
+        self.estimator.learn_renames(time.perf_counter() - t_moves, s.moves_done)
         self._copy_ok = bytearray(len(self.copies))
         self._copy_hash: list[bytes | None] = [None] * len(self.copies)
         self._delete_ok = bytearray(len(self.deletes))
@@ -1288,7 +1417,9 @@ class BackupJob:
         if self.mode == MODE_MIRROR and not self._cancel.is_set():
             s.step = "versionando"
             self._next = 0
+            t_del = time.perf_counter()
             self._pool(self._delete_worker)
+            self.estimator.learn_renames(time.perf_counter() - t_del, s.deletes_done)
             for d in self.orphan_dirs:
                 try:
                     os.rmdir(lp(d))
@@ -1312,6 +1443,41 @@ class BackupJob:
         s.copy_end = time.perf_counter()
         self.phase = "cancelled" if sync_cancelled else "done"
         self._write_history(root)
+
+    def _measure(self) -> None:
+        """Mide la copia cada medio segundo para el estimador. Las pausas y las esperas al disco no cuentan."""
+        s, est = self.stats, self.estimator
+        active, last = 0.0, time.perf_counter()
+        while self.phase == "copying" and s.step != "verificando" and not self._cancel.is_set():
+            time.sleep(0.5)
+            now = time.perf_counter()
+            dt, last = now - last, now
+            if self.paused or s.disk_lost_at or s.step != "copiando":
+                est.gap()
+                continue
+            active += dt
+            est.feed(active, s.bytes_done + s.bytes_failed, s.files_done + s.files_failed)
+
+    def eta(self) -> tuple[float, float, float] | None:
+        """(segundos de sincronización que faltan, segundos de revisión de integridad como mucho, fiabilidad 0-1).
+
+        Con el modelo aprendido: lo que falta por copiar en datos y en archivos, más lo que falta por
+        mover o pasar a versiones. La revisión de integridad va aparte: dura lo elegido como mucho.
+        """
+        est, s = self.estimator, self.stats
+        if est is None:
+            return None
+        if s.step == "verificando":
+            return 0.0, 0.0, 1.0
+        rem_b = max(0, s.plan_bytes - s.bytes_done - s.bytes_failed)
+        rem_f = max(0, s.plan_files - s.files_done - s.files_failed)
+        rem_r = 0
+        if s.step in ("", "limpieza", "carpetas", "moviendo"):
+            rem_r += max(0, s.moved_files - s.moves_done)
+        if self.mode == MODE_MIRROR and s.step not in ("purgando", "índice"):
+            rem_r += max(0, s.del_files - s.deletes_done)
+        scrub = float(self.scrub_seconds) if self.scrub_seconds > 0 else 0.0
+        return est.remaining(rem_b, rem_f, rem_r), scrub, est.confidence()
 
     def _pool(self, target) -> None:
         workers = [threading.Thread(target=target, name=f"trabajo-{i + 1}", daemon=True)
@@ -1793,10 +1959,18 @@ class BackupJob:
             "movidos": s.moved_files, "copiados": s.files_done, "bytes": s.bytes_done,
             "versiones": s.versions_saved, "errores": s.errors,
             "verificados": s.verified_copies,
+            "modelo": self._model_to_keep(root),
             "integridad": {"revisados": s.scrub_files, "reparados": s.scrub_repaired, "alertas": s.scrub_alerts,
                            "cubiertos": s.scrub_covered, "total": s.scrub_total},
         }
         append_history(root, self.summary)
+
+    def _model_to_keep(self, root: str) -> dict | None:
+        """El modelo de esta copia si se midieron al menos 20 s; si no, el de la anterior."""
+        est = self.estimator
+        if est is not None and est.active >= 20:
+            return {k: float(f"{v:.6g}") for k, v in est.model().items()}
+        return (last_history(root) or {}).get("modelo")
 
     # ── utilidades ───────────────────────────────────────────────────────
     def _error(self, path: str, exc: BaseException, context: str = "") -> None:

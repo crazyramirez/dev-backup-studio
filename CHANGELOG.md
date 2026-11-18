@@ -1,5 +1,19 @@
 # Novedades
 
+## 1.9.4
+
+- **Tiempo restante y hora de fin mucho más precisos.** El cálculo aprende de la propia copia
+  cuánto cuesta cada byte y cuánto cada archivo (abrir, crear, verificar, renombrar), y lo ajusta
+  sobre la marcha dando más peso a lo reciente. Antes cada archivo contaba como 1 MB fijo, y en
+  una carpeta de red con miles de archivos pequeños el error podía ser de horas. Parte de lo
+  aprendido en la copia anterior al mismo destino, así que acierta desde el principio; mientras
+  tiene pocos datos lo indica con «afinando».
+- La hora de fin incluye la revisión de integridad (como mucho el tiempo elegido) y lo dice.
+- **Velocidad estable:** media de los últimos segundos de copia, sin contar pausas ni esperas al
+  disco, con los archivos/s y los hilos que están copiando. Ya no cae a «0 B/s» mientras se
+  verifican archivos.
+- El tiempo previsto al conectar el disco usa el mismo modelo.
+
 ## 1.9.3
 
 - **Se ve si estás conectado a tu nube.** Debajo del destino aparece «✓ Conectado a tu nube «pcspi»»

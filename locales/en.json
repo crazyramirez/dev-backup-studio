@@ -657,6 +657,12 @@
   "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Excludes every folder. Loose files at the root of the source are still copied.",
   "Conectado a tu nube «{name}»": "Connected to your cloud “{name}”",
   "Tu nube «{name}» no responde ahora": "Your cloud “{name}” isn’t responding right now",
-  "Volver a conectar…": "Reconnect…"
+  "Volver a conectar…": "Reconnect…",
+  "afinando": "refining",
+  "con ≤ {v} de revisión": "with ≤ {v} of checking",
+  "{n} hilo copiando": [
+   "{n} thread copying",
+   "{n} threads copying"
+  ]
  }
 }

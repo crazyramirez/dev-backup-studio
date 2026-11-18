@@ -657,6 +657,12 @@
   "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Exclut tous les dossiers. Les fichiers isolés à la racine de la source sont toujours copiés.",
   "Conectado a tu nube «{name}»": "Connecté à votre cloud « {name} »",
   "Tu nube «{name}» no responde ahora": "Votre cloud « {name} » ne répond pas pour l’instant",
-  "Volver a conectar…": "Se reconnecter…"
+  "Volver a conectar…": "Se reconnecter…",
+  "afinando": "affinage",
+  "con ≤ {v} de revisión": "avec ≤ {v} de vérification",
+  "{n} hilo copiando": [
+   "{n} fil en copie",
+   "{n} fils en copie"
+  ]
  }
 }

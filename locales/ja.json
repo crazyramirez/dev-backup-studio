@@ -639,6 +639,12 @@
   "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "すべてのフォルダーを除外します。コピー元のルートにあるファイルは引き続きコピーされます。",
   "Conectado a tu nube «{name}»": "クラウド「{name}」に接続済み",
   "Tu nube «{name}» no responde ahora": "クラウド「{name}」は現在応答していません",
-  "Volver a conectar…": "再接続…"
+  "Volver a conectar…": "再接続…",
+  "afinando": "精度を調整中",
+  "con ≤ {v} de revisión": "確認 ≤ {v} を含む",
+  "{n} hilo copiando": [
+   "{n} スレッドでコピー中",
+   "{n} スレッドでコピー中"
+  ]
  }
 }

@@ -639,6 +639,12 @@
   "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "排除所有文件夹。源根目录下的单独文件仍会复制。",
   "Conectado a tu nube «{name}»": "已连接到你的云“{name}”",
   "Tu nube «{name}» no responde ahora": "你的云“{name}”目前没有响应",
-  "Volver a conectar…": "重新连接…"
+  "Volver a conectar…": "重新连接…",
+  "afinando": "正在校准",
+  "con ≤ {v} de revisión": "含 ≤ {v} 检查",
+  "{n} hilo copiando": [
+   "{n} 个线程正在复制",
+   "{n} 个线程正在复制"
+  ]
  }
 }

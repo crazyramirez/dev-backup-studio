@@ -53,7 +53,7 @@ import updater
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.9.3"
+APP_VERSION = "1.9.4"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -1846,8 +1846,11 @@ def change_rows(job: engine.BackupJob) -> list[tuple]:
 
 
 def estimate_seconds(root: str, s: engine.Stats) -> float | None:
-    """Tiempo previsto según el ritmo de la última copia en este disco."""
+    """Tiempo previsto con el modelo aprendido en la última copia a este disco (datos + archivos)."""
     last = engine.last_history(root)
+    if last and isinstance(last.get("modelo"), dict):
+        est = engine.Estimator(last["modelo"])
+        return est.remaining(s.plan_bytes, s.plan_files, s.moved_files + s.del_files)
     if not last or float(last.get("copia_s", 0)) < 5:
         return None
     work_then = last.get("bytes", 0) + (last.get("copiados", 0) + last.get("movidos", 0)
@@ -5060,32 +5063,22 @@ class MainWindow(QMainWindow):
         done_b = s.bytes_done + s.bytes_failed
         paused = job.paused and not final
 
-        work = done_b + s.ops_done * FILE_COST
-        work_total = s.plan_bytes + s.ops_total * FILE_COST
-        if not paused:
-            self._samples.append((t_copy, work, s.bytes_done, s.ops_done))
-            while len(self._samples) > 2 and t_copy - self._samples[0][0] > 30:
-                self._samples.popleft()
-
-        def rate(window: float, idx: int) -> float:
-            if len(self._samples) < 2:
-                return 0.0
-            last = self._samples[-1]
-            first = next((x for x in self._samples if last[0] - x[0] <= window), self._samples[0])
-            dt = last[0] - first[0]
-            return (last[idx] - first[idx]) / dt if dt > 0.25 else 0.0
-
-        speed = rate(2.0, 2)
-        fps = rate(2.0, 3)
+        # Velocidad: media de los últimos ~6 s de copia (sin pausas), no un instante suelto.
+        # Tiempo restante: modelo de coste aprendido de esta copia (datos + coste fijo por archivo,
+        # engine.Estimator), más lo que falta por mover o pasar a versiones.
+        est = job.estimator
+        speed, fps = est.speed() if est else (0.0, 0.0)
         avg = s.bytes_done / t_copy
-        work_rate = rate(20.0, 1) if t_copy > 3 else 0.0
-        if work_rate <= 0 and t_copy > 1.5:
-            work_rate = work / t_copy
-        eta = None
-        if work_rate > 0:
-            raw = min(max(0.0, (work_total - work) / work_rate), 30 * 86400)
+        threads = len(job.active)
+        eta = scrub_budget = None
+        confidence = 0.0
+        info = job.eta()
+        if info is not None and (est.active >= 3 or est.has_prior):
+            raw, scrub_budget, confidence = info
+            raw = min(raw, 30 * 86400)
             dt = max(0.0, now - self._last_tick)
-            self._eta = raw if self._eta is None else max(0.0, self._eta - dt) * 0.88 + raw * 0.12
+            # cuenta atrás suave: el valor nuevo entra poco a poco, sin saltos de un segundo a otro
+            self._eta = raw if self._eta is None else max(0.0, self._eta - dt) * 0.8 + raw * 0.2
             eta = self._eta
         if final:
             eta = 0.0
@@ -5129,10 +5122,15 @@ class MainWindow(QMainWindow):
             self.t_left.set("…", _("midiendo velocidad"))
             self.t_eta.set("…", "")
         else:
-            self.t_left.set(fmt_clock(eta), f"≈ {fmt_human(eta)}")
-            fin = datetime.now() + timedelta(seconds=eta)
+            note = f"≈ {fmt_human(eta)}"
+            if confidence < 0.6:
+                note += "  ·  " + _("afinando")
+            self.t_left.set(fmt_clock(eta), note)
+            fin = datetime.now() + timedelta(seconds=eta + (scrub_budget or 0))
             day = fin.date() - datetime.now().date()
             when = _("hoy") if day.days == 0 else _("mañana") if day.days == 1 else fin.strftime(_("%d/%m/%Y"))
+            if scrub_budget:
+                when += "  ·  " + _("con ≤ {v} de revisión").format(v=fmt_human(scrub_budget))
             self.t_eta.set(fin.strftime("%H:%M:%S"), when)
         if final:
             self.t_speed.set(fmt_speed(avg), _("media de la copia"))
@@ -5140,7 +5138,10 @@ class MainWindow(QMainWindow):
             span = max(1e-6, time.perf_counter() - s.scrub_start) if s.scrub_start else 0
             self.t_speed.set(fmt_speed(s.scrub_bytes / span) if span else "—", _("lectura de comprobación"))
         else:
-            self.t_speed.set(fmt_speed(speed) if not paused else "—", _("{n} archivos/s").format(n=fmt_int(fps)))
+            sub = _("{n} archivos/s").format(n=fmt_dec(fps, 1) if 0 < fps < 10 else fmt_int(fps))
+            if threads:
+                sub += "  ·  " + _n("{n} hilo copiando", "{n} hilos copiando", threads).format(n=threads)
+            self.t_speed.set(fmt_speed(speed) if not paused and (speed or fps) else "—" if paused else "…", sub)
         self.t_copied.set(fmt_bytes(s.bytes_done), _("de {total}").format(total=fmt_bytes(s.plan_bytes)))
         pending = max(0, s.ops_total - s.ops_done)
         self.t_files.set(fmt_int(handled), _("de {ops_total}  ·  {pending} pendientes").format(ops_total=fmt_int(s.ops_total), pending=fmt_int(pending)))
