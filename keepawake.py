@@ -260,6 +260,9 @@ class Guard:
             self._system = None
         if self._beat is not None:
             self._beat.stop_event.set()
+            # espera a que suelte el archivo del latido (un disco colgado no bloquea más de 2 s)
+            if self._beat.is_alive() and self._beat is not threading.current_thread():
+                self._beat.join(timeout=2.0)
             self._beat = None
 
     def status(self) -> dict:

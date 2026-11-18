@@ -6185,9 +6185,11 @@ def selftest() -> int:
             guard = keepawake.Guard()
             guard.start(f"{APP_NAME} selftest", meta)
             try:
-                time.sleep(2.6)
-                st = guard.status()
                 beat_file = os.path.join(meta, ".devbackup", keepawake.BEAT_FILE)
+                deadline = time.monotonic() + 10.0   # el runner de CI puede ir lento: no basta un tiempo fijo
+                while time.monotonic() < deadline and not guard.status()["beats"]:
+                    time.sleep(0.2)
+                st = guard.status()
                 say(f"  sin suspensión: {st['method'] or '—'} · latidos={st['beats']} {st['disk_error']}")
                 assert st["beats"] >= 1 and os.path.exists(beat_file), "latido del disco"
                 if IS_WIN or IS_MAC:
