@@ -654,6 +654,9 @@
   "Marcar todo": "Check all",
   "Desmarcar todo": "Uncheck all",
   "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).": "Includes every folder (removes the manual exclusions; rules stay).",
-  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Excludes every folder. Loose files at the root of the source are still copied."
+  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Excludes every folder. Loose files at the root of the source are still copied.",
+  "Conectado a tu nube «{name}»": "Connected to your cloud “{name}”",
+  "Tu nube «{name}» no responde ahora": "Your cloud “{name}” isn’t responding right now",
+  "Volver a conectar…": "Reconnect…"
  }
 }

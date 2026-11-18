@@ -654,6 +654,9 @@
   "Marcar todo": "Tout cocher",
   "Desmarcar todo": "Tout décocher",
   "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).": "Inclut tous les dossiers (retire les exclusions manuelles ; les règles restent).",
-  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Exclut tous les dossiers. Les fichiers isolés à la racine de la source sont toujours copiés."
+  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Exclut tous les dossiers. Les fichiers isolés à la racine de la source sont toujours copiés.",
+  "Conectado a tu nube «{name}»": "Connecté à votre cloud « {name} »",
+  "Tu nube «{name}» no responde ahora": "Votre cloud « {name} » ne répond pas pour l’instant",
+  "Volver a conectar…": "Se reconnecter…"
  }
 }

@@ -654,6 +654,9 @@
   "Marcar todo": "Seleziona tutto",
   "Desmarcar todo": "Deseleziona tutto",
   "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).": "Include tutte le cartelle (toglie le esclusioni manuali; le regole restano).",
-  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Esclude tutte le cartelle. I file sciolti nella radice dell’origine vengono comunque copiati."
+  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "Esclude tutte le cartelle. I file sciolti nella radice dell’origine vengono comunque copiati.",
+  "Conectado a tu nube «{name}»": "Connesso al tuo cloud «{name}»",
+  "Tu nube «{name}» no responde ahora": "Il tuo cloud «{name}» al momento non risponde",
+  "Volver a conectar…": "Ricollega…"
  }
 }

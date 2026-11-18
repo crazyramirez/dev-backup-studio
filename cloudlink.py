@@ -113,8 +113,116 @@ def _parse(data: bytes) -> list[tuple[str, int, object]]:
     return out
 
 
-def discover(timeout: float = 2.5) -> list[Cloud]:
-    """Nubes que se anuncian en la red. Lista vacía si no hay ninguna (o la red no deja)."""
+def discover(timeout: float = 2.5, known=()) -> list[Cloud]:
+    """Nubes de la red: las que se anuncian por mDNS y las ya conocidas (known) que responden.
+
+    En Windows se pregunta de dos formas a la vez: con el servicio DNS-SD del sistema (al que el
+    cortafuegos deja recibir respuestas) y con una consulta propia, que funciona si el cortafuegos
+    permite la app. Lista vacía si no hay ninguna.
+    """
+    import concurrent.futures as cf
+
+    jobs = [lambda: _discover_socket(timeout)]
+    if IS_WIN:
+        jobs.append(lambda: _discover_windows(timeout))
+    for host in known:
+        if host:
+            jobs.append(lambda host=host: [Cloud(name=host.split(".")[0], host=host)] if probe(host) else [])
+    found: dict[str, Cloud] = {}
+    with cf.ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+        for fut in [pool.submit(j) for j in jobs]:
+            try:
+                for c in fut.result(timeout=timeout + 6):
+                    found.setdefault(c.host.lower(), c)
+            except Exception:  # noqa: BLE001 - una vía que falla no impide las otras
+                continue
+    return list(found.values())
+
+
+def probe(host: str, timeout: float = 3.0) -> bool:
+    """¿Es una nube Personal Cloud Storage que responde? (lee /api/v1/system/health)."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # CA propia de la nube: solo se lee el estado público
+    try:
+        req = urllib.request.Request(f"https://{host}/api/v1/system/health", headers={"User-Agent": "DEV-Backup-Studio"})
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+            return "volumeState" in json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def _discover_windows(timeout: float) -> list[Cloud]:
+    """Búsqueda DNS-SD con el servicio de Windows 10+ (DnsServiceBrowse)."""
+    from ctypes import wintypes
+
+    class _PTR(ctypes.Structure):
+        _fields_ = [("pNameHost", wintypes.LPWSTR)]
+
+    class _DATA(ctypes.Union):
+        _fields_ = [("PTR", _PTR), ("raw", ctypes.c_byte * 64)]
+
+    class _REC(ctypes.Structure):
+        pass
+
+    _REC._fields_ = [("pNext", ctypes.POINTER(_REC)), ("pName", wintypes.LPWSTR), ("wType", wintypes.WORD),
+                     ("wDataLength", wintypes.WORD), ("Flags", wintypes.DWORD), ("dwTtl", wintypes.DWORD),
+                     ("dwReserved", wintypes.DWORD), ("Data", _DATA)]
+    callback_t = ctypes.WINFUNCTYPE(None, wintypes.DWORD, ctypes.c_void_p, ctypes.POINTER(_REC))
+
+    class _REQ(ctypes.Structure):
+        _fields_ = [("Version", wintypes.ULONG), ("InterfaceIndex", wintypes.ULONG), ("QueryName", wintypes.LPCWSTR),
+                    ("pBrowseCallback", callback_t), ("pQueryContext", ctypes.c_void_p)]
+
+    class _CANCEL(ctypes.Structure):
+        _fields_ = [("reserved", ctypes.c_void_p)]
+
+    try:
+        dnsapi = ctypes.WinDLL("dnsapi")
+        browse, cancel_fn, free = dnsapi.DnsServiceBrowse, dnsapi.DnsServiceBrowseCancel, dnsapi.DnsRecordListFree
+    except (OSError, AttributeError):
+        return []
+    browse.argtypes = [ctypes.POINTER(_REQ), ctypes.POINTER(_CANCEL)]
+    browse.restype = wintypes.LONG
+    cancel_fn.argtypes = [ctypes.POINTER(_CANCEL)]
+    cancel_fn.restype = wintypes.LONG
+    free.argtypes = [ctypes.POINTER(_REC), ctypes.c_int]
+    free.restype = None
+
+    names: set[str] = set()
+
+    def on_record(status, _ctx, rec):
+        try:
+            node = rec
+            while node:
+                r = node.contents
+                if r.wType == 12 and r.Data.PTR.pNameHost:  # PTR → «pcspi._pcloud._tcp.local»
+                    names.add(r.Data.PTR.pNameHost)
+                node = r.pNext
+        finally:
+            if rec:
+                free(rec, 1)
+
+    cb = callback_t(on_record)
+    _KEEP.append(cb)  # Windows puede llamar aún tras cancelar: la función tiene que seguir viva
+    req = _REQ(Version=1, InterfaceIndex=0, QueryName=SERVICE, pBrowseCallback=cb, pQueryContext=None)
+    handle = _CANCEL()
+    if browse(ctypes.byref(req), ctypes.byref(handle)) != 9506:  # DNS_REQUEST_PENDING
+        return []
+    time.sleep(timeout)
+    cancel_fn(ctypes.byref(handle))
+    clouds = []
+    for inst in sorted(names):
+        name = inst.split(".")[0]
+        if name:
+            clouds.append(Cloud(name=name, host=name + ".local"))
+    return clouds
+
+
+_KEEP: list = []
+
+
+def _discover_socket(timeout: float) -> list[Cloud]:
     query = struct.pack("!6H", 0, 0, 1, 0, 0, 0) + _qname(SERVICE) + struct.pack("!HH", 12, 1)
     records: list[tuple[str, int, object]] = []
     try:
@@ -169,6 +277,40 @@ def _resolves(host: str) -> bool:
         return True
     except OSError:
         return False
+
+
+# ── destino en la nube ──────────────────────────────────────────────────────
+
+# Nombre actual de la carpeta de red de Personal Cloud Storage (antes «Copias», que sigue como alias).
+SHARE_NAME = "DEV_Backup_Studio"
+
+
+def unc_parts(path: str) -> tuple[str, str, str] | None:
+    """«\\\\nube\\Recurso\\PC» → ("nube", "Recurso", "PC"); None si no es una ruta de red de Windows."""
+    if not IS_WIN or not path.startswith(("\\\\", "//")) or path.startswith("\\\\?\\"):
+        return None
+    bits = path.replace("/", "\\").lstrip("\\").split("\\")
+    if len(bits) < 2 or not bits[0] or not bits[1]:
+        return None
+    return bits[0], bits[1], "\\".join(b for b in bits[2:] if b)
+
+
+def current_share_path(dst: str) -> str:
+    """Si dst va por el nombre antiguo de la carpeta y el nuevo es la misma (misma marca de disco de
+    copia), la ruta con el nombre nuevo. Si no, "" (no hay nada que cambiar)."""
+    parts = unc_parts(dst)
+    if parts is None:
+        return ""
+    host, share, rest = parts
+    if share.lower() == SHARE_NAME.lower():
+        return ""
+    import engine
+    old_root = f"\\\\{host}\\{share}\\"
+    new_root = f"\\\\{host}\\{SHARE_NAME}\\"
+    old_id = engine.read_disk_id(old_root)
+    if not old_id or engine.read_disk_id(new_root) != old_id:
+        return ""
+    return new_root + rest if rest else new_root.rstrip("\\")
 
 
 # ── canje del código ────────────────────────────────────────────────────────

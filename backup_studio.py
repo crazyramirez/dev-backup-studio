@@ -53,7 +53,7 @@ import updater
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.9.2"
+APP_VERSION = "1.9.3"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -2091,7 +2091,18 @@ class PairDialog(QDialog):
         self.failed.connect(self._on_failed)
         self._update()
         self.code.setFocus()
-        threading.Thread(target=lambda: self.found.emit(cloudlink.discover()), name="buscar-nube", daemon=True).start()
+        saved = str(win.settings.value("nube_host", "") or "")
+        if saved:
+            self.cloud.addItem(f"{saved.split('.')[0]}  ({saved})", saved)
+            self.cloud.setCurrentIndex(0)
+        def search():
+            clouds = cloudlink.discover(known=[saved] if saved else [])
+            try:
+                self.found.emit(clouds)
+            except RuntimeError:  # el diálogo se cerró antes de terminar la búsqueda
+                pass
+
+        threading.Thread(target=search, name="buscar-nube", daemon=True).start()
 
     def showEvent(self, event):  # noqa: N802
         super().showEvent(event)
@@ -2118,8 +2129,10 @@ class PairDialog(QDialog):
                                       "navegador, sin «https://»."))
             return
         typed = self.cloud.currentText()
+        have = {str(self.cloud.itemData(i) or "").lower() for i in range(self.cloud.count())}
         for c in clouds:
-            self.cloud.addItem(f"{c.name}  ({c.host})", c.host)
+            if c.host.lower() not in have:
+                self.cloud.addItem(f"{c.name}  ({c.host})", c.host)
         if not typed:
             self.cloud.setCurrentIndex(0)
         self._update()
@@ -2166,6 +2179,10 @@ class PairDialog(QDialog):
             self.code.clear()
             self.code.setFocus()
         self._update()
+
+    @property
+    def link_host(self) -> str:
+        return self._link.host if self._link else ""
 
     def _on_done(self, path: str):
         self.result_path = path
@@ -3257,6 +3274,9 @@ class ReminderBar(QFrame):
 
 
 class MainWindow(QMainWindow):
+    # comprobación de la nube en segundo plano: (servidor, destino corregido o "", ok | down | none)
+    cloud_checked = pyqtSignal(str, str, str)
+
     def __init__(self, tray_mode: bool = False, updated: bool = False):
         super().__init__()
         self.setWindowTitle(APP_NAME)
@@ -3338,6 +3358,8 @@ class MainWindow(QMainWindow):
             self._ensure_tray()
         # al arrancar con la sesión la ventana no debe abrirse sola aunque la app pase a primer plano
         self.tray_only_start = tray_mode
+        self.cloud_checked.connect(self._on_cloud_checked)
+        QTimer.singleShot(1500, self._check_cloud)
         if tray_mode:
             QTimer.singleShot(3000, lambda: setattr(self, "tray_only_start", False))
             # si el disco ya está puesto y hace tiempo de la última copia, preguntar
@@ -3549,7 +3571,14 @@ class MainWindow(QMainWindow):
                                     "que te da su web. Sin contraseñas."))
         self.cloud_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cloud_btn.clicked.connect(self._pair_cloud)
-        pair.body.addWidget(self.cloud_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        cloud_row = QHBoxLayout()
+        cloud_row.setSpacing(10)
+        self.cloud_state = QLabel("")
+        self.cloud_state.hide()
+        cloud_row.addWidget(self.cloud_state)
+        cloud_row.addWidget(self.cloud_btn)
+        cloud_row.addStretch(1)
+        pair.body.addLayout(cloud_row)
         self.card_pair = pair
         lay.addWidget(pair)
 
@@ -4558,6 +4587,8 @@ class MainWindow(QMainWindow):
     def _on_dst_changed(self):
         self._adopt_disk()
         self._invalidate_plan()
+        if hasattr(self, "cloud_state"):
+            self._check_cloud()
 
     def _pair_cloud(self):
         if self._state in RUNNING:
@@ -4567,9 +4598,58 @@ class MainWindow(QMainWindow):
         if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.result_path:
             return
         self.dst_card.set_path(dlg.result_path)
+        if dlg.link_host:
+            self.settings.setValue("nube_host", dlg.link_host)
         self._on_dst_changed()
         self._save_settings()
         QMessageBox.information(self, APP_NAME, _("Conectado. Las copias se guardarán en {path}.").format(path=dlg.result_path))
+
+    def _check_cloud(self):
+        """¿El destino es una carpeta de Personal Cloud Storage? ¿Responde? Todo fuera de la ventana."""
+        dst = self.dst_card.path()
+        saved = str(self.settings.value("nube_host", "") or "")
+        self._cloud_seq = getattr(self, "_cloud_seq", 0) + 1
+        seq = self._cloud_seq
+
+        def work():
+            parts = cloudlink.unc_parts(dst)
+            if parts is None:
+                state, host, new_dst = "none", "", ""
+            else:
+                host = parts[0]
+                ok = cloudlink.probe(host)
+                state = "ok" if ok else ("down" if host.lower() == saved.lower() else "none")
+                new_dst = cloudlink.current_share_path(dst) if ok else ""
+            if seq == self._cloud_seq:  # el destino no ha cambiado entretanto
+                try:
+                    self.cloud_checked.emit(host, new_dst or "", state)
+                except RuntimeError:  # la ventana ya se cerró
+                    pass
+
+        threading.Thread(target=work, name="comprobar-nube", daemon=True).start()
+
+    def _on_cloud_checked(self, host: str, new_dst: str, state: str):
+        name = host.split(".")[0]
+        if state == "ok":
+            if host and str(self.settings.value("nube_host", "") or "").lower() != host.lower():
+                self.settings.setValue("nube_host", host)
+            if new_dst and os.path.normcase(new_dst) != os.path.normcase(self.dst_card.path()) and self._state not in RUNNING:
+                # la carpeta de la nube cambió de nombre (p. ej. «Copias» → «DEV_Backup_Studio»)
+                self.dst_card.set_path(new_dst)
+                self._on_dst_changed()
+                self._save_settings()
+            self.cloud_state.setText("✓  " + _("Conectado a tu nube «{name}»").format(name=name))
+            self.cloud_state.setStyleSheet(f"color: {C['ok']};")
+            self.cloud_state.show()
+            self.cloud_btn.setText("  " + _("Volver a conectar…"))
+        elif state == "down":
+            self.cloud_state.setText(_("Tu nube «{name}» no responde ahora").format(name=name))
+            self.cloud_state.setStyleSheet(f"color: {C['warn']};")
+            self.cloud_state.show()
+            self.cloud_btn.setText("  " + _("Volver a conectar…"))
+        else:
+            self.cloud_state.hide()
+            self.cloud_btn.setText("  " + _("Conectar con mi nube…"))
 
     def _on_tree_changed(self):
         n = len(self.tree.excluded)

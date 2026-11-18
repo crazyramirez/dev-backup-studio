@@ -636,6 +636,9 @@
   "Marcar todo": "全部勾选",
   "Desmarcar todo": "全部取消勾选",
   "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).": "包含所有文件夹（移除手动排除；规则保留）。",
-  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "排除所有文件夹。源根目录下的单独文件仍会复制。"
+  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "排除所有文件夹。源根目录下的单独文件仍会复制。",
+  "Conectado a tu nube «{name}»": "已连接到你的云“{name}”",
+  "Tu nube «{name}» no responde ahora": "你的云“{name}”目前没有响应",
+  "Volver a conectar…": "重新连接…"
  }
 }

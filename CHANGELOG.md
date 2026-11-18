@@ -1,5 +1,15 @@
 # Novedades
 
+## 1.9.3
+
+- **Se ve si estás conectado a tu nube.** Debajo del destino aparece «✓ Conectado a tu nube «pcspi»»
+  (o que no responde ahora), y el botón pasa a *Volver a conectar…*. La app recuerda tu nube: al
+  volver a conectar ya sale puesta.
+- **Encuentra la nube aunque el cortafuegos de Windows bloquee la app.** La búsqueda usa también el
+  servicio de descubrimiento del propio Windows, y prueba directamente la nube ya conocida.
+- La carpeta de red de Personal Cloud Storage se llama ahora `DEV_Backup_Studio`. Un destino con el
+  nombre antiguo (`\\pcspi.local\Copias\…`) se cambia solo al nuevo, si es la misma carpeta.
+
 ## 1.9.2
 
 - **Marcar todo y Desmarcar todo** en *Qué se copia*, en lugar de *Restablecer*. Sin selección

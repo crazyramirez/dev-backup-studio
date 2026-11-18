@@ -636,6 +636,9 @@
   "Marcar todo": "すべてチェック",
   "Desmarcar todo": "すべて解除",
   "Incluye todas las carpetas (quita las exclusiones hechas a mano; las reglas se mantienen).": "すべてのフォルダーを含めます（手動の除外を解除。ルールはそのまま）。",
-  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "すべてのフォルダーを除外します。コピー元のルートにあるファイルは引き続きコピーされます。"
+  "Excluye todas las carpetas. Los archivos sueltos de la raíz del origen se siguen copiando.": "すべてのフォルダーを除外します。コピー元のルートにあるファイルは引き続きコピーされます。",
+  "Conectado a tu nube «{name}»": "クラウド「{name}」に接続済み",
+  "Tu nube «{name}» no responde ahora": "クラウド「{name}」は現在応答していません",
+  "Volver a conectar…": "再接続…"
  }
 }
