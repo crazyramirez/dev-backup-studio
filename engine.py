@@ -759,13 +759,15 @@ class Estimator:
     El tiempo solo cuenta mientras se copia: las pausas y las esperas al disco no entran.
     """
 
-    SPAN = 3.0           # segundos de copia por tramo
+    SPAN = 10.0          # segundos de copia por tramo: promedia los atascos cortos dentro de tramos con avance
     HALF_LIFE = 90.0     # los tramos de hace 90 s pesan la mitad
     PRIOR_WEIGHT = 4.0   # el modelo anterior vale como 4 tramos
+    # sin historial: lo típico de un disco USB y de una carpeta de red por Wi-Fi (medido con una Pi 4)
     DEFAULT = {"s_byte": 1 / (60 * 1024 * 1024), "s_file": 0.004, "s_ren": 0.002}
+    DEFAULT_NETWORK = {"s_byte": 1 / (8 * 1024 * 1024), "s_file": 0.06, "s_ren": 0.02}
 
-    def __init__(self, prior: dict | None = None):
-        base = dict(self.DEFAULT)
+    def __init__(self, prior: dict | None = None, network: bool = False):
+        base = dict(self.DEFAULT_NETWORK if network else self.DEFAULT)
         self.has_prior = False
         if isinstance(prior, dict):
             for k in base:
@@ -835,6 +837,17 @@ class Estimator:
             x, f = 1e-12, max(stf / sff, 0.0) if sff else self.f
         elif f < 0:
             x, f = max(stb / sbb, 1e-12) if sbb else self.x, 0.0
+        # Calibración con el tiempo real. Los tramos en los que no termina nada (el servidor o el
+        # disco se atascan, otra copia compite) no aportan nada a la regresión, pero ese tiempo
+        # también pasa. Se reparte: x y f se escalan para que expliquen todo el tiempo reciente.
+        real = expl = 0.0
+        for t, dt, db, df in self._spans:
+            w = 0.5 ** ((now - t) / self.HALF_LIFE)
+            real += w * dt
+            expl += w * (x * db + f * df)
+        if expl > 0 and real > 0:
+            k = real / expl
+            x, f = x * k, f * k
         self.x, self.f = x, f
 
     def learn_renames(self, seconds: float, count: int) -> None:
@@ -1352,7 +1365,7 @@ class BackupJob:
         self.version_root = os.path.join(root, META_DIR, "versiones", self._started_at.strftime(STAMP_FMT),
                                          rel_to_volume(self.dst))
         self._move_ok = bytearray(len(self.moves))
-        self.estimator = Estimator((last_history(root) or {}).get("modelo"))
+        self.estimator = Estimator((last_history(root) or {}).get("modelo"), network=self.network)
         threading.Thread(target=self._measure, name="medidor", daemon=True).start()
 
         s.step = "limpieza"
@@ -1477,6 +1490,9 @@ class BackupJob:
         if self.mode == MODE_MIRROR and s.step not in ("purgando", "índice"):
             rem_r += max(0, s.del_files - s.deletes_done)
         scrub = float(self.scrub_seconds) if self.scrub_seconds > 0 else 0.0
+        if self.verify and s.skip_files == 0 and not s.fast:
+            # todo lo del destino se copia ahora y se verifica al copiarlo: la revisión no tiene qué leer
+            scrub = 0.0
         return est.remaining(rem_b, rem_f, rem_r), scrub, est.confidence()
 
     def _pool(self, target) -> None:

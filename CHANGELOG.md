@@ -1,5 +1,17 @@
 # Novedades
 
+## 1.9.5
+
+- **El tiempo restante cuenta también los atascos.** Si el servidor o el disco se paran un rato
+  (otra copia compite, la nube vacía su caché), ese tiempo ya entra en la estimación en lugar de
+  ignorarse; la 1.9.4 podía quedarse muy corta en esos casos. Mide en tramos de 10 s, que promedian
+  los atascos cortos.
+- La primera copia a una carpeta de red parte de valores típicos de red (unos 60 ms por archivo)
+  en lugar de los de un disco USB, así que acierta mucho antes. Desde la segunda, usa lo aprendido.
+- La gráfica de velocidad usa la misma medida estable que la tarjeta.
+- La hora de fin ya no suma la revisión de integridad cuando no hay nada que revisar (todo lo
+  copiado es nuevo y ya se verificó al copiarlo).
+
 ## 1.9.4
 
 - **Tiempo restante y hora de fin mucho más precisos.** El cálculo aprende de la propia copia

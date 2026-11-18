@@ -53,7 +53,7 @@ import updater
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.9.4"
+APP_VERSION = "1.9.5"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -1849,7 +1849,7 @@ def estimate_seconds(root: str, s: engine.Stats) -> float | None:
     """Tiempo previsto con el modelo aprendido en la última copia a este disco (datos + archivos)."""
     last = engine.last_history(root)
     if last and isinstance(last.get("modelo"), dict):
-        est = engine.Estimator(last["modelo"])
+        est = engine.Estimator(last["modelo"], network=engine.is_network(root))
         return est.remaining(s.plan_bytes, s.plan_files, s.moved_files + s.del_files)
     if not last or float(last.get("copia_s", 0)) < 5:
         return None
@@ -3298,7 +3298,6 @@ class MainWindow(QMainWindow):
         self._tray_hint_shown = False
         self._state = "idle"
         self._finalized = True
-        self._samples: deque = deque()
         self._eta: float | None = None
         self._last_tick = 0.0
         self._last_chart = 0.0
@@ -4856,7 +4855,6 @@ class MainWindow(QMainWindow):
         return True
 
     def _reset_progress(self):
-        self._samples.clear()
         self._eta = None
         self._last_chart = 0.0
         self._pause_at = None
@@ -4907,7 +4905,6 @@ class MainWindow(QMainWindow):
                 if job.phase == "copying":
                     self._paused_copy += gap
                 self._pause_at = None
-            self._samples.clear()
             self._log(_("Reanudado"))
         else:
             job.pause()
@@ -4999,7 +4996,6 @@ class MainWindow(QMainWindow):
                     "copiar").format(threads=job.threads, ops_total=fmt_int(s.ops_total), plan_bytes=fmt_bytes(s.plan_bytes)), C["accent"])
         self._set_active_rows(job.threads)
         self.ring.set_busy(False)
-        self._samples.clear()
         self.banner.set("run", _("Sincronizando  {src}  →  {dst}").format(src=job.src, dst=job.dst),
                         self._plan_text(s) + ("  ·  " + _("análisis en {scan_end}").format(scan_end=fmt_clock(s.scan_end - s.scan_start, ms=True))),
                         G.SYNC)
@@ -5073,7 +5069,7 @@ class MainWindow(QMainWindow):
         eta = scrub_budget = None
         confidence = 0.0
         info = job.eta()
-        if info is not None and (est.active >= 3 or est.has_prior):
+        if info is not None and (est.active >= est.SPAN or est.has_prior):
             raw, scrub_budget, confidence = info
             raw = min(raw, 30 * 86400)
             dt = max(0.0, now - self._last_tick)
@@ -5150,7 +5146,7 @@ class MainWindow(QMainWindow):
 
         if not final and not paused and now - self._last_chart >= 0.5:
             self._last_chart = now
-            self.chart.push(rate(1.0, 2))
+            self.chart.push(speed)
         slots = list(job.active.values())
         for i, row in enumerate(self.active_rows):
             row.show_slot(slots[i] if i < len(slots) and not final else None, job.src)
