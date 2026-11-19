@@ -1,5 +1,13 @@
 # Novedades
 
+## 2.3.0
+
+- **Alemán.** La app ya está en siete idiomas: español, inglés, francés, alemán, italiano, chino y
+  japonés. Se elige solo según el sistema o en *Sistema → Idioma*; la guía rápida tiene sus capturas
+  en alemán, y las fechas, números y diálogos de Qt siguen el formato alemán.
+- **Instalador de Windows** también en francés, alemán, italiano y japonés (antes solo español e
+  inglés).
+
 ## 2.2.0
 
 - **Linux: «Conectar con mi nube…».** Encuentra Personal Cloud Storage, pide el código de 6 cifras y

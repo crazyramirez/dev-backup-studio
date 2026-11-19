@@ -1,4 +1,4 @@
-"""Idiomas de la app: español (el original), inglés, francés, italiano, chino y japonés.
+"""Idiomas de la app: español (el original), inglés, francés, alemán, italiano, chino y japonés.
 
 Los textos se escriben en español en el código y se traducen al usarlos:
 
@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-LANGS = {"es": "Español", "en": "English", "fr": "Français", "it": "Italiano", "zh": "中文（简体）", "ja": "日本語"}
+LANGS = {"es": "Español", "en": "English", "fr": "Français", "de": "Deutsch", "it": "Italiano", "zh": "中文（简体）", "ja": "日本語"}
 SOURCE = "es"
 FALLBACK = "en"  # si el idioma del sistema no está entre los de la app
 LOCALES_DIR = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))), "locales")
@@ -25,7 +25,7 @@ LOCALES_DIR = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(os.path.absp
 # separador de miles, separador decimal y espacio antes de «%»
 NUMBERS = {
     "es": (".", ",", " "), "en": (",", ".", ""), "fr": (" ", ",", " "),
-    "it": (".", ",", ""), "zh": (",", ".", ""), "ja": (",", ".", ""),
+    "de": (".", ",", " "), "it": (".", ",", ""), "zh": (",", ".", ""), "ja": (",", ".", ""),
 }
 
 _lang = SOURCE

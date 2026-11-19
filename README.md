@@ -97,7 +97,7 @@ primera vez:
   con cambios sin copiar, te avisa una vez por periodo: «Tienes cambios sin copiar en DEV · 37 archivos
   desde tu última copia, hace 4 días». Comprueba sin abrir archivos; si no has tocado nada, no avisa.
   Con el disco conectado, se sincroniza desde el propio aviso.
-- **En seis idiomas.** Español, inglés, francés, italiano, chino y japonés: automático según el
+- **En siete idiomas.** Español, inglés, francés, alemán, italiano, chino y japonés: automático según el
   sistema o elegido en *Sistema → Idioma*.
 - **Guía rápida.** La primera vez enseña en seis pasos, con capturas de la propia app, cómo dejarla
   lista: origen y destino (disco o nube), qué copiar, analizar y sincronizar, recuperar lo borrado y

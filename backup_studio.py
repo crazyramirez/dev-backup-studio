@@ -58,7 +58,7 @@ import versions
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.3.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -2302,6 +2302,8 @@ def short_day(d: datetime) -> str:
     q = QDate(d.year, d.month, d.day)
     if i18n.current() in ("zh", "ja"):
         return f"{d.month}月{d.day}日 ({qlocale().toString(q, 'ddd')})"
+    if i18n.current() == "de":
+        return qlocale().toString(q, "ddd, d. MMM")
     return qlocale().toString(q, "ddd d MMM")
 
 
