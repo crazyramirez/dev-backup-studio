@@ -663,6 +663,13 @@
   "{n} hilo copiando": [
    "{n} thread in copia",
    "{n} thread in copia"
-  ]
+  ],
+  "{n} con otras mayúsculas": [
+   "{n} con maiuscole diverse",
+   "{n} con maiuscole diverse"
+  ],
+  "Exclusión «{old}» → «{new}»: la carpeta se renombró": "Esclusione «{old}» → «{new}»: la cartella è stata rinominata",
+  "excluida a mano (sigue a su carpeta renombrada)": "esclusa a mano (segue la sua cartella rinominata)",
+  "no se pudo cambiar a «{name}»": "impossibile cambiarlo in «{name}»"
  }
 }

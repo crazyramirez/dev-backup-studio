@@ -917,6 +917,8 @@ class Stats:
     bytes_failed: int = 0
     moves_done: int = 0
     deletes_done: int = 0
+    case_renames: int = 0      # carpetas o archivos que solo cambian mayúsculas/minúsculas
+    case_done: int = 0
     other_failed: int = 0
     versions_saved: int = 0
     versions_purged: int = 0
@@ -954,7 +956,7 @@ class Stats:
 
     @property
     def has_changes(self) -> bool:
-        return bool(self.ops_total or self.junk_files)
+        return bool(self.ops_total or self.junk_files or self.case_renames)
 
 
 class BackupJob:
@@ -1015,6 +1017,9 @@ class BackupJob:
         self.moves: list[tuple[str, tuple]] = []
         self.dirs: list[str] = []          # carpetas que hay que crear en el destino
         self.orphan_dirs: list[str] = []   # carpetas del destino que ya no existen en el origen
+        self.case_renames: list[tuple[str, str]] = []  # (ruta actual en el destino, ruta con las mayúsculas del origen)
+        self.renamed_dirs: list[tuple[str, str]] = []  # carpetas renombradas en el origen (antes, ahora)
+        self.renamed_exclusions: list[tuple[str, str]] = []  # exclusiones a mano que siguen a su carpeta
         self.junk: list[str] = []          # temporales de ejecuciones interrumpidas
         self._seen_dirs: list[str] = []
         self._copy_ok: bytearray = bytearray()
@@ -1162,8 +1167,12 @@ class BackupJob:
                         dfiles.pop(key, None)
                         continue
                     if entry.is_dir(follow_symlinks=False):
-                        ddirs.pop(key, None)
+                        dname = ddirs.pop(key, None)
                         child = os.path.join(rel, name) if rel else name
+                        if dname is not None and dname != name and not match_rule(name, self.patterns) \
+                                and norm_rel(child) not in self.excluded:
+                            # misma carpeta con otras mayúsculas («proyecto» → «Proyecto»)
+                            self.case_renames.append((os.path.join(ddir, dname), os.path.join(ddir, name)))
                         rule = match_rule(name, self.patterns)
                         if not rel and name.lower() in ROOT_SKIP:
                             # papelera, puntos de restauración, índices de Spotlight…: no son datos tuyos
@@ -1187,8 +1196,10 @@ class BackupJob:
                         if have is not None and self._same(size, mtime, have):
                             s.skip_files += 1
                             s.skip_bytes += size
+                            if have[0] != name:
+                                self.case_renames.append((os.path.join(ddir, have[0]), os.path.join(ddir, name)))
                             if self._writer:
-                                self._writer.add_file(rel, have[0], have[1], have[2])
+                                self._writer.add_file(rel, name, have[1], have[2])
                         else:
                             kind = "c" if have else "n"
                             self.copies.append((os.path.join(sdir, name), size, mtime, kind, have))
@@ -1207,6 +1218,8 @@ class BackupJob:
             s.dirs_scanned += 1
         if self.mode == MODE_MIRROR:
             self._detect_moves()
+            self._follow_exclusions()
+        s.case_renames = len(self.case_renames)
         s.plan_files = len(self.copies)
         s.plan_bytes = sum(c[1] for c in self.copies)
         s.dirs_to_create = len(self.dirs)
@@ -1329,6 +1342,7 @@ class BackupJob:
 
         match(lambda n, s, m: (os.path.normcase(n), s, m), 1)   # carpeta movida o renombrada
         match(lambda n, s, m: (s, m), MOVE_MIN_SIZE)            # archivo renombrado
+        self._match_renamed_dirs(pairs, used)
         if not pairs:
             return
         s = self.stats
@@ -1343,6 +1357,104 @@ class BackupJob:
             s.del_bytes -= old[1]
         self.copies = [c for i, c in enumerate(self.copies) if i not in pairs]
         self.deletes = [d for j, d in enumerate(self.deletes) if j not in used]
+
+    def _rel_parts(self, path: str, base: str) -> list[str]:
+        return [p for p in path[len(base):].replace("/", os.sep).split(os.sep) if p]
+
+    def _match_renamed_dirs(self, pairs: dict[int, int], used: set[int]) -> None:
+        """Carpetas renombradas o movidas enteras: también sus archivos repetidos.
+
+        De las parejas sin ambigüedad se deduce qué carpeta pasó a llamarse cómo (las rutas acaban
+        igual y empiezan distinto: «Proyecto\\src\\a.py» → «Proyecto-v2\\src\\a.py»). Con eso, un archivo
+        nuevo bajo la carpeta nueva se empareja con el que había en la misma ruta bajo la antigua,
+        aunque haya muchos iguales (varios __init__.py vacíos, .gitkeep…). Solo con el mismo tamaño y
+        fecha, y sin carpetas contradictorias.
+        """
+        votes: dict[tuple, dict[tuple, int]] = {}
+        for i, j in pairs.items():
+            new = self._rel_parts(self.copies[i][0], self.src)
+            old = self._rel_parts(self.deletes[j][0], self.dst)
+            k = 0
+            while k < min(len(new), len(old)) and os.path.normcase(new[-1 - k]) == os.path.normcase(old[-1 - k]):
+                k += 1
+            if k == 0 or (k == len(new) and k == len(old)):
+                continue  # archivo renombrado (el nombre cambia) o nada que deducir
+            old_pre = tuple(os.path.normcase(p) for p in old[:len(old) - k])
+            new_pre = tuple(new[:len(new) - k])
+            votes.setdefault(old_pre, {}).setdefault(new_pre, 0)
+            votes[old_pre][new_pre] += 1
+        mapping: dict[tuple, tuple] = {}
+        for old_pre, cands in votes.items():
+            if len(cands) == 1:  # una carpeta antigua, un único destino: sin dudas
+                mapping[tuple(os.path.normcase(p) for p in next(iter(cands)))] = (old_pre, next(iter(cands)))
+        if not mapping:
+            return
+        self.renamed_dirs = sorted({(os.sep.join(o), os.sep.join(n)) for o, n in mapping.values()})
+        left: dict[str, int] = {}
+        for j, (path, _size, _mtime) in enumerate(self.deletes):
+            if j not in used:
+                left[os.sep.join(os.path.normcase(p) for p in self._rel_parts(path, self.dst))] = j
+        for i, (src, size, mtime, kind, _have) in enumerate(self.copies):
+            if kind != "n" or i in pairs:
+                continue
+            parts = self._rel_parts(src, self.src)
+            low = [os.path.normcase(p) for p in parts]
+            for cut in range(len(parts) - 1, 0, -1):  # la carpeta renombrada más profunda que la contenga
+                hit = mapping.get(tuple(low[:cut]))
+                if hit is None:
+                    continue
+                j = left.get(os.sep.join(list(hit[0]) + low[cut:]))
+                if j is not None and j not in used:
+                    _p, dsize, dmtime = self.deletes[j]
+                    if self._same(size, mtime, (None, dsize, dmtime)):
+                        pairs[i] = j
+                        used.add(j)
+                break
+
+    def _follow_exclusions(self) -> None:
+        """Una carpeta excluida a mano dentro de una carpeta renombrada sigue excluida con el nombre nuevo."""
+        if not self.renamed_dirs or not self.excluded:
+            return
+        s = self.stats
+        moved: list[tuple[str, str]] = []
+        for ex in sorted(self.excluded):
+            for old, new in self.renamed_dirs:
+                if ex == old or ex.startswith(old + os.sep):
+                    target = new + ex[len(old):]
+                    if os.path.exists(lp(os.path.join(self.src, ex))) or not os.path.isdir(lp(os.path.join(self.src, target))):
+                        break  # la carpeta antigua sigue ahí, o la nueva no existe: no es este renombrado
+                    moved.append((ex, norm_rel(target)))
+                    break
+        if not moved:
+            return
+        for ex, new in moved:
+            self.excluded.discard(ex)
+            self.excluded.add(new)
+            s.excluded_manual += 1
+            self.pruned.append((new, _("excluida a mano (sigue a su carpeta renombrada)")))
+        self.renamed_exclusions = moved
+        news = [new for _ex, new in moved]
+
+        def under(path: str, base: str) -> bool:
+            rel = norm_rel(os.path.relpath(path, base))
+            return any(rel == n or rel.startswith(n + os.sep) for n in news)
+
+        keep = []
+        for c in self.copies:
+            if under(c[0], self.src):
+                s.files_found -= 1
+                s.bytes_found -= c[1]
+                if c[3] == "c":
+                    s.changed_files -= 1
+                    s.changed_bytes -= c[1]
+                else:
+                    s.new_files -= 1
+                    s.new_bytes -= c[1]
+            else:
+                keep.append(c)
+        self.copies = keep
+        self.dirs = [d for d in self.dirs if not under(d, self.dst)]
+        self._seen_dirs = [r for r in self._seen_dirs if not (norm_rel(r) in news or any(norm_rel(r).startswith(n + os.sep) for n in news))]
 
     # ── fase 2: ejecución ────────────────────────────────────────────────
     def _dst_for(self, src: str) -> str:
@@ -1389,6 +1501,22 @@ class BackupJob:
 
         s.step = "moviendo"
         t_moves = time.perf_counter()
+        for old, new in self.case_renames:
+            if self._cancel.is_set():
+                break
+            # en dos pasos: en un sistema que no distingue mayúsculas, «a» → «A» directo puede no cambiar nada
+            tmp = new + ".bkcase"
+            try:
+                os.replace(lp(old), lp(tmp))
+                os.replace(lp(tmp), lp(new))
+                s.case_done += 1
+            except OSError as exc:
+                if os.path.exists(lp(tmp)) and not os.path.exists(lp(old)):
+                    try:
+                        os.replace(lp(tmp), lp(old))  # deshacer: que no quede a medias
+                    except OSError:
+                        pass
+                self._error(old, exc, _("no se pudo cambiar a «{name}»").format(name=os.path.basename(new)))
         for k, (old, item) in enumerate(self.moves):
             if self._cancel.is_set():
                 break
@@ -1973,6 +2101,7 @@ class BackupJob:
             "rapido": s.fast,
             "nuevos": s.new_files, "modificados": s.changed_files, "eliminados": s.del_files,
             "movidos": s.moved_files, "copiados": s.files_done, "bytes": s.bytes_done,
+            "mayusculas": s.case_done,
             "versiones": s.versions_saved, "errores": s.errors,
             "verificados": s.verified_copies,
             "modelo": self._model_to_keep(root),

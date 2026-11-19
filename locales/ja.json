@@ -645,6 +645,13 @@
   "{n} hilo copiando": [
    "{n} スレッドでコピー中",
    "{n} スレッドでコピー中"
-  ]
+  ],
+  "{n} con otras mayúsculas": [
+   "{n} 件 大文字/小文字の違い",
+   "{n} 件 大文字/小文字の違い"
+  ],
+  "Exclusión «{old}» → «{new}»: la carpeta se renombró": "除外「{old}」→「{new}」：フォルダーの名前が変更されました",
+  "excluida a mano (sigue a su carpeta renombrada)": "手動で除外（名前が変わったフォルダーに追従）",
+  "no se pudo cambiar a «{name}»": "「{name}」に変更できませんでした"
  }
 }

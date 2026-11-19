@@ -663,6 +663,13 @@
   "{n} hilo copiando": [
    "{n} fil en copie",
    "{n} fils en copie"
-  ]
+  ],
+  "{n} con otras mayúsculas": [
+   "{n} avec une autre casse",
+   "{n} avec une autre casse"
+  ],
+  "Exclusión «{old}» → «{new}»: la carpeta se renombró": "Exclusion « {old} » → « {new} » : le dossier a été renommé",
+  "excluida a mano (sigue a su carpeta renombrada)": "exclu manuellement (suit son dossier renommé)",
+  "no se pudo cambiar a «{name}»": "impossible de le changer en « {name} »"
  }
 }

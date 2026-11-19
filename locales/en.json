@@ -663,6 +663,13 @@
   "{n} hilo copiando": [
    "{n} thread copying",
    "{n} threads copying"
-  ]
+  ],
+  "{n} con otras mayúsculas": [
+   "{n} with different capitalization",
+   "{n} with different capitalization"
+  ],
+  "Exclusión «{old}» → «{new}»: la carpeta se renombró": "Exclusion “{old}” → “{new}”: the folder was renamed",
+  "excluida a mano (sigue a su carpeta renombrada)": "excluded manually (follows its renamed folder)",
+  "no se pudo cambiar a «{name}»": "couldn’t change it to “{name}”"
  }
 }

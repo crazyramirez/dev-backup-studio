@@ -53,7 +53,7 @@ import updater
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.9.5"
+APP_VERSION = "1.9.6"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -1176,7 +1176,10 @@ class FolderTree(QTreeWidget):
         for i in range(root.childCount()):
             self._apply(root.child(i))
 
-    def reset(self) -> None:
+    # No puede llamarse «reset»: QTreeWidget.clear() llama al reset() de Qt, y con ese nombre se
+    # borraban las exclusiones a mano cada vez que se recargaba el árbol (al abrir la app, al
+    # cambiar el origen…).
+    def clear_exclusions(self) -> None:
         self.excluded.clear()
         self.refresh()
         self.changed.emit()
@@ -4660,7 +4663,7 @@ class MainWindow(QMainWindow):
         self._invalidate_plan()
 
     def _reset_exclusions(self):
-        self.tree.reset()
+        self.tree.clear_exclusions()
 
     def _check_scope(self, checked: bool):
         self.tree.set_checked(self.tree.scope(), checked)
@@ -4966,6 +4969,13 @@ class MainWindow(QMainWindow):
             self._finish(job, phase)
 
     def _plan_text(self, s: engine.Stats) -> str:
+        text = self._plan_counts(s)
+        if s.case_renames:
+            text += "  ·  " + _n("{n} con otras mayúsculas", "{n} con otras mayúsculas",
+                                 s.case_renames).format(n=fmt_int(s.case_renames))
+        return text
+
+    def _plan_counts(self, s: engine.Stats) -> str:
         return (_("{new_files} nuevos ({new_bytes})  ·  {changed_files} modificados ({changed_bytes})  ·  "
                   "{moved_files} movidos  ·  {del_files} a versiones  ·  {skip_files} sin cambios").format(new_files=fmt_int(s.new_files), new_bytes=fmt_bytes(s.new_bytes), changed_files=fmt_int(s.changed_files), changed_bytes=fmt_bytes(s.changed_bytes), moved_files=fmt_int(s.moved_files), del_files=fmt_int(s.del_files), skip_files=fmt_int(s.skip_files)))
 
@@ -5205,8 +5215,26 @@ class MainWindow(QMainWindow):
         self._log(job.index_note)
 
     # ── fin ──────────────────────────────────────────────────────────────
+    def _apply_renamed_exclusions(self, job: engine.BackupJob):
+        """Las exclusiones a mano de una carpeta renombrada pasan a su nombre nuevo (el motor ya lo aplicó)."""
+        moved = job.renamed_exclusions
+        if not moved or os.path.normcase(job.src) != self._excl_key():
+            return
+        excluded = self.tree.excluded
+        for old, new in moved:
+            excluded.discard(old)
+            excluded.add(new)
+            self._log(_("Exclusión «{old}» → «{new}»: la carpeta se renombró").format(old=old, new=new), C["accent2"])
+        self.excl_map[self._excl_key()] = excluded
+        self.tree.refresh()  # sin «changed»: el análisis recién hecho sigue valiendo
+        n = len(excluded)
+        self.excl_count.setText(_n("{n} excluida a mano", "{n} excluidas a mano", n).format(n=n) if n else "")
+        self._update_check_buttons()
+        self._save_settings()
+
     def _finish(self, job: engine.BackupJob, phase: str):
         self._guard_stop()
+        self._apply_renamed_exclusions(job)
         s = job.stats
         if self._pause_at is not None:
             self._paused_total += time.perf_counter() - self._pause_at
@@ -6240,6 +6268,43 @@ def selftest() -> int:
             clash = [n for n in vars(cls) if n in ("done", "accept", "reject", "exec", "open", "result")
                      and isinstance(vars(cls)[n], pyqtSignal)]
             assert not clash, f"{cls.__name__}: {clash} tapa un método de QDialog"
+        # recargar el árbol de carpetas conserva las exclusiones a mano (y no tapa métodos de Qt)
+        with tempfile.TemporaryDirectory() as tree_root:
+            os.makedirs(os.path.join(tree_root, "a", "b"))
+            kept = {engine.norm_rel(os.path.join("a", "b"))}
+            tree = FolderTree()
+            tree.load(tree_root, kept, [])
+            tree.load(tree_root, kept, [])
+            assert kept == {engine.norm_rel(os.path.join("a", "b"))}, "recargar el árbol borra las exclusiones"
+            assert "reset" not in vars(FolderTree), "FolderTree.reset tapa QAbstractItemView.reset"
+        say("  árbol de carpetas: recargar conserva las exclusiones")
+        # renombrar: carpeta entera (con archivos repetidos), exclusión que la sigue y solo mayúsculas
+        with tempfile.TemporaryDirectory() as ren:
+            rsrc, rdst = os.path.join(ren, "src"), os.path.join(ren, "dst")
+            for rel in ["P/a/__init__.py", "P/b/__init__.py", "P/a/m.py", "P/build/o.bin", "P/lib/readme.md"]:
+                os.makedirs(os.path.dirname(os.path.join(rsrc, rel)), exist_ok=True)
+                with open(os.path.join(rsrc, rel), "wb") as fh:
+                    fh.write(b"" if rel.endswith("__init__.py") else os.urandom(200))
+            excl = [engine.norm_rel(os.path.join("P", "build"))]
+
+            def ren_run():
+                j = engine.BackupJob(rsrc, rdst, [], excl, meta_root=rdst, scrub_seconds=0)
+                j.run(copy=True)
+                assert j.phase == "done" and not j.errors, j.errors
+                return j
+
+            ren_run()
+            os.rename(os.path.join(rsrc, "P"), os.path.join(rsrc, "Q"))
+            j = ren_run()
+            assert (j.stats.new_files, j.stats.moved_files, j.stats.del_files) == (0, 4, 0), \
+                f"renombrar carpeta: {j.stats.new_files} nuevos, {j.stats.moved_files} movidos, {j.stats.del_files} a versiones"
+            assert j.renamed_exclusions and not os.path.exists(os.path.join(rdst, "Q", "build")), "la exclusión no siguió a la carpeta"
+            excl = [new for _old, new in j.renamed_exclusions]
+            os.rename(os.path.join(rsrc, "Q", "lib"), os.path.join(rsrc, "Q", "Lib"))
+            j = ren_run()
+            assert j.stats.case_done == 1 and "Lib" in os.listdir(os.path.join(rdst, "Q")), "cambio de mayúsculas no aplicado"
+            assert not ren_run().stats.has_changes, "tras renombrar quedan cambios pendientes"
+        say("  renombrar: carpeta entera, exclusión que la sigue y mayúsculas, sin recopiar nada")
         pair = PairDialog(win)
         pair.accept()  # pasa por QDialog.done(): si algo lo tapa, el resultado no cambia
         assert pair.result() == QDialog.DialogCode.Accepted, "el diálogo «Conectar con mi nube» no se cierra"

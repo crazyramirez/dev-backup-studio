@@ -1,5 +1,21 @@
 # Novedades
 
+## 1.9.6
+
+- **Corregido (importante): las carpetas excluidas a mano se olvidaban.** Desde la 1.0.0, recargar el
+  árbol de carpetas (al abrir la app, al cambiar el origen o con el botón de volver a leer) borraba
+  las exclusiones hechas a mano, y la siguiente copia incluía lo que habías desmarcado. Ahora se
+  conservan; las reglas por nombre (`node_modules`, `.venv`…) no estaban afectadas. Revisa *Qué se
+  copia* por si alguna carpeta que querías fuera vuelve a estar marcada.
+- **Renombrar una carpeta no recopia nada.** Además de los archivos únicos, ahora se mueven también
+  los repetidos (varios `__init__.py` vacíos, `.gitkeep`…): se deduce qué carpeta pasó a llamarse
+  cómo y cada archivo se empareja con el de la misma ruta bajo el nombre antiguo.
+- **Las exclusiones siguen a su carpeta.** Si excluiste `Proyecto\build` y renombras `Proyecto` a
+  `Proyecto-v2`, la exclusión pasa sola a `Proyecto-v2\build` (lo dice el registro) y no se copia.
+- **Cambios solo de mayúsculas.** `proyecto` → `Proyecto` (o un archivo `readme.md` → `README.md`)
+  se renombra también en la copia, sin volver a copiar el contenido.
+- El autodiagnóstico comprueba los tres casos y que recargar el árbol conserva las exclusiones.
+
 ## 1.9.5
 
 - **El tiempo restante cuenta también los atascos.** Si el servidor o el disco se paran un rato

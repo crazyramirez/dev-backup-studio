@@ -645,6 +645,13 @@
   "{n} hilo copiando": [
    "{n} 个线程正在复制",
    "{n} 个线程正在复制"
-  ]
+  ],
+  "{n} con otras mayúsculas": [
+   "{n} 个大小写不同",
+   "{n} 个大小写不同"
+  ],
+  "Exclusión «{old}» → «{new}»: la carpeta se renombró": "排除项“{old}”→“{new}”：文件夹已重命名",
+  "excluida a mano (sigue a su carpeta renombrada)": "手动排除（随重命名的文件夹转移）",
+  "no se pudo cambiar a «{name}»": "无法改为“{name}”"
  }
 }
