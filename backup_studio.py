@@ -58,7 +58,7 @@ import versions
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -1905,6 +1905,10 @@ class DiskWatcher(QObject):
         known = engine.mounted_volumes(extra=extra)
         while not self._stop.wait(2.0):
             try:
+                if IS_LINUX:
+                    # la carpeta de la nube no sigue montada tras reiniciar: se monta al responder
+                    for root in self._extra:
+                        cloudlink.ensure_mounted(root)
                 now = engine.mounted_volumes(extra=self._extra)
             except Exception:  # noqa: BLE001 - el vigilante no se puede morir
                 continue
@@ -2287,8 +2291,18 @@ def group_label(d: datetime) -> str:
         return _("Ayer")
     if days < 7:
         return _("Esta semana")
+    if i18n.current() in ("zh", "ja"):
+        return f"{d.year}年{d.month}月"
     month = qlocale().standaloneMonthName(d.month)
     return f"{month[:1].upper()}{month[1:]} {d.year}"
+
+
+def short_day(d: datetime) -> str:
+    """Día corto con el de la semana: «lun 16 nov», «Mon 16 Nov», «11月16日 (月)»."""
+    q = QDate(d.year, d.month, d.day)
+    if i18n.current() in ("zh", "ja"):
+        return f"{d.month}月{d.day}日 ({qlocale().toString(q, 'ddd')})"
+    return qlocale().toString(q, "ddd d MMM")
 
 
 def short_stamp(d: datetime) -> str:
@@ -2821,7 +2835,7 @@ class RecoverPage(QWidget):
             days = (now.date() - s.stamp.date()).days
             when = s.stamp.strftime("%H:%M")
             if days >= 2:
-                when = qlocale().toString(QDate(s.stamp.year, s.stamp.month, s.stamp.day), "ddd d MMM") + "  ·  " + when
+                when = short_day(s.stamp) + "  ·  " + when
             it.setData(d.TITLE, when)
             it.setData(d.SUB, _n("{n} archivo", "{n} archivos", len(s.files)).format(n=fmt_int(len(s.files)))
                        + "  ·  " + fmt_bytes(s.size))
@@ -3352,6 +3366,8 @@ class PairDialog(QDialog):
             "busy": _("Demasiados intentos. Espera unos minutos y vuelve a probar."),
             "connect": _("El código es correcto, pero no se pudo abrir la carpeta de red. Pulsa «Conectar» para "
                          "reintentar: no hace falta otro código."),
+            "nogvfs": _("Este escritorio no puede abrir carpetas de red. Instala el paquete gvfs-backends "
+                        "(Ubuntu, Debian) o gvfs-smb (Fedora, Arch) y pulsa «Conectar»: no hace falta otro código."),
         }.get(kind, kind)
         self.status.setText(text + (f"  ({detail})" if detail and kind in ("unreachable", "connect") else ""))
         if kind == "code":
@@ -3540,7 +3556,7 @@ class UpdateDialog(QDialog):
 
 # ── guía rápida ──────────────────────────────────────────────────────────────
 
-TOUR_VERSION = 1
+TOUR_VERSION = 2  # al subirla, quien actualiza vuelve a ver la guía (una vez) con lo nuevo
 TOUR_DIR = os.path.join(getattr(sys, "_MEIPASS", APP_DIR), "assets", "tour")
 
 
@@ -3550,22 +3566,29 @@ def tour_steps() -> list[dict]:
     return [
         {"image": "1-bienvenida", "glyph": G.SPARK, "eyebrow": _("Guía rápida"),
          "title": _("Tus proyectos, siempre a salvo"),
-         "text": _("Copia tu carpeta de proyectos a un disco externo en cuatro pasos: rápido, comprobado y con "
-                 "historial de versiones."),
+         "text": _("Copia tu carpeta de proyectos a un disco externo o a tu nube: rápido, comprobado y con "
+                 "un historial para recuperar lo que borres."),
          "chips": [(G.SHIELD, _("Verificado con SHA-256")), (G.CLOCK, _("Versiones de lo que cambias")),
                    (G.NEXT, _("Detecta movidos"))]},
         {"image": "2-origen-destino", "glyph": G.FOLDER, "title": _("Elige origen y destino"),
-         "text": _("El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo."),
-         "chips": [(G.FOLDER, _("Una carpeta o un disco entero")), (G.DRIVE, _("Lo reconoce aunque cambie de letra"))]},
+         "text": _("El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo o de tu "
+                   "nube en casa."),
+         "chips": [(G.FOLDER, _("Una carpeta o un disco entero")), (G.DRIVE, _("Lo reconoce aunque cambie de letra")),
+                   (G.GLOBE, _("Tu nube, con un código"))]},
         {"image": "3-que-copiar", "glyph": G.FILTER, "title": _("Decide qué se copia"),
          "text": _("Desmarca carpetas en el árbol o exclúyelas por nombre, en cualquier nivel de cada proyecto."),
          "chips": [(G.FILTER, _("node_modules, .venv, dist…")), (G.TREE, _("Se recuerda para la próxima"))]},
         {"image": "4-sincroniza", "glyph": G.PLAY, "title": _("Analiza y sincroniza"),
-         "text": _("Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia y lo "
-                 "comprueba."),
+         "text": _("Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia, lo "
+                   "comprueba y, si fuera a apartar media copia de golpe, se para a preguntarte."),
          "chips": [(G.SEARCH, _("Revisa antes de copiar")), (G.SHIELD, _("Cada archivo verificado")),
-                   (G.CLOCK, _("Lo borrado va a versiones"))]},
-        {"image": "5-conecta", "glyph": G.BELL, "title": _("Conecta el disco y listo"),
+                   (G.WARN, _("Frena los borrados masivos"))]},
+        {"image": "5-recupera", "glyph": G.HISTORY, "title": _("Recupera lo que borraste"),
+         "text": _("Lo que borras o cambias pasa a versiones. En Recuperar eliges una fecha, buscas el archivo y "
+                   "lo devuelves a su sitio, sin sobrescribir nada."),
+         "chips": [(G.HISTORY, _("Línea de tiempo por fechas")), (G.RESTORE, _("Nunca sobrescribe")),
+                   (G.CLOCK, _("7, 30 o 60 días"))]},
+        {"image": "6-conecta", "glyph": G.BELL, "title": _("Conecta el disco y listo"),
          "text": _("Desde {tray} vigila el disco y te recuerda copiar si llevas días con cambios sin guardar. "
                    "Al enchufarlo, sincronizas con un clic.").format(tray=tray),
          "chips": [(G.SYNC, _("Vigila en segundo plano")), (G.BELL, _("Te recuerda copiar")),
@@ -4749,8 +4772,6 @@ class MainWindow(QMainWindow):
                                     "que te da su web. Sin contraseñas."))
         self.cloud_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cloud_btn.clicked.connect(self._pair_cloud)
-        # Linux: todavía no monta la carpeta de red sola; se elige como destino una ya montada
-        self.cloud_btn.setVisible(not IS_LINUX)
         cloud_row = QHBoxLayout()
         cloud_row.setSpacing(10)
         self.cloud_state = QLabel("")
@@ -5459,7 +5480,7 @@ class MainWindow(QMainWindow):
     def _network_roots(self) -> set[str]:
         """Carpetas de red sin letra de unidad donde hay copias: el destino actual y las habituales."""
         dsts = [self.dst_card.path()] + [it.get("dst", "") for it in self.registry.items.values()]
-        return {engine.volume_root(d) for d in dsts if d and engine.is_unc(d)}
+        return {engine.volume_root(d) for d in dsts if d and (engine.is_unc(d) or engine.gvfs_share(d))}
 
     def _watch_network_roots(self):
         if getattr(self, "watcher", None) is not None:
@@ -5807,6 +5828,7 @@ class MainWindow(QMainWindow):
         seq = self._cloud_seq
 
         def work():
+            cloudlink.ensure_mounted(dst)  # Linux: tras reiniciar, la vuelve a montar
             parts = cloudlink.unc_parts(dst)
             if parts is None:
                 state, host, new_dst = "none", "", ""
@@ -7643,6 +7665,52 @@ def selftest() -> int:
         pair.accept()  # pasa por QDialog.done(): si algo lo tapa, el resultado no cambia
         assert pair.result() == QDialog.DialogCode.Accepted, "el diálogo «Conectar con mi nube» no se cierra"
         say("  conectar con la nube: el diálogo abre y se cierra")
+        if IS_LINUX:
+            # montaje con GVFS: un «gio» de mentira con las mismas preguntas que el de verdad
+            with tempfile.TemporaryDirectory() as fake:
+                gvfs = os.path.join(fake, "gvfs")
+                os.makedirs(gvfs)
+                secret = 's3cr€t "x y$'
+                with open(os.path.join(fake, "gio"), "w", encoding="utf-8") as fh:
+                    fh.write("#!/bin/bash\n"
+                             "for i in 1 2; do\n"
+                             "  echo 'Authentication Required'\n"
+                             "  read -r -p 'User [x]: ' u; read -r -p 'Domain [WORKGROUP]: ' d\n"
+                             "  read -r -s -p 'Password: ' p; echo\n"
+                             f"  [ \"$u\" = pc ] && [ \"$p\" = '{secret.replace(chr(39), '')}' ] && "
+                             f"mkdir -p '{gvfs}/smb-share:server=nube.local,share=dev_backup_studio' && exit 0\n"
+                             "done\nexit 2\n")
+                os.chmod(os.path.join(fake, "gio"), 0o755)
+                secret = secret.replace("'", "")
+                saved = (os.environ.get("PATH", ""), os.environ.get("XDG_CONFIG_HOME"), cloudlink._gvfs_dir)
+                os.environ["PATH"] = fake + os.pathsep + saved[0]
+                os.environ["XDG_CONFIG_HOME"] = os.path.join(fake, "cfg")
+                cloudlink._gvfs_dir = lambda: gvfs
+                try:
+                    bad = cloudlink.Link("nube.local", "DEV_Backup_Studio", "pc", "otra", "PC")
+                    try:
+                        cloudlink.connect(bad)
+                        raise AssertionError("gio: aceptó una contraseña errónea")
+                    except cloudlink.LinkError as exc:
+                        assert exc.kind == "connect", exc.kind
+                    dst = cloudlink.connect(cloudlink.Link("nube.local", "DEV_Backup_Studio", "pc", secret, "PC"))
+                    assert os.path.isdir(dst) and cloudlink.unc_parts(dst)[2] == "PC", dst
+                    mode = stat.S_IMODE(os.stat(cloudlink.credentials_file()).st_mode)
+                    assert mode == 0o600, f"credenciales con permisos {oct(mode)}"
+                    shutil.rmtree(os.path.dirname(dst))  # como tras reiniciar
+                    reach, engine.host_reachable = engine.host_reachable, lambda h, port=445: True
+                    try:
+                        assert cloudlink.ensure_mounted(dst) and os.path.isdir(os.path.dirname(dst)), "no se volvió a montar"
+                    finally:
+                        engine.host_reachable = reach
+                finally:
+                    os.environ["PATH"] = saved[0]
+                    if saved[1] is None:
+                        os.environ.pop("XDG_CONFIG_HOME", None)
+                    else:
+                        os.environ["XDG_CONFIG_HOME"] = saved[1]
+                    cloudlink._gvfs_dir = saved[2]
+            say("  nube en Linux: gio mount por terminal virtual, contraseña errónea, credencial 0600, volver a montar")
         for code in i18n.LANGS:
             images, spots, _size = tour_assets(code)
             missing = [k for k, pm in images.items() if pm.isNull()]

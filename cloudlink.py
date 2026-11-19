@@ -7,6 +7,9 @@
    los 10 minutos.
 3. connect(): guarda las credenciales donde el sistema las usa solo (Windows: Administrador de
    credenciales; macOS: llavero) y abre la carpeta. Devuelve la ruta de destino.
+   Linux: la monta con GVFS («gio mount», sin administrador), como al abrir smb:// en el gestor
+   de archivos. GVFS no la recuerda al reiniciar, así que la credencial se guarda en un archivo
+   que solo puede leer tu usuario y ensure_mounted() la vuelve a montar cuando hace falta.
 
 HTTPS: la nube usa una CA propia que este ordenador no conoce, así que el certificado no se puede
 comprobar. Lo que protege es el código: de un solo uso, 10 minutos y anulado tras 5 fallos. La
@@ -18,6 +21,9 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import re
+import shutil
+import threading
 import socket
 import ssl
 import struct
@@ -30,6 +36,7 @@ from dataclasses import dataclass
 
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
 SERVICE = "_pcloud._tcp.local"
 MDNS = ("224.0.0.251", 5353)
 
@@ -55,7 +62,7 @@ class LinkError(Exception):
 
     def __init__(self, kind: str, detail: str = ""):
         super().__init__(kind)
-        self.kind = kind      # code | unreachable | unavailable | busy | connect
+        self.kind = kind      # code | unreachable | unavailable | busy | connect | nogvfs
         self.detail = detail
 
 
@@ -287,6 +294,8 @@ SHARE_NAME = "DEV_Backup_Studio"
 
 def unc_parts(path: str) -> tuple[str, str, str] | None:
     """«\\\\nube\\Recurso\\PC» → ("nube", "Recurso", "PC"); None si no es una ruta de red de Windows."""
+    if IS_LINUX:
+        return gvfs_parts(path)
     if not IS_WIN or not path.startswith(("\\\\", "//")) or path.startswith("\\\\?\\"):
         return None
     bits = path.replace("/", "\\").lstrip("\\").split("\\")
@@ -299,7 +308,7 @@ def current_share_path(dst: str) -> str:
     """Si dst va por el nombre antiguo de la carpeta y el nuevo es la misma (misma marca de disco de
     copia), la ruta con el nombre nuevo. Si no, "" (no hay nada que cambiar)."""
     parts = unc_parts(dst)
-    if parts is None:
+    if parts is None or not IS_WIN:
         return ""
     host, share, rest = parts
     if share.lower() == SHARE_NAME.lower():
@@ -450,6 +459,192 @@ def _mount_mac(link: Link) -> str:
     return os.path.join("/Volumes", name.rstrip(":"))
 
 
+# ── Linux: GVFS ─────────────────────────────────────────────────────────────
+
+APP_NAME = "DEV Backup Studio"
+_PROMPT = re.compile(r"(?:^|\n)(user|domain|password)(?: \[[^\]\n]*\])?:[ \t]*$", re.IGNORECASE)
+_mount_lock = threading.Lock()
+_last_try: dict[str, float] = {}
+REMOUNT_EVERY = 60.0  # segundos entre intentos de volver a montar una carpeta que no responde
+
+
+def _gvfs_dir() -> str:
+    return f"/run/user/{os.getuid()}/gvfs"
+
+
+def _gvfs_fields(name: str) -> dict[str, str]:
+    """«smb-share:server=nube.local,share=dev_backup_studio,user=pc» → {"server": …, "share": …, "user": …}."""
+    if not name.startswith("smb-share:"):
+        return {}
+    return dict(f.split("=", 1) for f in name.split(":", 1)[1].split(",") if "=" in f)
+
+
+def gvfs_parts(path: str) -> tuple[str, str, str] | None:
+    """«/run/user/1000/gvfs/smb-share:server=nube.local,share=x/PC» → ("nube.local", "x", "PC")."""
+    base = _gvfs_dir() + os.sep
+    path = os.path.abspath(path)
+    if not path.startswith(base):
+        return None
+    parts = path[len(base):].split(os.sep)
+    fields = _gvfs_fields(parts[0])
+    if not fields.get("server") or not fields.get("share"):
+        return None
+    return fields["server"], fields["share"], os.sep.join(p for p in parts[1:] if p)
+
+
+def gvfs_path(host: str, share: str) -> str | None:
+    """Carpeta donde GVFS tiene montada smb://host/share, o None si no está montada."""
+    try:
+        names = os.listdir(_gvfs_dir())
+    except OSError:
+        return None
+    for name in names:
+        f = _gvfs_fields(name)
+        if f.get("server", "").lower() == host.lower() and f.get("share", "").lower() == share.lower():
+            return os.path.join(_gvfs_dir(), name)
+    return None
+
+
+def _gio_mount(link: Link, timeout: float = 45.0) -> None:
+    """«gio mount smb://host/recurso» contestando a sus preguntas por una terminal virtual: así la
+    contraseña no aparece en la lista de procesos ni pasa por la línea de órdenes."""
+    gio = shutil.which("gio")
+    if not gio:
+        raise LinkError("nogvfs", "gio")
+    import pty
+    import select
+    master, slave = pty.openpty()
+    env = dict(os.environ, LC_ALL="C", LANG="C", LANGUAGE="C")  # preguntas en inglés, siempre iguales
+    try:
+        proc = subprocess.Popen([gio, "mount", f"smb://{link.host}/{link.share}"], stdin=slave, stdout=slave,
+                                stderr=slave, env=env, start_new_session=True, close_fds=True)
+    except OSError as exc:
+        os.close(master)
+        os.close(slave)
+        raise LinkError("nogvfs", str(exc)) from exc
+    os.close(slave)
+    answers = {"user": link.user, "domain": "", "password": link.password}  # dominio: el que propone
+    asked: dict[str, int] = {}
+    out, pending = "", ""
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            if time.monotonic() > deadline:
+                raise LinkError("connect", "gio mount: sin respuesta")
+            ready, _w, _x = select.select([master], [], [], 0.3)
+            if not ready:
+                if proc.poll() is not None:
+                    break
+                continue
+            try:
+                data = os.read(master, 4096)
+            except OSError:  # EIO: gio ya terminó y cerró la terminal
+                data = b""
+            if not data:
+                break
+            text = data.decode("utf-8", "replace")
+            out += text
+            pending += text
+            m = _PROMPT.search(pending)
+            if m:
+                key = m.group(1).lower()
+                asked[key] = asked.get(key, 0) + 1
+                if asked[key] > 1:  # vuelve a preguntar: no aceptó el usuario o la contraseña
+                    raise LinkError("connect", "usuario o contraseña no aceptados")
+                os.write(master, (answers[key] + "\n").encode())
+                pending = ""
+        proc.wait(timeout=5)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        os.close(master)
+    if len(link.password) >= 6:  # por si apareciera en un mensaje (no se repite al teclearla)
+        out = out.replace(link.password, "•••")
+    if proc.returncode != 0 and "already mounted" not in out.lower():
+        low = out.lower()
+        last = next((ln.strip() for ln in reversed(out.splitlines()) if ln.strip()), "")
+        # sin el módulo SMB de GVFS (gvfs-backends, gvfs-smb) o sin GVFS (escritorios sin él)
+        if any(s in low for s in ("not supported", "no such method", "not mountable", "implement mount")):
+            raise LinkError("nogvfs", last)
+        raise LinkError("connect", last or f"gio mount {proc.returncode}")
+
+
+def _mount_linux(link: Link) -> str:
+    """Monta el recurso con GVFS (si no lo está ya) y devuelve su carpeta."""
+    with _mount_lock:
+        path = gvfs_path(link.host, link.share)
+        if path is None:
+            _gio_mount(link)
+            deadline = time.monotonic() + 10
+            while path is None and time.monotonic() < deadline:
+                time.sleep(0.3)
+                path = gvfs_path(link.host, link.share)
+        if path is None:
+            raise LinkError("nogvfs", _gvfs_dir())  # montado, pero sin carpeta FUSE (falta gvfs-fuse)
+        return path
+
+
+def credentials_file() -> str:
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(base, APP_NAME, "nube-credenciales.json")
+
+
+def _load_creds() -> dict:
+    try:
+        with open(credentials_file(), encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_linux(link: Link) -> None:
+    """Guarda usuario y contraseña del recurso para volver a montarlo tras reiniciar. Archivo 0600:
+    solo lo lee tu usuario (como ~/.smbcredentials). Solo da acceso a la carpeta de copias."""
+    data = _load_creds()
+    data[f"{link.host.lower()}/{link.share.lower()}"] = {"host": link.host, "share": link.share,
+                                                          "user": link.user, "password": link.password}
+    path = credentials_file()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=1)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def ensure_mounted(path: str) -> bool:
+    """Linux: si path está en una carpeta de la nube que GVFS ya no tiene montada (tras reiniciar o
+    cerrar sesión) y su servidor responde, la vuelve a montar con la credencial guardada. Como mucho
+    un intento por minuto. True si la carpeta está disponible."""
+    if not IS_LINUX:
+        return True
+    parts = gvfs_parts(path)
+    if parts is None:
+        return True
+    host, share, _rest = parts
+    if gvfs_path(host, share):
+        return True
+    cred = _load_creds().get(f"{host.lower()}/{share.lower()}")
+    if not cred:
+        return False
+    now = time.monotonic()
+    if now - _last_try.get(f"{host}/{share}".lower(), -REMOUNT_EVERY) < REMOUNT_EVERY:
+        return False
+    _last_try[f"{host}/{share}".lower()] = now
+    import engine
+    if not engine.host_reachable(host):
+        return False
+    try:
+        _mount_linux(Link(host=cred.get("host") or host, share=cred.get("share") or share,
+                          user=cred.get("user", ""), password=cred.get("password", ""), folder=""))
+    except LinkError:
+        return False
+    return True
+
+
 def connect(link: Link) -> str:
     """Guarda las credenciales, abre la carpeta y crea la del ordenador. Devuelve la ruta de destino."""
     if IS_WIN:
@@ -457,6 +652,9 @@ def connect(link: Link) -> str:
         base = f"\\\\{link.host}\\{link.share}"
     elif IS_MAC:
         base = _mount_mac(link)
+    elif IS_LINUX:
+        base = _mount_linux(link)
+        _save_linux(link)
     else:
         raise LinkError("connect", "sistema no admitido")
     dst = os.path.join(base, link.folder)

@@ -47,6 +47,9 @@ primera vez:
   anteriores*. Un clic devuelve archivos o carpetas enteras a su sitio en el origen, o a otra carpeta.
   Nunca sobrescribe: si ya hay un archivo distinto con ese nombre, la versión se guarda al lado como
   `nombre (recuperado <fecha>).ext`.
+
+  ![Recuperar: lo apartado por fecha](docs/recuperar.png)
+
 - **Protección contra borrados masivos.** Si una sincronización va a apartar una parte grande de la
   copia (por ejemplo, porque el origen aparece vacío o un disco no está bien conectado), se detiene
   antes de tocar nada, enseña qué carpetas desaparecen y pregunta.
@@ -76,12 +79,14 @@ primera vez:
 - **Copia también en una carpeta de red.** El destino puede ser una carpeta compartida de otro equipo
   de casa, por ejemplo la carpeta `DEV_Backup_Studio` de [Personal Cloud Storage](#juntos-con-personal-cloud-storage): una unidad de red (`Z:`) o la
   ruta `\\nube.local\DEV_Backup_Studio\MiPC` en Windows, el recurso montado en `/Volumes` en macOS o una carpeta
-  de red ya montada en Linux. Antes de
-  tocarla comprueba en un segundo que el servidor responde, así que un servidor apagado no deja la app
+  de red abierta desde el gestor de archivos en Linux. Antes de tocarla comprueba en un segundo que el servidor responde, así que un servidor apagado no deja la app
   esperando. Al volver a la red se ofrece sincronizar, como al conectar el disco.
 - **Se conecta a Personal Cloud Storage con un código.** *Conectar con mi nube…* encuentra la nube en
   la red y pide el código de 6 cifras de su web. Guarda la credencial en el sistema y pone el destino
-  solo: no hay que escribir direcciones ni contraseñas.
+  solo: no hay que escribir direcciones ni contraseñas. En Linux monta la carpeta con GVFS (como al
+  abrir `smb://` en el gestor de archivos, sin permisos de administrador), guarda la credencial en un
+  archivo que solo puede leer tu usuario (`~/.config/DEV Backup Studio/nube-credenciales.json`) y la
+  vuelve a montar sola tras reiniciar, en cuanto la nube responde.
 - **No deja que nada pare la copia.** Mientras analiza o sincroniza, el equipo no se suspende por
   inactividad y el disco USB no se duerme. Apagar o reiniciar pide confirmación: en Windows aparece
   «Copia de seguridad en curso», y en macOS lo pide la propia app (en Linux se usa `systemd-inhibit`
@@ -94,8 +99,9 @@ primera vez:
   Con el disco conectado, se sincroniza desde el propio aviso.
 - **En seis idiomas.** Español, inglés, francés, italiano, chino y japonés: automático según el
   sistema o elegido en *Sistema → Idioma*.
-- **Guía rápida.** La primera vez enseña en cinco pasos, con capturas de la propia app, cómo dejarla
-  lista. Se vuelve a abrir con el botón *Guía*, con F1 (⌘? en macOS) o desde el icono de la bandeja.
+- **Guía rápida.** La primera vez enseña en seis pasos, con capturas de la propia app, cómo dejarla
+  lista: origen y destino (disco o nube), qué copiar, analizar y sincronizar, recuperar lo borrado y
+  conectar el disco. Tras una actualización con novedades importantes vuelve a salir una vez. Se vuelve a abrir con el botón *Guía*, con F1 (⌘? en macOS) o desde el icono de la bandeja.
 - **Se actualiza sola, preguntando.** Comprueba en GitHub si hay una versión nueva (como mucho una vez
   al día), enseña las novedades y, si aceptas, descarga el instalador, comprueba su SHA-256, lo instala
   y se vuelve a abrir. Se puede desactivar o buscar a mano en *Actualizaciones*. Novedades de cada
@@ -202,8 +208,9 @@ de la app: `python tools/make_tour.py` (Windows; monta datos de ejemplo con `sub
   fuera de casa.
 - Las versiones guardan el archivo completo (no hay deduplicación por bloques como en restic).
 - La versión de macOS se compila para Apple Silicon y la de Linux para x86_64.
-- En Linux, *Conectar con mi nube…* todavía no monta la carpeta de red: hay que montarla antes (desde
-  el gestor de archivos, `smb://nube.local/DEV_Backup_Studio`) y elegirla como destino.
+- En Linux, *Conectar con mi nube…* necesita GVFS con su módulo SMB (`gvfs-backends` en Ubuntu y
+  Debian, `gvfs-smb` en Fedora y Arch), que traen GNOME, Cinnamon, MATE y XFCE. En KDE hay que
+  instalarlo; si falta, la app lo dice.
 - Linux distingue mayúsculas y los discos FAT, exFAT y NTFS no: si en una misma carpeta hay
   `Foto.jpg` y `foto.jpg` y el destino es uno de esos discos, solo se copia uno y el otro aparece como
   error.

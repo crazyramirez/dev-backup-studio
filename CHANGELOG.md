@@ -1,5 +1,17 @@
 # Novedades
 
+## 2.2.0
+
+- **Linux: «Conectar con mi nube…».** Encuentra Personal Cloud Storage, pide el código de 6 cifras y
+  monta la carpeta de red con GVFS (sin permisos de administrador), como al abrir `smb://` en el
+  gestor de archivos. La contraseña nunca pasa por la línea de órdenes. Tras reiniciar, la carpeta se
+  vuelve a montar sola en cuanto la nube responde, y se ofrece sincronizar como al conectar un disco.
+  Si el escritorio no tiene GVFS con SMB, explica qué paquete instalar.
+- **Guía rápida renovada, con seis pasos.** Nuevo paso *Recupera lo que borraste* con la línea de
+  tiempo de versiones, y lo nuevo en el resto: la nube como destino y el freno a los borrados
+  masivos. Quien actualiza la ve una vez; siempre se abre con *Guía* o F1.
+- **Fechas en chino y japonés** en Recuperar con su formato propio (`11月16日 (月)`, `2026年11月`).
+
 ## 2.1.0
 
 - **Versión para Linux.** Nuevo `DEV-Backup-Studio-x.y.z-x86_64.AppImage`: un solo archivo que funciona

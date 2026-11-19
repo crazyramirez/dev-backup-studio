@@ -254,10 +254,57 @@ def capture() -> None:
         os.utime(p, (m + 7, m + 7))
         os.rename(os.path.join(src, P["web"]), os.path.join(src, P["web"] + " 2026"))
         os.remove(os.path.join(src, P["shop"], "README.md"))
+        # unos cuantos borrados más, para que Recuperar tenga qué enseñar (lejos del umbral de borrado masivo)
+        for parts, n in (((P["game"], "Assets", "Sprites"), 3), ((P["app"], "lib", "widgets"), 2)):
+            folder = os.path.join(src, *parts)
+            for name in sorted(os.listdir(folder))[:n]:
+                os.remove(os.path.join(folder, name))
+        old_versions()
         for i in range(4):
             with open(os.path.join(src, P["game"], "Scripts", f"{D['level']}_{5 + i}.cs"), "w") as fh:
                 fh.write("// nuevo nivel\n" * 60)
         subst(DST_LETTER, None)
+
+    def old_versions():
+        """Versiones de días anteriores, para que la línea de tiempo de Recuperar tenga varias fechas."""
+        now = datetime.now()
+        picks = {3: [(P["api"], "app", "routes"), (P["fw"], "src")], 12: [(P["shop"], "src", "components")],
+                 34: [(P["app"], "lib", "screens"), (P["game"], "Scripts")]}
+        for days, folders in picks.items():
+            stamp = (now - timedelta(days=days, hours=days % 5)).strftime(engine.STAMP_FMT)
+            for parts in folders:
+                folder = os.path.join(src, *parts)
+                names = sorted(os.listdir(folder))[:4 + days % 3]
+                for name in names:
+                    target = os.path.join(dst_vol, engine.META_DIR, "versiones", stamp, D["backup"], *parts, name)
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    shutil.copy2(os.path.join(folder, name), target)
+
+    def recover_grab():
+        rp = win.recover
+        if rp.timeline.count() < 3 or not rp.timeline.isVisible():
+            return False
+        row = next(i for i in range(rp.timeline.count())
+                   if rp.timeline.item(i).data(bs.TimelineDelegate.KIND) == "snap")  # la fecha más reciente
+        rp.timeline.setCurrentRow(row)
+        rp.tree.expandAll()
+        from PyQt6.QtWidgets import QTreeWidgetItemIterator
+        it = QTreeWidgetItemIterator(rp.tree)
+        while it.value() is not None:  # un archivo borrado, que es lo que más se busca
+            item = it.value()
+            if item.childCount() == 0 and item.text(1) == bs._("Borrado"):
+                rp.tree.setCurrentItem(item)
+                break
+            it += 1
+        page = win.stack.widget(bs.PAGE_RECOVER)
+        sel = rp.timeline.visualItemRect(rp.timeline.item(row))
+        sel = QRect(rp.timeline.viewport().mapTo(page, sel.topLeft()), sel.size())
+        acts = rp.b_restore.parentWidget()
+        grab("recover", page, rects={"date": sel, "tree": rect_in(rp.tree, page)})
+        grab("recover_actions", acts, rects={"open": rect_in(rp.b_open, acts), "to": rect_in(rp.b_to, acts),
+                                             "restore": rect_in(rp.b_restore, acts)})
+        grab("window_recover", win.centralWidget())
+        return None
 
     def dialog_ready():
         d = win.dialog
@@ -278,7 +325,8 @@ def capture() -> None:
     after(800, lambda: (win.seg_buttons[bs.PAGE_TREE].click(), None)[1])
     after(400, lambda: grab("tree", win.stack.widget(bs.PAGE_TREE), rects=tree_rects()))
     after(50, lambda: grab("pair", win.card_pair, rects={"src": rect_in(win.src_card.edit, win.card_pair),
-                                                          "dst": rect_in(win.dst_card.edit, win.card_pair)}))
+                                                          "dst": rect_in(win.dst_card.edit, win.card_pair),
+                                                          "cloud": rect_in(win.cloud_btn, win.card_pair)}))
     after(50, lambda: grab("rules", win.card_rules, rects={"chips": rect_in(win.chips_box, win.card_rules)}))
     after(50, lambda: grab("disk", win.card_disk, rects={"status": rect_in(win.disk_status, win.card_disk),
                                                           "watch": rect_in(win.watch_box, win.card_disk)}))
@@ -297,6 +345,9 @@ def capture() -> None:
     after(200, wait_state("done", "cancelled", "failed"))
     after(800, lambda: (win.seg_buttons[bs.PAGE_PROGRESS].click(), None)[1])
     after(500, lambda: grab("summary", win.summary_card))
+    after(200, lambda: (win.seg_buttons[bs.PAGE_RECOVER].click(), None)[1])
+    after(600, recover_grab)
+    after(300, lambda: (win.seg_buttons[bs.PAGE_PROGRESS].click(), None)[1])
 
     def remind_due():
         for i in range(6):
@@ -523,7 +574,8 @@ def compose() -> None:
     x0 = (W - pair["w"] - disk["w"] - gap) / 2
     _r, pair_at = panel(p, "pair", x0, (H - pair["h"]) / 2, strong=True)
     _r, disk_at = panel(p, "disk", x0 + pair["w"] + gap, (H - disk["h"]) / 2 + 6, strong=True)
-    save(img, p, "2-origen-destino", [pair_at("src", 5), pair_at("dst", 5), disk_at("status", 6)])
+    save(img, p, "2-origen-destino", [pair_at("src", 5), pair_at("dst", 5), pair_at("cloud", 4),
+                                      disk_at("status", 6)])
 
     # 3 · qué copiar: árbol con una carpeta desmarcada y reglas por nombre
     img, p = canvas()
@@ -556,7 +608,22 @@ def compose() -> None:
                         radius=12, strong=True)
     save(img, p, "4-sincroniza", [foot_at("scan", 4), foot_at("start", 4)])
 
-    # 5 · conectar el disco y recordatorios: el aviso arriba, la tarjeta y el diálogo al enchufar el disco
+    # 5 · recuperar: la línea de tiempo con lo apartado y los botones para devolverlo
+    img, p = canvas()
+    rec = meta["recover"]
+    rsc = 0.62
+    _r, rec_at = panel(p, "recover", 30, 24, scale=rsc, crop=(0, 0, rec["w"], min(rec["h"], (H - 48) / rsc)))
+    act = meta["recover_actions"]
+    ax0 = act["open"][0] - 10
+    ax1 = act["restore"][0] + act["restore"][2] + 10
+    ay0 = act["restore"][1] - 8
+    ah = act["restore"][3] + 16
+    asc = 0.95
+    _r, act_at = panel(p, "recover_actions", W - (ax1 - ax0) * asc - 28, H - ah * asc - 22, scale=asc,
+                       crop=(ax0, ay0, ax1 - ax0, ah), radius=12, strong=True)
+    save(img, p, "5-recupera", [rec_at("date", 4), act_at("restore", 4)])
+
+    # 6 · conectar el disco y recordatorios: el aviso arriba, la tarjeta y el diálogo al enchufar el disco
     img, p = canvas()
     bar = meta["remind_bar"]
     bsc = 0.84
@@ -567,12 +634,12 @@ def compose() -> None:
     dlg = meta["dialog"]
     dsc = 0.66
     _r, dlg_at = panel(p, "dialog", W - dlg["w"] * dsc - 28, H - dlg["h"] * dsc - 18, scale=dsc, strong=True)
-    save(img, p, "5-conecta", [bar_at("go", 4), dlg_at("sync", 4)])
+    save(img, p, "6-conecta", [bar_at("go", 4), dlg_at("sync", 4)])
 
     # capturas del README (en español) con el diseño actual
     docs = os.path.join(ROOT, "docs")
     for name, out, width in [] if LANG != "es" else (("window_copy", "progreso.png", 1800), ("window_changes", "cambios.png", 1800),
-                             ("dialog", "conectar.png", 875)):
+                             ("dialog", "conectar.png", 875), ("window_recover", "recuperar.png", 1800)):
         raw(name).toImage().scaledToWidth(width, Qt.TransformationMode.SmoothTransformation).save(
             os.path.join(docs, out))
         print("captura docs/" + out, flush=True)
