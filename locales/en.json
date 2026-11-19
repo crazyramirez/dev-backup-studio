@@ -22,9 +22,6 @@
   "Cancelado": "Canceled",
   "Error": "Error",
   "30 días": "30 days",
-  "90 días": "90 days",
-  "1 año": "1 year",
-  "Siempre": "Forever",
   "Preguntar si sincronizar": "Ask before syncing",
   "Sincronizar sin preguntar": "Sync without asking",
   "Solo avisar": "Just notify",
@@ -177,7 +174,6 @@
   "Cómo se copia": "How it copies",
   "Modo y versiones": "Mode and versions",
   "Conservar versiones": "Keep versions",
-  "De lo que modificas o borras": "Of what you modify or delete",
   "Hilos de copia": "Copy threads",
   "Archivos que se copian a la vez": "Files copied at the same time",
   "Revisar todo el destino": "Recheck the whole destination",
@@ -670,6 +666,139 @@
   ],
   "Exclusión «{old}» → «{new}»: la carpeta se renombró": "Exclusion “{old}” → “{new}”: the folder was renamed",
   "excluida a mano (sigue a su carpeta renombrada)": "excluded manually (follows its renamed folder)",
-  "no se pudo cambiar a «{name}»": "couldn’t change it to “{name}”"
+  "no se pudo cambiar a «{name}»": "couldn’t change it to “{name}”",
+  "7 días": "7 days",
+  "60 días": "60 days",
+  "El origen está vacío": "The source is empty",
+  "No hay ningún archivo en {src}. Si el disco o la carpeta de origen no está bien conectado, sincronizar dejaría la copia vacía.": "There are no files in {src}. If the source drive or folder isn't connected properly, syncing would leave the backup empty.",
+  "Esta sincronización apartaría {n} archivo de la copia": [
+   "This sync would set aside {n} file from the backup",
+   "This sync would set aside {n} files from the backup"
+  ],
+  "Es el {pct} de lo que hay en el destino ({size}). Pasaría a versiones: se puede recuperar durante {keep} desde «Recuperar», pero la copia dejaría de tenerlo.": "That's {pct} of what's in the destination ({size}). It would go to versions: you can recover it for {keep} from “Recover”, but the backup would no longer have it.",
+  "Ya no están en el origen": "No longer in the source",
+  "Archivos sueltos de la raíz": "Loose files at the top level",
+  "y {n} carpeta más": [
+   "and {n} more folder",
+   "and {n} more folders"
+  ],
+  "Si no lo has borrado tú a propósito, no sincronices: comprueba que el origen está bien conectado. Con el modo «Solo añadir y actualizar» nunca se quita nada del destino.": "If you didn't delete this on purpose, don't sync: check that the source is connected properly. With “Add and update only” mode nothing is ever removed from the destination.",
+  "Ver la lista": "See the list",
+  "No sincronizar": "Don't sync",
+  "Sincronizar igualmente": "Sync anyway",
+  "Hoy": "Today",
+  "Ayer": "Yesterday",
+  "Esta semana": "This week",
+  "Lo que la sincronización apartó de la copia, por fecha: lo que borraste del origen y la versión anterior de lo que cambiaste. Recuperar lo devuelve al origen sin sobrescribir nada.": "What syncing set aside from the backup, by date: what you deleted from the source and the previous version of what you changed. Recovering puts it back in the source without overwriting anything.",
+  "Volver a leer las versiones del disco de copia": "Read the versions on the backup drive again",
+  "Fechas": "Dates",
+  "Todo": "All",
+  "Borrados": "Deleted",
+  "Versiones anteriores": "Previous versions",
+  "Siguen en el origen, pero con otro contenido: esto es como eran antes": "Still in the source, but with different content: this is how they were before",
+  "Buscar archivo…": "Search for a file…",
+  "Leyendo versiones…": "Reading versions…",
+  "NOMBRE": "NAME",
+  "MODIFICADO": "MODIFIED",
+  "Detener": "Stop",
+  "Ver: abre una copia temporal; la versión guardada no cambia": "View: opens a temporary copy; the saved version doesn't change",
+  "Mostrar la versión en su carpeta del disco de copia": "Show the version in its folder on the backup drive",
+  "Recuperar en…": "Recover to…",
+  "Elige otra carpeta para dejar ahí una copia": "Choose another folder to put a copy there",
+  "Recuperar": "Recover",
+  "Devuelve lo seleccionado a su sitio en el origen": "Puts the selection back where it was in the source",
+  "Elige una carpeta de destino": "Choose a destination folder",
+  "Las versiones se guardan en el disco de copia, junto al destino.": "Versions are kept on the backup drive, next to the destination.",
+  "Conecta el disco de copia": "Connect the backup drive",
+  "Las versiones se guardan en el propio disco de copia. Conéctalo (o enciende tu nube) para verlas y recuperarlas.": "Versions are kept on the backup drive itself. Connect it (or turn on your cloud) to see and recover them.",
+  "{size} en versiones · se guardan {keep}": "{size} in versions · kept for {keep}",
+  "Se guardan {keep}": "Kept for {keep}",
+  "Aún no hay nada que recuperar": "Nothing to recover yet",
+  "Cuando sincronices y algo se borre del origen o cambie, la versión de la copia se aparta aquí, por fecha, durante {keep}. Desde aquí la recuperas con un clic.": "When you sync and something was deleted from the source or changed, the backup's version is set aside here, by date, for {keep}. Recover it from here with one click.",
+  "Todas las fechas": "All dates",
+  "La versión más reciente de cada archivo apartado": "The latest version of each file set aside",
+  "{n} d": "{n} d",
+  "Se quita sola dentro de {n} día (plazo de {keep} días)": [
+   "Removed automatically in {n} day ({keep}-day period)",
+   "Removed automatically in {n} days ({keep}-day period)"
+  ],
+  "La versión más reciente de cada archivo · {n} · {size}": "The latest version of each file · {n} · {size}",
+  "APARTADO": "SET ASIDE",
+  "Apartado al sincronizar · {n} · {size}": "Set aside when syncing · {n} · {size}",
+  "Nada coincide": "Nothing matches",
+  "Prueba con otra búsqueda u otro filtro.": "Try another search or filter.",
+  "{n} borrado": [
+   "{n} deleted",
+   "{n} deleted"
+  ],
+  "{n} anterior": [
+   "{n} previous",
+   "{n} previous"
+  ],
+  "Borrado": "Deleted",
+  "Versión anterior": "Previous version",
+  "{n} fecha": [
+   "{n} date",
+   "{n} dates"
+  ],
+  "{n} archivo seleccionado · {size}": [
+   "{n} file selected · {size}",
+   "{n} files selected · {size}"
+  ],
+  "Espera a que termine la sincronización": "Wait for the sync to finish",
+  "La carpeta de origen no está disponible: usa «Recuperar en…»": "The source folder isn't available: use “Recover to…”",
+  "No se pudo abrir la versión.\n\n{error}": "Couldn't open the version.\n\n{error}",
+  "Recuperando…": "Recovering…",
+  "Recuperando…  {i} / {n}": "Recovering…  {i} / {n}",
+  "en el origen": "to the source",
+  "en {dir}": "to {dir}",
+  "{n} se guardó al lado, con «({tag} …)» en el nombre, porque ya había otro archivo distinto con ese nombre": [
+   "{n} was saved alongside, with “({tag} …)” in the name, because a different file with that name already existed",
+   "{n} were saved alongside, with “({tag} …)” in the name, because different files with those names already existed"
+  ],
+  "recuperado": "recovered",
+  "{n} ya estaba igual": [
+   "{n} was already the same",
+   "{n} were already the same"
+  ],
+  "pasarán a la copia en la próxima sincronización": "they'll go into the backup at the next sync",
+  "{n} no se pudo recuperar": [
+   "{n} couldn't be recovered",
+   "{n} couldn't be recovered"
+  ],
+  "{n} archivo recuperado {where}": [
+   "{n} file recovered {where}",
+   "{n} files recovered {where}"
+  ],
+  "detenido": "stopped",
+  "Mostrar": "Show",
+  "Ver": "View",
+  "Mostrar en su carpeta": "Show in its folder",
+  "Abrir la carpeta de esta fecha": "Open this date's folder",
+  "Eliminar estas versiones…": "Delete these versions…",
+  "¿Eliminar para siempre las versiones de {when}?": "Permanently delete the versions from {when}?",
+  "Son {n} ({size}). Libera ese espacio en el disco de copia, pero ya no se podrán recuperar. No se puede deshacer.": "That's {n} ({size}). It frees that space on the backup drive, but they can no longer be recovered. This can't be undone.",
+  "{n} archivo": [
+   "{n} file",
+   "{n} files"
+  ],
+  "No se pudieron eliminar todas las versiones.\n\n{error}": "Not all versions could be deleted.\n\n{error}",
+  "Luego se quitan solas; antes si falta sitio": "Then removed automatically; sooner if space runs out",
+  "Falta espacio: quitando las versiones más antiguas para hacer sitio…": "Not enough space: removing the oldest versions to make room…",
+  "El origen está vacío: sincronizar dejaría la copia vacía": "The source is empty: syncing would leave the backup empty",
+  "Atención: se apartarían {n} archivo de la copia ({pct})": [
+   "Warning: {n} file would be set aside from the backup ({pct})",
+   "Warning: {n} files would be set aside from the backup ({pct})"
+  ],
+  "Revisa la lista en Cambios → A versiones. Antes de apartar nada se pide confirmación.": "Check the list in Changes → To versions. You'll be asked to confirm before anything is set aside.",
+  "Sincronización detenida antes de copiar: apartaría {n} archivos ({pct} de la copia). Se pide confirmación.": "Sync stopped before copying: it would set aside {n} files ({pct} of the backup). Asking for confirmation.",
+  "Sincronización en espera": "Sync on hold",
+  "Iba a apartar muchos archivos de la copia. Confírmalo en la ventana.": "It was about to set aside many files from the backup. Confirm it in the window.",
+  "Confirmado: se sincroniza y lo borrado del origen pasa a versiones.": "Confirmed: syncing, and what was deleted from the source goes to versions.",
+  "No se ha sincronizado: la copia sigue como estaba.": "Not synced: the backup is unchanged.",
+  "{size} liberados quitando versiones antiguas por falta de espacio": "{size} freed by removing old versions for lack of space",
+  "demasiados archivos recuperados con el mismo nombre": "too many recovered files with the same name",
+  "la copia no tiene el tamaño del original": "the copy doesn't have the original's size",
+  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "Choose what to recover  ·  Ctrl or Shift + click for several"
  }
 }

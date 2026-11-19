@@ -22,9 +22,6 @@
   "Cancelado": "已取消",
   "Error": "错误",
   "30 días": "30 天",
-  "90 días": "90 天",
-  "1 año": "1 年",
-  "Siempre": "永久",
   "Preguntar si sincronizar": "询问是否同步",
   "Sincronizar sin preguntar": "直接同步",
   "Solo avisar": "仅通知",
@@ -174,7 +171,6 @@
   "Cómo se copia": "备份方式",
   "Modo y versiones": "模式与版本",
   "Conservar versiones": "保留版本",
-  "De lo que modificas o borras": "针对你修改或删除的内容",
   "Hilos de copia": "复制线程",
   "Archivos que se copian a la vez": "同时复制的文件数",
   "Revisar todo el destino": "完整扫描目标文件夹",
@@ -652,6 +648,126 @@
   ],
   "Exclusión «{old}» → «{new}»: la carpeta se renombró": "排除项“{old}”→“{new}”：文件夹已重命名",
   "excluida a mano (sigue a su carpeta renombrada)": "手动排除（随重命名的文件夹转移）",
-  "no se pudo cambiar a «{name}»": "无法改为“{name}”"
+  "no se pudo cambiar a «{name}»": "无法改为“{name}”",
+  "7 días": "7 天",
+  "60 días": "60 天",
+  "El origen está vacío": "源为空",
+  "No hay ningún archivo en {src}. Si el disco o la carpeta de origen no está bien conectado, sincronizar dejaría la copia vacía.": "{src} 中没有任何文件。如果源磁盘或文件夹没有正确连接，同步会清空备份。",
+  "Esta sincronización apartaría {n} archivo de la copia": [
+   "此次同步会把 {n} 个文件移出备份"
+  ],
+  "Es el {pct} de lo que hay en el destino ({size}). Pasaría a versiones: se puede recuperar durante {keep} desde «Recuperar», pero la copia dejaría de tenerlo.": "这占目标中内容的 {pct}（{size}）。它们会存入版本：{keep}内可在“恢复”中找回，但备份中将不再有这些文件。",
+  "Ya no están en el origen": "已不在源中",
+  "Archivos sueltos de la raíz": "根目录下的零散文件",
+  "y {n} carpeta más": [
+   "以及另外 {n} 个文件夹"
+  ],
+  "Si no lo has borrado tú a propósito, no sincronices: comprueba que el origen está bien conectado. Con el modo «Solo añadir y actualizar» nunca se quita nada del destino.": "如果不是你有意删除的，请不要同步：检查源是否正确连接。使用“仅添加和更新”模式时，目标中的内容永远不会被移除。",
+  "Ver la lista": "查看列表",
+  "No sincronizar": "不同步",
+  "Sincronizar igualmente": "仍然同步",
+  "Hoy": "今天",
+  "Ayer": "昨天",
+  "Esta semana": "本周",
+  "Lo que la sincronización apartó de la copia, por fecha: lo que borraste del origen y la versión anterior de lo que cambiaste. Recuperar lo devuelve al origen sin sobrescribir nada.": "同步时从备份中移出的内容，按日期排列：你从源中删除的文件，以及你修改过的文件的旧版本。恢复会把它们放回源中，不会覆盖任何内容。",
+  "Volver a leer las versiones del disco de copia": "重新读取备份磁盘上的版本",
+  "Fechas": "日期",
+  "Todo": "全部",
+  "Borrados": "已删除",
+  "Versiones anteriores": "旧版本",
+  "Siguen en el origen, pero con otro contenido: esto es como eran antes": "仍在源中，但内容已改变：这里是它们之前的样子",
+  "Buscar archivo…": "搜索文件…",
+  "Leyendo versiones…": "正在读取版本…",
+  "NOMBRE": "名称",
+  "MODIFICADO": "修改时间",
+  "Detener": "停止",
+  "Ver: abre una copia temporal; la versión guardada no cambia": "查看：打开一个临时副本；保存的版本不会改变",
+  "Mostrar la versión en su carpeta del disco de copia": "在备份磁盘上的文件夹中显示该版本",
+  "Recuperar en…": "恢复到…",
+  "Elige otra carpeta para dejar ahí una copia": "选择另一个文件夹，把副本放到那里",
+  "Recuperar": "恢复",
+  "Devuelve lo seleccionado a su sitio en el origen": "把所选内容放回源中的原位置",
+  "Elige una carpeta de destino": "请选择目标文件夹",
+  "Las versiones se guardan en el disco de copia, junto al destino.": "版本保存在备份磁盘上，与目标放在一起。",
+  "Conecta el disco de copia": "请连接备份磁盘",
+  "Las versiones se guardan en el propio disco de copia. Conéctalo (o enciende tu nube) para verlas y recuperarlas.": "版本保存在备份磁盘本身。连接它（或打开你的云）即可查看和恢复。",
+  "{size} en versiones · se guardan {keep}": "版本占用 {size} · 保留 {keep}",
+  "Se guardan {keep}": "保留 {keep}",
+  "Aún no hay nada que recuperar": "暂时没有可恢复的内容",
+  "Cuando sincronices y algo se borre del origen o cambie, la versión de la copia se aparta aquí, por fecha, durante {keep}. Desde aquí la recuperas con un clic.": "同步时，如果源中有文件被删除或修改，备份中的旧版本会按日期保存在这里，保留 {keep}。在这里一键即可恢复。",
+  "Todas las fechas": "所有日期",
+  "La versión más reciente de cada archivo apartado": "每个已移出文件的最新版本",
+  "{n} d": "{n} 天",
+  "Se quita sola dentro de {n} día (plazo de {keep} días)": [
+   "{n} 天后自动移除（保留期 {keep} 天）"
+  ],
+  "La versión más reciente de cada archivo · {n} · {size}": "每个文件的最新版本 · {n} · {size}",
+  "APARTADO": "移出时间",
+  "Apartado al sincronizar · {n} · {size}": "同步时移出 · {n} · {size}",
+  "Nada coincide": "没有匹配项",
+  "Prueba con otra búsqueda u otro filtro.": "试试其他搜索词或筛选条件。",
+  "{n} borrado": [
+   "{n} 个已删除"
+  ],
+  "{n} anterior": [
+   "{n} 个旧版本"
+  ],
+  "Borrado": "已删除",
+  "Versión anterior": "旧版本",
+  "{n} fecha": [
+   "{n} 个日期"
+  ],
+  "{n} archivo seleccionado · {size}": [
+   "已选择 {n} 个文件 · {size}"
+  ],
+  "Espera a que termine la sincronización": "请等待同步完成",
+  "La carpeta de origen no está disponible: usa «Recuperar en…»": "源文件夹不可用：请使用“恢复到…”",
+  "No se pudo abrir la versión.\n\n{error}": "无法打开该版本。\n\n{error}",
+  "Recuperando…": "正在恢复…",
+  "Recuperando…  {i} / {n}": "正在恢复…  {i} / {n}",
+  "en el origen": "到源中",
+  "en {dir}": "到 {dir}",
+  "{n} se guardó al lado, con «({tag} …)» en el nombre, porque ya había otro archivo distinto con ese nombre": [
+   "{n} 个已另存在旁边，名称中带有“({tag} …)”，因为已有同名的不同文件"
+  ],
+  "recuperado": "已恢复",
+  "{n} ya estaba igual": [
+   "{n} 个已经相同"
+  ],
+  "pasarán a la copia en la próxima sincronización": "下次同步时会进入备份",
+  "{n} no se pudo recuperar": [
+   "{n} 个无法恢复"
+  ],
+  "{n} archivo recuperado {where}": [
+   "已将 {n} 个文件恢复{where}"
+  ],
+  "detenido": "已停止",
+  "Mostrar": "显示",
+  "Ver": "查看",
+  "Mostrar en su carpeta": "在文件夹中显示",
+  "Abrir la carpeta de esta fecha": "打开该日期的文件夹",
+  "Eliminar estas versiones…": "删除这些版本…",
+  "¿Eliminar para siempre las versiones de {when}?": "要永久删除 {when} 的版本吗？",
+  "Son {n} ({size}). Libera ese espacio en el disco de copia, pero ya no se podrán recuperar. No se puede deshacer.": "共 {n}（{size}）。这会释放备份磁盘上的空间，但之后将无法再恢复。此操作无法撤销。",
+  "{n} archivo": [
+   "{n} 个文件"
+  ],
+  "No se pudieron eliminar todas las versiones.\n\n{error}": "未能删除全部版本。\n\n{error}",
+  "Luego se quitan solas; antes si falta sitio": "到期自动移除；空间不足时提前移除",
+  "Falta espacio: quitando las versiones más antiguas para hacer sitio…": "空间不足：正在移除最旧的版本以腾出空间…",
+  "El origen está vacío: sincronizar dejaría la copia vacía": "源为空：同步会清空备份",
+  "Atención: se apartarían {n} archivo de la copia ({pct})": [
+   "注意：将有 {n} 个文件被移出备份（{pct}）"
+  ],
+  "Revisa la lista en Cambios → A versiones. Antes de apartar nada se pide confirmación.": "请在“更改 → 存入版本”中查看列表。移出任何内容前都会请你确认。",
+  "Sincronización detenida antes de copiar: apartaría {n} archivos ({pct} de la copia). Se pide confirmación.": "同步在复制前已暂停：将移出 {n} 个文件（占备份的 {pct}）。正在请求确认。",
+  "Sincronización en espera": "同步等待中",
+  "Iba a apartar muchos archivos de la copia. Confírmalo en la ventana.": "即将从备份中移出大量文件。请在窗口中确认。",
+  "Confirmado: se sincroniza y lo borrado del origen pasa a versiones.": "已确认：开始同步，从源中删除的内容将存入版本。",
+  "No se ha sincronizado: la copia sigue como estaba.": "未同步：备份保持原样。",
+  "{size} liberados quitando versiones antiguas por falta de espacio": "因空间不足移除旧版本，释放了 {size}",
+  "demasiados archivos recuperados con el mismo nombre": "同名的已恢复文件过多",
+  "la copia no tiene el tamaño del original": "副本大小与原文件不一致",
+  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "选择要恢复的内容  ·  按住 Ctrl 或 Shift 点击可多选"
  }
 }

@@ -22,9 +22,6 @@
   "Cancelado": "Annulé",
   "Error": "Erreur",
   "30 días": "30 jours",
-  "90 días": "90 jours",
-  "1 año": "1 an",
-  "Siempre": "Toujours",
   "Preguntar si sincronizar": "Demander avant de synchroniser",
   "Sincronizar sin preguntar": "Synchroniser sans demander",
   "Solo avisar": "Prévenir seulement",
@@ -177,7 +174,6 @@
   "Cómo se copia": "Comment copier",
   "Modo y versiones": "Mode et versions",
   "Conservar versiones": "Conserver les versions",
-  "De lo que modificas o borras": "De ce que vous modifiez ou supprimez",
   "Hilos de copia": "Threads de copie",
   "Archivos que se copian a la vez": "Fichiers copiés en même temps",
   "Revisar todo el destino": "Analyser toute la destination",
@@ -670,6 +666,139 @@
   ],
   "Exclusión «{old}» → «{new}»: la carpeta se renombró": "Exclusion « {old} » → « {new} » : le dossier a été renommé",
   "excluida a mano (sigue a su carpeta renombrada)": "exclu manuellement (suit son dossier renommé)",
-  "no se pudo cambiar a «{name}»": "impossible de le changer en « {name} »"
+  "no se pudo cambiar a «{name}»": "impossible de le changer en « {name} »",
+  "7 días": "7 jours",
+  "60 días": "60 jours",
+  "El origen está vacío": "La source est vide",
+  "No hay ningún archivo en {src}. Si el disco o la carpeta de origen no está bien conectado, sincronizar dejaría la copia vacía.": "Il n'y a aucun fichier dans {src}. Si le disque ou le dossier source n'est pas bien connecté, synchroniser viderait la sauvegarde.",
+  "Esta sincronización apartaría {n} archivo de la copia": [
+   "Cette synchronisation retirerait {n} fichier de la sauvegarde",
+   "Cette synchronisation retirerait {n} fichiers de la sauvegarde"
+  ],
+  "Es el {pct} de lo que hay en el destino ({size}). Pasaría a versiones: se puede recuperar durante {keep} desde «Recuperar», pero la copia dejaría de tenerlo.": "C'est {pct} du contenu de la destination ({size}). Cela passerait dans les versions : récupérable pendant {keep} depuis « Récupérer », mais la sauvegarde ne l'aurait plus.",
+  "Ya no están en el origen": "Ne sont plus dans la source",
+  "Archivos sueltos de la raíz": "Fichiers isolés à la racine",
+  "y {n} carpeta más": [
+   "et {n} dossier de plus",
+   "et {n} dossiers de plus"
+  ],
+  "Si no lo has borrado tú a propósito, no sincronices: comprueba que el origen está bien conectado. Con el modo «Solo añadir y actualizar» nunca se quita nada del destino.": "Si vous ne l'avez pas supprimé volontairement, ne synchronisez pas : vérifiez que la source est bien connectée. Avec le mode « Ajouter et mettre à jour seulement », rien n'est jamais retiré de la destination.",
+  "Ver la lista": "Voir la liste",
+  "No sincronizar": "Ne pas synchroniser",
+  "Sincronizar igualmente": "Synchroniser quand même",
+  "Hoy": "Aujourd'hui",
+  "Ayer": "Hier",
+  "Esta semana": "Cette semaine",
+  "Lo que la sincronización apartó de la copia, por fecha: lo que borraste del origen y la versión anterior de lo que cambiaste. Recuperar lo devuelve al origen sin sobrescribir nada.": "Ce que la synchronisation a retiré de la sauvegarde, par date : ce que vous avez supprimé de la source et la version précédente de ce que vous avez modifié. Récupérer le remet dans la source sans rien écraser.",
+  "Volver a leer las versiones del disco de copia": "Relire les versions du disque de sauvegarde",
+  "Fechas": "Dates",
+  "Todo": "Tout",
+  "Borrados": "Supprimés",
+  "Versiones anteriores": "Versions précédentes",
+  "Siguen en el origen, pero con otro contenido: esto es como eran antes": "Toujours dans la source, mais avec un autre contenu : voici leur état précédent",
+  "Buscar archivo…": "Rechercher un fichier…",
+  "Leyendo versiones…": "Lecture des versions…",
+  "NOMBRE": "NOM",
+  "MODIFICADO": "MODIFIÉ",
+  "Detener": "Arrêter",
+  "Ver: abre una copia temporal; la versión guardada no cambia": "Voir : ouvre une copie temporaire ; la version enregistrée ne change pas",
+  "Mostrar la versión en su carpeta del disco de copia": "Afficher la version dans son dossier sur le disque de sauvegarde",
+  "Recuperar en…": "Récupérer dans…",
+  "Elige otra carpeta para dejar ahí una copia": "Choisissez un autre dossier pour y déposer une copie",
+  "Recuperar": "Récupérer",
+  "Devuelve lo seleccionado a su sitio en el origen": "Remet la sélection à sa place dans la source",
+  "Elige una carpeta de destino": "Choisissez un dossier de destination",
+  "Las versiones se guardan en el disco de copia, junto al destino.": "Les versions sont conservées sur le disque de sauvegarde, à côté de la destination.",
+  "Conecta el disco de copia": "Connectez le disque de sauvegarde",
+  "Las versiones se guardan en el propio disco de copia. Conéctalo (o enciende tu nube) para verlas y recuperarlas.": "Les versions sont conservées sur le disque de sauvegarde lui-même. Connectez-le (ou allumez votre cloud) pour les voir et les récupérer.",
+  "{size} en versiones · se guardan {keep}": "{size} dans les versions · conservées {keep}",
+  "Se guardan {keep}": "Conservées {keep}",
+  "Aún no hay nada que recuperar": "Rien à récupérer pour l'instant",
+  "Cuando sincronices y algo se borre del origen o cambie, la versión de la copia se aparta aquí, por fecha, durante {keep}. Desde aquí la recuperas con un clic.": "Quand vous synchronisez et que quelque chose a été supprimé de la source ou modifié, la version de la sauvegarde est mise de côté ici, par date, pendant {keep}. Récupérez-la d'ici en un clic.",
+  "Todas las fechas": "Toutes les dates",
+  "La versión más reciente de cada archivo apartado": "La version la plus récente de chaque fichier mis de côté",
+  "{n} d": "{n} j",
+  "Se quita sola dentro de {n} día (plazo de {keep} días)": [
+   "Supprimée automatiquement dans {n} jour (durée de {keep} jours)",
+   "Supprimée automatiquement dans {n} jours (durée de {keep} jours)"
+  ],
+  "La versión más reciente de cada archivo · {n} · {size}": "La version la plus récente de chaque fichier · {n} · {size}",
+  "APARTADO": "MIS DE CÔTÉ",
+  "Apartado al sincronizar · {n} · {size}": "Mis de côté lors de la synchronisation · {n} · {size}",
+  "Nada coincide": "Aucun résultat",
+  "Prueba con otra búsqueda u otro filtro.": "Essayez une autre recherche ou un autre filtre.",
+  "{n} borrado": [
+   "{n} supprimé",
+   "{n} supprimés"
+  ],
+  "{n} anterior": [
+   "{n} précédente",
+   "{n} précédentes"
+  ],
+  "Borrado": "Supprimé",
+  "Versión anterior": "Version précédente",
+  "{n} fecha": [
+   "{n} date",
+   "{n} dates"
+  ],
+  "{n} archivo seleccionado · {size}": [
+   "{n} fichier sélectionné · {size}",
+   "{n} fichiers sélectionnés · {size}"
+  ],
+  "Espera a que termine la sincronización": "Attendez la fin de la synchronisation",
+  "La carpeta de origen no está disponible: usa «Recuperar en…»": "Le dossier source n'est pas disponible : utilisez « Récupérer dans… »",
+  "No se pudo abrir la versión.\n\n{error}": "Impossible d'ouvrir la version.\n\n{error}",
+  "Recuperando…": "Récupération…",
+  "Recuperando…  {i} / {n}": "Récupération…  {i} / {n}",
+  "en el origen": "dans la source",
+  "en {dir}": "dans {dir}",
+  "{n} se guardó al lado, con «({tag} …)» en el nombre, porque ya había otro archivo distinto con ese nombre": [
+   "{n} a été enregistré à côté, avec « ({tag} …) » dans le nom, car un autre fichier différent portait déjà ce nom",
+   "{n} ont été enregistrés à côté, avec « ({tag} …) » dans le nom, car d'autres fichiers différents portaient déjà ces noms"
+  ],
+  "recuperado": "récupéré",
+  "{n} ya estaba igual": [
+   "{n} était déjà identique",
+   "{n} étaient déjà identiques"
+  ],
+  "pasarán a la copia en la próxima sincronización": "ils passeront dans la sauvegarde à la prochaine synchronisation",
+  "{n} no se pudo recuperar": [
+   "{n} n'a pas pu être récupéré",
+   "{n} n'ont pas pu être récupérés"
+  ],
+  "{n} archivo recuperado {where}": [
+   "{n} fichier récupéré {where}",
+   "{n} fichiers récupérés {where}"
+  ],
+  "detenido": "arrêté",
+  "Mostrar": "Afficher",
+  "Ver": "Voir",
+  "Mostrar en su carpeta": "Afficher dans son dossier",
+  "Abrir la carpeta de esta fecha": "Ouvrir le dossier de cette date",
+  "Eliminar estas versiones…": "Supprimer ces versions…",
+  "¿Eliminar para siempre las versiones de {when}?": "Supprimer définitivement les versions du {when} ?",
+  "Son {n} ({size}). Libera ese espacio en el disco de copia, pero ya no se podrán recuperar. No se puede deshacer.": "Cela représente {n} ({size}). Cet espace est libéré sur le disque de sauvegarde, mais ils ne pourront plus être récupérés. C'est irréversible.",
+  "{n} archivo": [
+   "{n} fichier",
+   "{n} fichiers"
+  ],
+  "No se pudieron eliminar todas las versiones.\n\n{error}": "Toutes les versions n'ont pas pu être supprimées.\n\n{error}",
+  "Luego se quitan solas; antes si falta sitio": "Ensuite supprimées automatiquement ; plus tôt si la place manque",
+  "Falta espacio: quitando las versiones más antiguas para hacer sitio…": "Espace insuffisant : suppression des versions les plus anciennes pour faire de la place…",
+  "El origen está vacío: sincronizar dejaría la copia vacía": "La source est vide : synchroniser viderait la sauvegarde",
+  "Atención: se apartarían {n} archivo de la copia ({pct})": [
+   "Attention : {n} fichier serait retiré de la sauvegarde ({pct})",
+   "Attention : {n} fichiers seraient retirés de la sauvegarde ({pct})"
+  ],
+  "Revisa la lista en Cambios → A versiones. Antes de apartar nada se pide confirmación.": "Vérifiez la liste dans Changements → Vers les versions. Une confirmation est demandée avant de retirer quoi que ce soit.",
+  "Sincronización detenida antes de copiar: apartaría {n} archivos ({pct} de la copia). Se pide confirmación.": "Synchronisation arrêtée avant la copie : elle retirerait {n} fichiers ({pct} de la sauvegarde). Confirmation demandée.",
+  "Sincronización en espera": "Synchronisation en attente",
+  "Iba a apartar muchos archivos de la copia. Confírmalo en la ventana.": "Elle allait retirer beaucoup de fichiers de la sauvegarde. Confirmez dans la fenêtre.",
+  "Confirmado: se sincroniza y lo borrado del origen pasa a versiones.": "Confirmé : synchronisation en cours, ce qui a été supprimé de la source passe dans les versions.",
+  "No se ha sincronizado: la copia sigue como estaba.": "Pas de synchronisation : la sauvegarde reste inchangée.",
+  "{size} liberados quitando versiones antiguas por falta de espacio": "{size} libérés en supprimant d'anciennes versions par manque de place",
+  "demasiados archivos recuperados con el mismo nombre": "trop de fichiers récupérés portant le même nom",
+  "la copia no tiene el tamaño del original": "la copie n'a pas la taille de l'original",
+  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "Choisissez quoi récupérer  ·  Ctrl ou Maj + clic pour plusieurs"
  }
 }

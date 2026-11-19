@@ -22,9 +22,6 @@
   "Cancelado": "キャンセル済み",
   "Error": "エラー",
   "30 días": "30 日",
-  "90 días": "90 日",
-  "1 año": "1 年",
-  "Siempre": "無期限",
   "Preguntar si sincronizar": "同期するか確認",
   "Sincronizar sin preguntar": "確認せずに同期",
   "Solo avisar": "通知のみ",
@@ -174,7 +171,6 @@
   "Cómo se copia": "コピー方法",
   "Modo y versiones": "モードとバージョン",
   "Conservar versiones": "バージョンの保持",
-  "De lo que modificas o borras": "変更・削除したファイルの旧バージョン",
   "Hilos de copia": "コピースレッド",
   "Archivos que se copian a la vez": "同時にコピーするファイル数",
   "Revisar todo el destino": "コピー先全体をチェック",
@@ -652,6 +648,126 @@
   ],
   "Exclusión «{old}» → «{new}»: la carpeta se renombró": "除外「{old}」→「{new}」：フォルダーの名前が変更されました",
   "excluida a mano (sigue a su carpeta renombrada)": "手動で除外（名前が変わったフォルダーに追従）",
-  "no se pudo cambiar a «{name}»": "「{name}」に変更できませんでした"
+  "no se pudo cambiar a «{name}»": "「{name}」に変更できませんでした",
+  "7 días": "7 日",
+  "60 días": "60 日",
+  "El origen está vacío": "コピー元が空です",
+  "No hay ningún archivo en {src}. Si el disco o la carpeta de origen no está bien conectado, sincronizar dejaría la copia vacía.": "{src} にファイルが 1 つもありません。コピー元のディスクやフォルダーが正しく接続されていないと、同期でバックアップが空になります。",
+  "Esta sincronización apartaría {n} archivo de la copia": [
+   "この同期でバックアップから {n} 個のファイルが外されます"
+  ],
+  "Es el {pct} de lo que hay en el destino ({size}). Pasaría a versiones: se puede recuperar durante {keep} desde «Recuperar», pero la copia dejaría de tenerlo.": "コピー先の {pct}（{size}）にあたります。バージョンに移され、{keep}の間は「復元」から戻せますが、バックアップからはなくなります。",
+  "Ya no están en el origen": "コピー元にもうないもの",
+  "Archivos sueltos de la raíz": "ルートにある個別のファイル",
+  "y {n} carpeta más": [
+   "ほか {n} 個のフォルダー"
+  ],
+  "Si no lo has borrado tú a propósito, no sincronices: comprueba que el origen está bien conectado. Con el modo «Solo añadir y actualizar» nunca se quita nada del destino.": "意図して削除したのでなければ同期しないでください。コピー元が正しく接続されているか確認してください。「追加と更新のみ」モードではコピー先から何も消えません。",
+  "Ver la lista": "一覧を見る",
+  "No sincronizar": "同期しない",
+  "Sincronizar igualmente": "それでも同期する",
+  "Hoy": "今日",
+  "Ayer": "昨日",
+  "Esta semana": "今週",
+  "Lo que la sincronización apartó de la copia, por fecha: lo que borraste del origen y la versión anterior de lo que cambiaste. Recuperar lo devuelve al origen sin sobrescribir nada.": "同期でバックアップから外されたものを日付順に表示します。コピー元で削除したものと、変更したものの以前のバージョンです。復元すると何も上書きせずにコピー元へ戻します。",
+  "Volver a leer las versiones del disco de copia": "バックアップディスクのバージョンを読み直す",
+  "Fechas": "日付",
+  "Todo": "すべて",
+  "Borrados": "削除済み",
+  "Versiones anteriores": "以前のバージョン",
+  "Siguen en el origen, pero con otro contenido: esto es como eran antes": "コピー元にまだありますが内容が変わっています。これは変更前の状態です",
+  "Buscar archivo…": "ファイルを検索…",
+  "Leyendo versiones…": "バージョンを読み込み中…",
+  "NOMBRE": "名前",
+  "MODIFICADO": "更新日時",
+  "Detener": "停止",
+  "Ver: abre una copia temporal; la versión guardada no cambia": "表示：一時的なコピーを開きます。保存されたバージョンは変わりません",
+  "Mostrar la versión en su carpeta del disco de copia": "バックアップディスク上のフォルダーでバージョンを表示",
+  "Recuperar en…": "別の場所に復元…",
+  "Elige otra carpeta para dejar ahí una copia": "別のフォルダーを選んで、そこにコピーを置きます",
+  "Recuperar": "復元",
+  "Devuelve lo seleccionado a su sitio en el origen": "選んだものをコピー元の元の場所に戻します",
+  "Elige una carpeta de destino": "コピー先フォルダーを選んでください",
+  "Las versiones se guardan en el disco de copia, junto al destino.": "バージョンはバックアップディスクのコピー先の近くに保存されます。",
+  "Conecta el disco de copia": "バックアップディスクを接続してください",
+  "Las versiones se guardan en el propio disco de copia. Conéctalo (o enciende tu nube) para verlas y recuperarlas.": "バージョンはバックアップディスク自体に保存されています。接続する（またはクラウドの電源を入れる）と表示・復元できます。",
+  "{size} en versiones · se guardan {keep}": "バージョン {size} · {keep}保持",
+  "Se guardan {keep}": "{keep}保持",
+  "Aún no hay nada que recuperar": "まだ復元できるものはありません",
+  "Cuando sincronices y algo se borre del origen o cambie, la versión de la copia se aparta aquí, por fecha, durante {keep}. Desde aquí la recuperas con un clic.": "同期のときにコピー元で削除・変更されたものがあると、バックアップ側のバージョンが日付ごとにここへ {keep}保管されます。ここからワンクリックで復元できます。",
+  "Todas las fechas": "すべての日付",
+  "La versión más reciente de cada archivo apartado": "外された各ファイルの最新バージョン",
+  "{n} d": "{n} 日",
+  "Se quita sola dentro de {n} día (plazo de {keep} días)": [
+   "{n} 日後に自動で削除（保持期間 {keep} 日）"
+  ],
+  "La versión más reciente de cada archivo · {n} · {size}": "各ファイルの最新バージョン · {n} · {size}",
+  "APARTADO": "外した日時",
+  "Apartado al sincronizar · {n} · {size}": "同期時に外したもの · {n} · {size}",
+  "Nada coincide": "一致するものはありません",
+  "Prueba con otra búsqueda u otro filtro.": "別の検索語やフィルターを試してください。",
+  "{n} borrado": [
+   "削除 {n}"
+  ],
+  "{n} anterior": [
+   "以前 {n}"
+  ],
+  "Borrado": "削除済み",
+  "Versión anterior": "以前のバージョン",
+  "{n} fecha": [
+   "{n} 件の日付"
+  ],
+  "{n} archivo seleccionado · {size}": [
+   "{n} 個のファイルを選択 · {size}"
+  ],
+  "Espera a que termine la sincronización": "同期が終わるまでお待ちください",
+  "La carpeta de origen no está disponible: usa «Recuperar en…»": "コピー元フォルダーが使えません。「別の場所に復元…」を使ってください",
+  "No se pudo abrir la versión.\n\n{error}": "バージョンを開けませんでした。\n\n{error}",
+  "Recuperando…": "復元中…",
+  "Recuperando…  {i} / {n}": "復元中…  {i} / {n}",
+  "en el origen": "コピー元に",
+  "en {dir}": "{dir} に",
+  "{n} se guardó al lado, con «({tag} …)» en el nombre, porque ya había otro archivo distinto con ese nombre": [
+   "同じ名前の別のファイルがあったため、{n} 個を名前に「({tag} …)」を付けて隣に保存しました"
+  ],
+  "recuperado": "復元",
+  "{n} ya estaba igual": [
+   "{n} 個はすでに同じでした"
+  ],
+  "pasarán a la copia en la próxima sincronización": "次の同期でバックアップに入ります",
+  "{n} no se pudo recuperar": [
+   "{n} 個は復元できませんでした"
+  ],
+  "{n} archivo recuperado {where}": [
+   "{n} 個のファイルを{where}復元しました"
+  ],
+  "detenido": "停止しました",
+  "Mostrar": "表示",
+  "Ver": "表示",
+  "Mostrar en su carpeta": "フォルダーで表示",
+  "Abrir la carpeta de esta fecha": "この日付のフォルダーを開く",
+  "Eliminar estas versiones…": "これらのバージョンを削除…",
+  "¿Eliminar para siempre las versiones de {when}?": "{when} のバージョンを完全に削除しますか？",
+  "Son {n} ({size}). Libera ese espacio en el disco de copia, pero ya no se podrán recuperar. No se puede deshacer.": "{n}（{size}）です。バックアップディスクの空き容量は増えますが、もう復元できません。元に戻せません。",
+  "{n} archivo": [
+   "{n} 個のファイル"
+  ],
+  "No se pudieron eliminar todas las versiones.\n\n{error}": "すべてのバージョンを削除できませんでした。\n\n{error}",
+  "Luego se quitan solas; antes si falta sitio": "期間後に自動削除。容量不足ならそれより前に",
+  "Falta espacio: quitando las versiones más antiguas para hacer sitio…": "容量不足：空きを作るため最も古いバージョンを削除中…",
+  "El origen está vacío: sincronizar dejaría la copia vacía": "コピー元が空です。同期するとバックアップが空になります",
+  "Atención: se apartarían {n} archivo de la copia ({pct})": [
+   "注意：バックアップから {n} 個のファイルが外されます（{pct}）"
+  ],
+  "Revisa la lista en Cambios → A versiones. Antes de apartar nada se pide confirmación.": "「変更 → バージョンへ」で一覧を確認してください。外す前に確認を求めます。",
+  "Sincronización detenida antes de copiar: apartaría {n} archivos ({pct} de la copia). Se pide confirmación.": "コピー前に同期を止めました：{n} 個のファイル（バックアップの {pct}）が外されます。確認を求めています。",
+  "Sincronización en espera": "同期を保留中",
+  "Iba a apartar muchos archivos de la copia. Confírmalo en la ventana.": "バックアップから多くのファイルを外そうとしています。ウィンドウで確認してください。",
+  "Confirmado: se sincroniza y lo borrado del origen pasa a versiones.": "確認しました。同期し、コピー元で削除されたものはバージョンに移します。",
+  "No se ha sincronizado: la copia sigue como estaba.": "同期していません。バックアップはそのままです。",
+  "{size} liberados quitando versiones antiguas por falta de espacio": "容量不足のため古いバージョンを削除して {size} 空けました",
+  "demasiados archivos recuperados con el mismo nombre": "同じ名前の復元ファイルが多すぎます",
+  "la copia no tiene el tamaño del original": "コピーのサイズが元のファイルと一致しません",
+  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "復元するものを選択  ·  複数は Ctrl または Shift + クリック"
  }
 }

@@ -32,7 +32,16 @@ primera vez:
 
 - **Sincronización en espejo con versiones.** El destino queda igual que el origen. Lo que modificas o
   borras no se pierde: la versión anterior pasa a `.devbackup/versiones/<fecha>/` en el propio disco de
-  copia y se conserva el tiempo que elijas (30 días, 90 días, 1 año o siempre).
+  copia y se conserva el tiempo que elijas (7, 30 o 60 días). Luego se quita sola, y antes si falta
+  espacio para copiar: primero las más antiguas.
+- **Recuperar, como una máquina del tiempo.** La pestaña *Recuperar* enseña lo apartado por fecha
+  (hoy, ayer, esta semana, por meses) o todo junto, con buscador y filtros *Borrados* y *Versiones
+  anteriores*. Un clic devuelve archivos o carpetas enteras a su sitio en el origen, o a otra carpeta.
+  Nunca sobrescribe: si ya hay un archivo distinto con ese nombre, la versión se guarda al lado como
+  `nombre (recuperado <fecha>).ext`.
+- **Protección contra borrados masivos.** Si una sincronización va a apartar una parte grande de la
+  copia (por ejemplo, porque el origen aparece vacío o un disco no está bien conectado), se detiene
+  antes de tocar nada, enseña qué carpetas desaparecen y pregunta.
 - **Detecta movidos y renombrados.** Una carpeta renombrada o movida a otra subcarpeta se mueve
   dentro del disco en segundos en lugar de copiarse otra vez, incluidos sus archivos repetidos
   (varios `__init__.py` vacíos, `.gitkeep`…) y aunque no tenga ningún archivo único. Las subcarpetas que habías excluido a mano siguen excluidas con el nombre nuevo, y

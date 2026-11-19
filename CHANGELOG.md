@@ -1,5 +1,30 @@
 # Novedades
 
+## 2.0.0
+
+- **Nueva pestaña «Recuperar»: una máquina del tiempo de tu copia.** Todo lo que la sincronización
+  apartó a versiones (lo que borraste del origen y la versión anterior de lo que cambiaste) aparece
+  por fecha en una línea de tiempo: hoy, ayer, esta semana y por meses. «Todas las fechas» enseña la
+  versión más reciente de cada archivo, con buscador y filtros *Borrados* y *Versiones anteriores*.
+  - **Recuperar** devuelve lo seleccionado (archivos o carpetas enteras) a su sitio en el origen;
+    **Recuperar en…** lo deja en otra carpeta. La versión se copia, no se mueve: sigue disponible.
+  - **Nunca sobrescribe.** Si ya hay un archivo distinto con ese nombre, la versión se guarda al lado
+    como `nombre (recuperado AAAA-MM-DD HHMM).ext`; si es idéntico, no se duplica.
+  - **Ver** abre una copia temporal de solo lectura; **Mostrar** la enseña en su carpeta.
+  - Clic derecho en una fecha: abrir su carpeta o eliminar esas versiones para liberar espacio
+    (pide confirmación).
+- **Protección contra borrados masivos.** Si una sincronización en espejo va a apartar a versiones
+  una parte grande de la copia (50 archivos o más y al menos el 25 %, o 1 GB y el 25 % de los datos),
+  o si el origen aparece vacío, se detiene antes de tocar nada y explica qué carpetas desaparecen. Se
+  elige: *No sincronizar* (lo que pasa con Intro), *Ver la lista* o *Sincronizar igualmente*. También
+  cuando sincroniza sola al conectar el disco. El análisis ya lo avisa en amarillo.
+- **Versiones con plazo corto y limpieza automática.** Se guardan 7, 30 (por defecto) o 60 días y
+  luego se quitan solas. Los plazos antiguos (90 días, 1 año, siempre) pasan a 60 días. Si lo que hay
+  que copiar no cabe en el disco, antes de copiar se quitan las versiones más antiguas hasta que
+  quepa (como Time Machine), y el resumen dice cuánto se liberó.
+- El autodiagnóstico comprueba la protección, recuperar sin sobrescribir ni duplicar y la página
+  «Recuperar».
+
 ## 1.9.7
 
 - **Mover carpetas a otra subcarpeta sin recopiar nada, en todos los casos.** Además de deducir el

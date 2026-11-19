@@ -77,6 +77,13 @@ ROOT_SKIP = {META_DIR, "system volume information", "$recycle.bin", ".spotlight-
              ".trashes", ".temporaryitems", ".documentrevisions-v100"}
 INDEX_SCHEMA = "2"
 SCRUB_THREADS = 4
+# Protección contra borrados masivos (modo espejo): antes de apartar a versiones mucho de golpe,
+# la sincronización se detiene y pide confirmación. Un origen vacío o un disco mal conectado
+# no debe vaciar la copia en silencio.
+MASS_MIN_FILES = 50
+MASS_MIN_BYTES = 1024**3
+MASS_RATIO = 0.25
+SPACE_RESERVE = 64 * 1024 * 1024  # lo que se deja libre de más al hacer sitio quitando versiones
 # La revisión de integridad no vuelve a leer lo comprobado hace menos de esto
 # (al copiar ya se verifica). «Comprobar todo el disco» no tiene en cuenta el plazo.
 SCRUB_RECHECK_DAYS = 30
@@ -928,6 +935,7 @@ class Stats:
     other_failed: int = 0
     versions_saved: int = 0
     versions_purged: int = 0
+    space_freed: int = 0       # bytes liberados quitando versiones antiguas por falta de sitio
     dirs_created: int = 0
     dirs_removed: int = 0
     errors: int = 0
@@ -970,7 +978,7 @@ class BackupJob:
 
     def __init__(self, src: str, dst: str, patterns: list[str], excluded: set[str] | list[str],
                  mode: str = MODE_MIRROR, threads: int = 16, index_path: str | None = None,
-                 force_full: bool = False, keep_days: int = 90, meta_root: str | None = None,
+                 force_full: bool = False, keep_days: int = 30, meta_root: str | None = None,
                  verify: bool = True, scrub_seconds: int = 300):
         self.src = os.path.normpath(src)
         self.dst = os.path.normpath(dst)
@@ -1003,6 +1011,8 @@ class BackupJob:
         self.summary: dict = {}
         self.scan_started_at: datetime | None = None
         self.estimator: Estimator | None = None
+        self.held = False                # se detuvo antes de copiar: borrado masivo sin confirmar
+        self.allow_mass_delete = False   # el usuario ya lo ha confirmado
         self._reset_plan()
 
         self._lock = threading.Lock()
@@ -1070,6 +1080,7 @@ class BackupJob:
 
     def run(self, copy: bool = True) -> None:
         try:
+            self.held = False
             if self.phase != "ready":
                 if not self.scan():
                     self._close_index(commit=False)
@@ -1078,11 +1089,44 @@ class BackupJob:
             if not copy:
                 self.phase = "ready"
                 return
+            if not self.allow_mass_delete and self.mass_deletion():
+                self.held = True  # antes que la fase: la ventana lo mira al ver «ready»
+                self.phase = "ready"
+                return
             self.copy()
         except Exception as exc:  # noqa: BLE001 - se muestra en la UI
             self.fatal = f"{type(exc).__name__}: {exc}"
             self._close_index(commit=False)
             self.phase = "failed"
+
+    def mass_deletion(self) -> dict | None:
+        """¿Va a apartar a versiones una parte grande de la copia? Entonces se pide confirmación.
+
+        Devuelve los datos para explicarlo, o None si es un borrado normal.
+        """
+        s = self.stats
+        if self.mode != MODE_MIRROR or not s.del_files:
+            return None
+        files = s.skip_files + s.changed_files + s.moved_files + s.del_files
+        size = s.skip_bytes + s.changed_bytes + s.moved_bytes + s.del_bytes
+        ratio = s.del_files / max(1, files)
+        ratio_bytes = s.del_bytes / max(1, size)
+        empty = s.files_found == 0
+        big = ((s.del_files >= MASS_MIN_FILES and ratio >= MASS_RATIO)
+               or (s.del_bytes >= MASS_MIN_BYTES and ratio_bytes >= MASS_RATIO))
+        if not (empty or big):
+            return None
+        cut = len(self.dst)
+        groups: dict[str, list] = {}
+        for path, size_, _m in self.deletes:
+            rel = path[cut:].lstrip("\\/")
+            top = rel.split(os.sep, 1)[0] if os.sep in rel else ""
+            g = groups.setdefault(top, [0, 0])
+            g[0] += 1
+            g[1] += size_
+        folders = sorted(((k, v[0], v[1]) for k, v in groups.items()), key=lambda t: (-t[2], -t[1]))
+        return {"files": s.del_files, "bytes": s.del_bytes, "ratio": max(ratio, ratio_bytes),
+                "empty": empty, "folders": folders}
 
     # ── fase 1: análisis ─────────────────────────────────────────────────
     def _open_index(self) -> None:
@@ -1610,6 +1654,8 @@ class BackupJob:
                 s.del_files += 1
                 s.del_bytes += item[1]
         self.estimator.learn_renames(time.perf_counter() - t_moves, s.moves_done)
+        if not self._cancel.is_set() and self.copies:
+            self._make_room(root)
         self._copy_ok = bytearray(len(self.copies))
         self._copy_hash: list[bytes | None] = [None] * len(self.copies)
         self._delete_ok = bytearray(len(self.deletes))
@@ -1961,6 +2007,21 @@ class BackupJob:
         except BaseException:
             _remove_quiet(ltmp)
             raise
+
+    def _make_room(self, root: str) -> None:
+        """Si lo que hay que copiar no cabe, quita primero las versiones más antiguas (como Time Machine)."""
+        need = sum(c[1] for c in self.copies) + SPACE_RESERVE
+        try:
+            if shutil.disk_usage(root).free >= need:
+                return
+        except OSError:
+            return
+        from versions import free_space  # aquí: versions importa este módulo
+        s = self.stats
+        s.step = "haciendo sitio"
+        removed, freed = free_space(root, need, keep={self._started_at.strftime(STAMP_FMT)}, cancel=self._cancel)
+        s.versions_purged += removed
+        s.space_freed += freed
 
     def _purge_versions(self, root: str) -> None:
         base = os.path.join(root, META_DIR, "versiones")

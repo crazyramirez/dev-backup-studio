@@ -9,6 +9,7 @@ from __future__ import annotations
 import ctypes
 import faulthandler
 import getpass
+import hashlib
 import html
 import json
 import math
@@ -23,12 +24,13 @@ import tempfile
 import threading
 import time
 import traceback
+import types
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from PyQt6.QtCore import (QAbstractNativeEventFilter, QAbstractTableModel, QByteArray, QEasingCurve, QEvent,
-                          QLibraryInfo, QModelIndex, QObject, QPoint, QPointF, QProcess, QRect, QRectF, QSettings, QSize, Qt, QTimer, QTranslator,
+from PyQt6.QtCore import (QAbstractNativeEventFilter, QAbstractTableModel, QByteArray, QDate, QDateTime,
+                          QEasingCurve, QEvent, QLibraryInfo, QLocale, QModelIndex, QObject, QPoint, QPointF, QProcess, QRect, QRectF, QSettings, QSize, Qt, QTime, QTimer, QTranslator,
                           QUrl, QVariantAnimation, pyqtSignal)
 from PyQt6.QtGui import (QBrush, QColor, QConicalGradient, QDesktopServices, QFont,
                          QFontDatabase, QFontMetricsF, QIcon, QImage, QKeySequence, QLinearGradient,
@@ -38,7 +40,8 @@ from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QApplication, QButtonGroup, QComboBox,
                              QDialog, QFileDialog, QFrame, QGraphicsBlurEffect, QGraphicsOpacityEffect,
                              QGraphicsPixmapItem, QGraphicsScene, QGridLayout, QHBoxLayout, QHeaderView,
-                             QLabel, QLayout, QLineEdit, QMainWindow, QMenu, QMessageBox,
+                             QLabel, QLayout, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMenu,
+                             QMessageBox, QStyle, QStyledItemDelegate,
                              QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
                              QSpinBox, QStackedWidget, QSystemTrayIcon, QTableView, QTableWidget,
                              QTableWidgetItem, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
@@ -50,10 +53,11 @@ import i18n
 import keepawake
 import reminders
 import updater
+import versions
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.9.7"
+APP_VERSION = "2.0.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -165,6 +169,12 @@ ICONS = {
     "chevdown": _p("M7 10l5 5 5-5"),
     "chevright": _p("M10 7l5 5-5 5"),
     "arrowdown": _p("M12 5v14M6.5 13.5L12 19l5.5-5.5"),
+    "history": _p("M3.6 12a8.4 8.4 0 1 0 2.5-6") + _p("M3.5 4.2v4.3h4.3") + _p("M12 7.8v4.6l3 1.9"),
+    "restore": _p("M9 14.5L4 9.5l5-5") + _p("M4 9.5h10.5a5.5 5.5 0 0 1 0 11H10.5"),
+    "layers": _p("M12 3.5l8.5 4.5-8.5 4.5-8.5-4.5z") + _p("M3.5 12.3l8.5 4.5 8.5-4.5") + _p("M3.5 16.3l8.5 4.5 8.5-4.5"),
+    "trash": _p("M4.5 7h15M9.5 7V5.2a1.5 1.5 0 0 1 1.5-1.5h2a1.5 1.5 0 0 1 1.5 1.5V7")
+             + _p("M6.5 7l.9 11.6a2 2 0 0 0 2 1.9h5.2a2 2 0 0 0 2-1.9L17.5 7"),
+    "eye": _p("M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z") + '<circle cx="12" cy="12" r="2.8"/>',
     "globe": '<circle cx="12" cy="12" r="9"/>' + _p("M3.2 12h17.6")
              + _p("M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z"),
 }
@@ -179,6 +189,7 @@ class G:
     DONE, INFO, CLOCK, SPEED, DRIVE, FILTER = "done", "info", "clock", "speed", "drive", "filter"
     SHIELD, DOWNLOAD, POWER = "shield", "download", "power"
     ARROW, BACK, HELP, SPARK, BELL, MORE, GLOBE = "arrow", "back", "help", "spark", "bell", "more", "globe"
+    HISTORY, RESTORE, LAYERS, TRASH, EYE = "history", "restore", "layers", "trash", "eye"
 
 
 # ── formato (es-ES) ──────────────────────────────────────────────────────────
@@ -524,6 +535,8 @@ QToolTip { background: %(card2)s; color: %(text)s; border: 1px solid %(line2)s; 
 QMenu { background: %(card2)s; border: 1px solid %(line2)s; padding: 6px; border-radius: 10px; }
 QMenu::item { padding: 6px 18px; border-radius: 6px; }
 QMenu::item:selected { background: %(accent_mid)s; }
+QListWidget#timeline { background: transparent; border: none; padding: 0; }
+QListWidget#timeline::item { background: transparent; border: none; }
 QMessageBox { background: %(card)s; }
 """ % v
 
@@ -1651,9 +1664,23 @@ PILL = {
     "cancelled": (_("Cancelado"), C["warn"]), "failed": (_("Error"), C["err"]),
 }
 RUNNING = ("scanning", "copying", "paused")
-PAGE_TREE, PAGE_CHANGES, PAGE_PROGRESS, PAGE_ISSUES = range(4)
+PAGE_TREE, PAGE_CHANGES, PAGE_PROGRESS, PAGE_ISSUES, PAGE_RECOVER = range(5)
 
-KEEP_OPTIONS = [(30, _("30 días")), (90, _("90 días")), (365, _("1 año")), (0, _("Siempre"))]
+# Las versiones ocupan sitio en el disco de copia: se guardan un plazo y luego se quitan solas
+# (y antes, si falta espacio para copiar). 30 días por defecto; 60 como mucho.
+KEEP_OPTIONS = [(7, _("7 días")), (30, _("30 días")), (60, _("60 días"))]
+KEEP_DEFAULT = 30
+
+
+def keep_days_setting(value) -> int:
+    """Plazo guardado en los ajustes. Los de antes (90 días, 1 año, siempre) pasan a 60 días."""
+    try:
+        days = int(value)
+    except (TypeError, ValueError):
+        return KEEP_DEFAULT
+    if days in dict(KEEP_OPTIONS):
+        return days
+    return max(d for d, _t in KEEP_OPTIONS)
 CONNECT_ACTIONS = {"ask": _("Preguntar si sincronizar"), "auto": _("Sincronizar sin preguntar"), "none": _("Solo avisar")}
 KIND_INFO = {"n": (_("Nuevo"), C["ok"]), "c": (_("Modificado"), C["accent2"]),
              "m": (_("Movido"), C["accent"]), "d": (_("A versiones"), C["warn"])}
@@ -1992,6 +2019,14 @@ class ConnectDialog(QDialog):
                 self.b_view.setEnabled(True)
                 self.b_sync.setDefault(True)
                 self.b_sync.setFocus()
+                mass = job.mass_deletion()
+                if mass:
+                    warn = (_("El origen está vacío: sincronizar dejaría la copia vacía") if mass["empty"] else
+                            _n("Atención: se apartarían {n} archivo de la copia ({pct})",
+                               "Atención: se apartarían {n} archivos de la copia ({pct})", mass["files"]).format(
+                                n=fmt_int(mass["files"]), pct=pct(mass["ratio"])))
+                    note = warn + "  ·  " + note
+                    self.note.setStyleSheet(f"color:{C['warn']};")
             self.note.setText(note)
         elif job.phase in ("cancelled", "failed"):
             self._timer.stop()
@@ -2012,6 +2047,1027 @@ class ConnectDialog(QDialog):
         if job and job.phase == "scanning":
             job.cancel()
         super().reject()
+
+
+class MassDeleteDialog(QDialog):
+    """Antes de apartar a versiones una parte grande de la copia: qué pasaría y qué hacer.
+
+    «choice» queda en «cancel» (no sincronizar), «view» (ver la lista) o «go» (sincronizar igualmente).
+    """
+
+    def __init__(self, win: "MainWindow", job: engine.BackupJob, info: dict):
+        super().__init__(win)
+        self.choice = "cancel"
+        self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(app_icon())
+        self.setMinimumWidth(660)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(26, 24, 26, 22)
+        lay.setSpacing(16)
+
+        head = QHBoxLayout()
+        head.setSpacing(16)
+        head.addWidget(glyph_label(G.WARN, C["warn"], 34), 0, Qt.AlignmentFlag.AlignTop)
+        col = QVBoxLayout()
+        col.setSpacing(6)
+        keep = win.keep_combo.currentText().lower()
+        if info["empty"]:
+            title = _("El origen está vacío")
+            text = _("No hay ningún archivo en {src}. Si el disco o la carpeta de origen no está bien conectado, "
+                     "sincronizar dejaría la copia vacía.").format(src=job.src)
+        else:
+            title = _n("Esta sincronización apartaría {n} archivo de la copia",
+                       "Esta sincronización apartaría {n} archivos de la copia", info["files"]).format(n=fmt_int(info["files"]))
+            text = _("Es el {pct} de lo que hay en el destino ({size}). Pasaría a versiones: se puede recuperar "
+                     "durante {keep} desde «Recuperar», pero la copia dejaría de tenerlo.").format(
+                pct=pct(info["ratio"]), size=fmt_bytes(info["bytes"]), keep=keep)
+        t = QLabel(title)
+        t.setObjectName("h1")
+        t.setWordWrap(True)
+        sub = QLabel(text)
+        sub.setObjectName("muted")
+        sub.setWordWrap(True)
+        col.addWidget(t)
+        col.addWidget(sub)
+        head.addLayout(col, 1)
+        lay.addLayout(head)
+
+        folders = info["folders"]
+        if folders:
+            box = QFrame()
+            box.setObjectName("hint")
+            bl = QVBoxLayout(box)
+            bl.setContentsMargins(16, 12, 16, 12)
+            bl.setSpacing(8)
+            cap = QLabel(_("Ya no están en el origen").upper())
+            cap.setObjectName("cardTitle")
+            bl.addWidget(cap)
+            for name, n, size in folders[:6]:
+                row = QHBoxLayout()
+                row.setSpacing(10)
+                row.addWidget(glyph_label(G.FOLDER if name else G.DOC, C["folder"] if name else C["muted"], 15))
+                label = ElideLabel(name or _("Archivos sueltos de la raíz"))
+                row.addWidget(label, 1)
+                count = QLabel(_n("{n} archivo", "{n} archivos", n).format(n=fmt_int(n)) + "  ·  " + fmt_bytes(size))
+                count.setObjectName("faint")
+                row.addWidget(count)
+                bl.addLayout(row)
+            if len(folders) > 6:
+                more = QLabel(_n("y {n} carpeta más", "y {n} carpetas más", len(folders) - 6).format(n=fmt_int(len(folders) - 6)))
+                more.setObjectName("faint")
+                bl.addWidget(more)
+            lay.addWidget(box)
+
+        tip = QLabel(_("Si no lo has borrado tú a propósito, no sincronices: comprueba que el origen está bien "
+                       "conectado. Con el modo «Solo añadir y actualizar» nunca se quita nada del destino."))
+        tip.setObjectName("faint")
+        tip.setWordWrap(True)
+        lay.addWidget(tip)
+
+        buttons = QHBoxLayout()
+        buttons.setSpacing(10)
+        self.b_view = QPushButton("  " + _("Ver la lista"))
+        self.b_view.setIcon(glyph_icon(G.TREE, C["text"], 14))
+        self.b_no = QPushButton(_("No sincronizar"))
+        self.b_go = QPushButton("  " + _("Sincronizar igualmente"))
+        self.b_go.setObjectName("danger")
+        self.b_go.setIcon(glyph_icon(G.PLAY, C["text"], 14))
+        buttons.addWidget(self.b_view)
+        buttons.addStretch(1)
+        buttons.addWidget(self.b_no)
+        buttons.addWidget(self.b_go)
+        for b in (self.b_view, self.b_no, self.b_go):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setAutoDefault(False)
+        self.b_no.setDefault(True)  # lo seguro es lo que pasa con Intro
+        self.b_no.setFocus()
+        lay.addLayout(buttons)
+        self.b_view.clicked.connect(lambda: self._pick("view"))
+        self.b_no.clicked.connect(lambda: self._pick("cancel"))
+        self.b_go.clicked.connect(lambda: self._pick("go"))
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        set_dark_titlebar(self)
+
+    def _pick(self, choice: str):
+        self.choice = choice
+        if choice == "go":
+            self.accept()
+        else:
+            self.reject()
+
+
+# ── recuperar: lo apartado a versiones, por fecha ───────────────────────────
+
+def qlocale() -> QLocale:
+    return QLocale(i18n.current())
+
+
+def qdatetime(d: datetime) -> QDateTime:
+    return QDateTime(QDate(d.year, d.month, d.day), QTime(d.hour, d.minute, d.second))
+
+
+def day_label(d: datetime) -> str:
+    """«Hoy», «Ayer» o la fecha larga en el idioma de la app."""
+    today = datetime.now().date()
+    if d.date() == today:
+        return _("Hoy")
+    if d.date() == today - timedelta(days=1):
+        return _("Ayer")
+    text = qlocale().toString(QDate(d.year, d.month, d.day), QLocale.FormatType.LongFormat)
+    return text[:1].upper() + text[1:]
+
+
+def group_label(d: datetime) -> str:
+    """Grupo de la línea de tiempo: hoy, ayer, esta semana o el mes."""
+    days = (datetime.now().date() - d.date()).days
+    if days <= 0:
+        return _("Hoy")
+    if days == 1:
+        return _("Ayer")
+    if days < 7:
+        return _("Esta semana")
+    month = qlocale().standaloneMonthName(d.month)
+    return f"{month[:1].upper()}{month[1:]} {d.year}"
+
+
+def short_stamp(d: datetime) -> str:
+    return qlocale().toString(qdatetime(d), QLocale.FormatType.ShortFormat)
+
+
+def reveal_path(path: str) -> None:
+    """Abre la carpeta con el archivo seleccionado (Explorador o Finder)."""
+    try:
+        if IS_WIN:
+            subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+            return
+        if IS_MAC:
+            subprocess.Popen(["open", "-R", path])
+            return
+    except OSError:
+        pass
+    QDesktopServices.openUrl(QUrl.fromLocalFile(path if os.path.isdir(path) else os.path.dirname(path)))
+
+
+class TimelineDelegate(QStyledItemDelegate):
+    """Fechas como una línea de tiempo: punto, hora, qué hay y cuánto le queda."""
+    KIND, TITLE, SUB, SIDE = (Qt.ItemDataRole.UserRole + 10 + i for i in range(4))
+
+    def sizeHint(self, option, index):  # noqa: N802
+        return QSize(200, 34 if index.data(self.KIND) == "head" else 60)
+
+    def paint(self, p: QPainter, option, index):
+        kind = index.data(self.KIND)
+        r = QRectF(option.rect)
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if kind == "head":
+            f = QFont(FONT["ui"])
+            f.setPixelSize(10)
+            f.setWeight(QFont.Weight.ExtraBold)
+            f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.6)
+            p.setFont(f)
+            p.setPen(QColor(C["faint"]))
+            p.drawText(r.adjusted(16, 13, -8, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+                       (index.data(self.TITLE) or "").upper())
+            p.restore()
+            return
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        card = r.adjusted(4, 3, -4, -3)
+        if selected or hover:
+            path = QPainterPath()
+            path.addRoundedRect(card, 10, 10)
+            fill = QColor(C["accent"])
+            fill.setAlpha(46 if selected else 0)
+            if not selected:
+                fill = QColor(255, 255, 255, 10)
+            p.fillPath(path, fill)
+            if selected:
+                edge = QColor(C["accent"])
+                edge.setAlpha(130)
+                p.setPen(QPen(edge, 1))
+                p.drawPath(path)
+        x = card.left() + 20
+        cy = card.top() + 21
+        if kind == "all":
+            p.drawPixmap(QPointF(x - 9, cy - 9), glyph_pixmap(G.LAYERS, C["accent2"] if selected else C["muted"], 18))
+        else:
+            line = QColor(C["line2"])
+            p.setPen(QPen(line, 2))
+            p.drawLine(QPointF(x, r.top()), QPointF(x, r.bottom() + 1))
+            if selected:
+                halo = QColor(C["accent2"])
+                halo.setAlpha(55)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(halo)
+                p.drawEllipse(QPointF(x, cy), 9, 9)
+                p.setBrush(QColor(C["accent2"]))
+                p.drawEllipse(QPointF(x, cy), 5, 5)
+            else:
+                p.setPen(QPen(QColor(C["muted"] if hover else C["line2"]), 2))
+                p.setBrush(QColor(C["card"]))
+                p.drawEllipse(QPointF(x, cy), 5, 5)
+        left = x + 18
+        side = index.data(self.SIDE) or ""
+        fs = QFont(FONT["ui"])
+        fs.setPixelSize(11)
+        side_w = QFontMetricsF(fs).horizontalAdvance(side) + 6 if side else 0
+        width = card.right() - 12 - left - side_w
+        ft = QFont(FONT["ui"])
+        ft.setPixelSize(13)
+        ft.setWeight(QFont.Weight.DemiBold)
+        p.setFont(ft)
+        p.setPen(QColor(C["text"]))
+        title = QFontMetricsF(ft).elidedText(index.data(self.TITLE) or "", Qt.TextElideMode.ElideRight, width)
+        p.drawText(QRectF(left, card.top() + 9, width, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title)
+        p.setFont(fs)
+        p.setPen(QColor(C["muted"]))
+        sub = QFontMetricsF(fs).elidedText(index.data(self.SUB) or "", Qt.TextElideMode.ElideRight,
+                                           card.right() - 12 - left)
+        p.drawText(QRectF(left, card.top() + 30, card.right() - 12 - left, 18),
+                   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, sub)
+        if side:
+            p.setPen(QColor(C["faint"]))
+            p.drawText(QRectF(card.right() - 12 - side_w, card.top() + 9, side_w, 20),
+                       Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, side)
+        p.restore()
+
+
+class EmptyState(QWidget):
+    """Mensaje centrado con icono: sin versiones, sin disco, cargando…"""
+
+    def __init__(self, glyph: str, busy: bool = False):
+        super().__init__()
+        v = QVBoxLayout(self)
+        v.setContentsMargins(30, 30, 30, 30)
+        v.setSpacing(10)
+        v.addStretch(1)
+        self.icon = glyph_label(glyph, C["faint"], 46)
+        v.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignHCenter)
+        v.addSpacing(6)
+        self.title = QLabel()
+        self.title.setObjectName("bannerTitle")
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title.setWordWrap(True)
+        self.text = QLabel()
+        self.text.setObjectName("muted")
+        self.text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.text.setWordWrap(True)
+        self.text.setMaximumWidth(520)
+        v.addWidget(self.title)
+        v.addWidget(self.text, 0, Qt.AlignmentFlag.AlignHCenter)
+        if busy:
+            bar = thin_bar(4)
+            bar.setRange(0, 0)
+            bar.setFixedWidth(220)
+            v.addSpacing(6)
+            v.addWidget(bar, 0, Qt.AlignmentFlag.AlignHCenter)
+        v.addStretch(2)
+
+    def set(self, title: str, text: str = "") -> "EmptyState":
+        self.title.setText(title)
+        self.text.setText(text)
+        self.text.setVisible(bool(text))
+        return self
+
+
+class RecoverPage(QWidget):
+    """«Recuperar»: lo que la sincronización apartó a versiones, por fecha, como una máquina del tiempo.
+
+    Recuperar copia la versión de vuelta (no la mueve) y nunca sobrescribe: si ya hay un archivo
+    distinto con ese nombre, la versión se guarda al lado con «(recuperado …)» en el nombre.
+    """
+    loaded = pyqtSignal(int, object, object)  # generación, fechas (None = sin disco), {ruta: ¿existe en el origen?}
+    restore_progress = pyqtSignal(int, int)
+    restored = pyqtSignal(object, bool)       # versions.RestoreResult, ¿al origen?
+    snapshot_removed = pyqtSignal(str)         # error, o "" si fue bien
+    ALL = "\x00todo"
+    ROLE = Qt.ItemDataRole.UserRole
+    PREVIEW_MAX = 512 * 1024 * 1024
+
+    def __init__(self, win: "MainWindow"):
+        super().__init__()
+        self.win = win
+        self.snaps: list[versions.Snapshot] = []
+        self.by_name: dict[str, versions.Snapshot] = {}
+        self.exists: dict[str, bool] = {}
+        self.stale = True
+        self.busy = False
+        self._gen = 0
+        self._key = None
+        self._kind: str | None = None
+        self._all: list[list] = []      # lo de la fecha elegida: [ruta, tamaño, fecha_ns, Snapshot, nº de fechas]
+        self._rows: list[list] = []     # lo que enseña el árbol (tras filtrar)
+        self._cancel = threading.Event()
+        self._ic_folder = glyph_icon(G.FOLDER, C["folder"], 16)
+        self._ic_gone = glyph_icon(G.DOC, C["warn"], 16)
+        self._ic_prev = glyph_icon(G.DOC, C["accent2"], 16)
+        shutil.rmtree(self.preview_dir(), ignore_errors=True)  # vistas previas de otra sesión
+        self._build()
+        self.loaded.connect(self._on_loaded)
+        self.restore_progress.connect(self._on_progress)
+        self.restored.connect(self._on_restored)
+        self.snapshot_removed.connect(self._on_snapshot_removed)
+
+    @staticmethod
+    def preview_dir() -> str:
+        return os.path.join(tempfile.gettempdir(), APP_NAME, "vista")
+
+    # ── construcción ──
+    def _build(self):
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(12)
+        bar = QFrame()
+        bar.setObjectName("hint")
+        h = QHBoxLayout(bar)
+        h.setContentsMargins(16, 10, 10, 10)
+        h.setSpacing(10)
+        h.addWidget(glyph_label(G.HISTORY, C["accent2"], 16))
+        msg = QLabel(_("Lo que la sincronización apartó de la copia, por fecha: lo que borraste del origen y la "
+                       "versión anterior de lo que cambiaste. Recuperar lo devuelve al origen sin sobrescribir nada."))
+        msg.setObjectName("muted")
+        msg.setWordWrap(True)
+        h.addWidget(msg, 1)
+        self.b_reload = QPushButton()
+        self.b_reload.setObjectName("icon")
+        self.b_reload.setIcon(glyph_icon(G.REFRESH, C["text"], 14))
+        self.b_reload.setFixedSize(38, 34)
+        self.b_reload.setToolTip(_("Volver a leer las versiones del disco de copia"))
+        self.b_reload.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.b_reload.clicked.connect(lambda: self.reload(force=True))
+        h.addWidget(self.b_reload)
+        v.addWidget(bar)
+
+        self.result = Banner()
+        self.result.hide()
+        v.addWidget(self.result)
+
+        body = QHBoxLayout()
+        body.setSpacing(14)
+        left = Card(_("Fechas"), G.CLOCK, margins=(8, 14, 8, 8))
+        left.body.setSpacing(6)
+        left.setFixedWidth(278)
+        self.timeline = QListWidget()
+        self.timeline.setObjectName("timeline")
+        self.timeline.setItemDelegate(TimelineDelegate(self.timeline))
+        self.timeline.setMouseTracking(True)
+        self.timeline.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.timeline.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.timeline.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.timeline.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.timeline.customContextMenuRequested.connect(self._timeline_menu)
+        self.timeline.currentItemChanged.connect(lambda *_a: self._show_selected())
+        left.body.addWidget(self.timeline, 1)
+        self.usage = QLabel("")
+        self.usage.setObjectName("faint")
+        self.usage.setWordWrap(True)
+        self.usage.setContentsMargins(10, 4, 10, 2)
+        left.body.addWidget(self.usage)
+        body.addWidget(left)
+
+        right = QVBoxLayout()
+        right.setSpacing(10)
+        head = QVBoxLayout()
+        head.setSpacing(2)
+        head.setContentsMargins(4, 2, 0, 0)
+        self.title = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.title.setObjectName("bannerTitle")
+        self.sub = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.sub.setObjectName("faint")
+        head.addWidget(self.title)
+        head.addWidget(self.sub)
+        right.addLayout(head)
+
+        filters = QHBoxLayout()
+        filters.setSpacing(8)
+        self.kind_group = QButtonGroup(self)
+        self.kind_buttons: dict[str | None, QPushButton] = {}
+        for key, text in ((None, _("Todo")), ("d", _("Borrados")), ("p", _("Versiones anteriores"))):
+            b = QPushButton(text)
+            b.setObjectName("chip")
+            b.setCheckable(True)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setProperty("label", text)
+            b.setToolTip({None: "", "d": _("Ya no están en el origen"),
+                          "p": _("Siguen en el origen, pero con otro contenido: esto es como eran antes")}[key])
+            self.kind_group.addButton(b)
+            self.kind_buttons[key] = b
+            b.clicked.connect(lambda _c=False, k=key: self._set_kind(k))
+            filters.addWidget(b)
+        self.kind_buttons[None].setChecked(True)
+        filters.addStretch(1)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText(_("Buscar archivo…"))
+        self.search.setClearButtonEnabled(True)
+        self.search.setMinimumWidth(170)
+        self.search.setMaximumWidth(280)
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(220)
+        self._search_timer.timeout.connect(self._apply_filter)
+        self.search.textChanged.connect(lambda _t: self._search_timer.start())
+        filters.addWidget(self.search)
+        right.addLayout(filters)
+
+        self.stack = QStackedWidget()
+        self.loading = EmptyState(G.HISTORY, busy=True).set(_("Leyendo versiones…"))
+        self.empty = EmptyState(G.HISTORY)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels([_("NOMBRE"), _("ESTADO"), _("TAMAÑO"), _("MODIFICADO")])
+        self.tree.setUniformRowHeights(True)
+        self.tree.setAnimated(True)
+        self.tree.setIndentation(20)
+        self.tree.setIconSize(QSize(16, 16))
+        self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._tree_menu)
+        self.tree.itemSelectionChanged.connect(self.update_actions)
+        self.tree.itemDoubleClicked.connect(lambda it, _c: self._open() if it.data(0, self.ROLE)[0] == "file" else None)
+        hdr = self.tree.header()
+        hdr.setStretchLastSection(False)
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for col, width in ((1, 190), (2, 92), (3, 150)):
+            hdr.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
+            self.tree.setColumnWidth(col, width)
+        for w in (self.loading, self.empty, self.tree):
+            self.stack.addWidget(w)
+        right.addWidget(self.stack, 1)
+
+        actions = QFrame()
+        actions.setObjectName("hint")
+        ah = QHBoxLayout(actions)
+        ah.setContentsMargins(16, 8, 10, 8)
+        ah.setSpacing(8)
+        self.sel_label = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.sel_label.setObjectName("muted")
+        ah.addWidget(self.sel_label, 1)
+        self.progress = thin_bar(6)
+        self.progress.setFixedWidth(170)
+        self.progress.hide()
+        ah.addWidget(self.progress)
+        self.b_cancel = QPushButton(_("Detener"))
+        self.b_cancel.hide()
+        self.b_cancel.clicked.connect(self._cancel.set)
+        ah.addWidget(self.b_cancel)
+
+        def button(text, glyph, tip, slot, name=None, color=C["text"]):
+            b = QPushButton(f"  {text}" if text else "")
+            b.setIcon(glyph_icon(glyph, color, 14))
+            b.setToolTip(tip)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            if name:
+                b.setObjectName(name)
+            if not text:
+                b.setFixedSize(38, 36)
+                b.setAccessibleName(tip)
+            b.clicked.connect(slot)
+            ah.addWidget(b)
+            return b
+
+        self.b_open = button("", G.EYE, _("Ver: abre una copia temporal; la versión guardada no cambia"), self._open,
+                             "icon")
+        self.b_reveal = button("", G.OPEN, _("Mostrar la versión en su carpeta del disco de copia"), self._reveal,
+                               "icon")
+        self.b_to = button(_("Recuperar en…"), G.FOLDER, _("Elige otra carpeta para dejar ahí una copia"),
+                           lambda: self._restore(ask=True))
+        self.b_restore = button(_("Recuperar"), G.RESTORE, _("Devuelve lo seleccionado a su sitio en el origen"),
+                                lambda: self._restore(), "primary", "#FFFFFF")
+        self.b_restore.setMinimumWidth(150)
+        right.addWidget(actions)
+        body.addLayout(right, 1)
+        v.addLayout(body, 1)
+        self.update_actions()
+
+    # ── carga ──
+    def target(self) -> tuple[str, str, str] | None:
+        dst = self.win.dst_card.path()
+        if not dst:
+            return None
+        return engine.volume_root(dst), os.path.normpath(dst), self.win.src_card.path()
+
+    def show_page(self):
+        if self.stale or self._key != self.target():
+            self.reload()
+        else:
+            self.update_actions()
+
+    def mark_stale(self):
+        self.stale = True
+        if self.isVisible():
+            self.reload()
+
+    @staticmethod
+    def cache_path(dst: str) -> str:
+        """Lista de archivos de cada fecha ya leída: lo apartado en una fecha no cambia."""
+        key = hashlib.sha1(os.path.normcase(os.path.normpath(dst)).encode("utf-8")).hexdigest()[:16]
+        return os.path.join(DATA_DIR, "estado", f"versiones-{key}.json")
+
+    def reload(self, force: bool = False):
+        """Vuelve a leer las fechas. Con «force», también las ya conocidas (no se fía de la caché)."""
+        target = self.target()
+        self.stale = False
+        if target != self._key:
+            self.result.hide()  # el resultado de recuperar era de otra copia
+        self._key = target
+        self._gen += 1
+        gen = self._gen
+        if target is None:
+            self._on_loaded(gen, None, None)
+            return
+        if not self.snaps:
+            self.stack.setCurrentWidget(self.loading)
+        self.b_reload.setEnabled(False)
+
+        running = self.win._state in RUNNING  # la fecha más reciente puede estar escribiéndose
+
+        def work():
+            meta, dst, src = target
+            try:
+                if not engine.volume_present(dst):
+                    self.loaded.emit(gen, None, None)
+                    return
+                cache_file = self.cache_path(dst)
+                cache: dict = {}
+                if not force:
+                    try:
+                        with open(cache_file, encoding="utf-8") as fh:
+                            data = json.load(fh)
+                        cache = data if isinstance(data, dict) else {}
+                    except (OSError, ValueError):
+                        cache = {}
+                snaps = versions.load(meta, dst, cache=cache)
+                if running and cache:
+                    cache.pop(max(cache), None)
+                try:
+                    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                    with open(cache_file + ".tmp", "w", encoding="utf-8") as fh:
+                        json.dump(cache, fh, ensure_ascii=False, separators=(",", ":"))
+                    os.replace(cache_file + ".tmp", cache_file)
+                except OSError:
+                    pass
+                exists: dict[str, bool] = {}
+                if src and os.path.isdir(src):
+                    for snap in snaps:
+                        for rel, _size, _m in snap.files:
+                            if rel not in exists:
+                                exists[rel] = os.path.lexists(engine.lp(os.path.join(src, rel)))
+                self.loaded.emit(gen, snaps, exists)
+            except Exception:  # noqa: BLE001 - la página no se puede quedar cargando
+                self.loaded.emit(gen, [], {})
+
+        threading.Thread(target=work, name="versiones", daemon=True).start()
+
+    def _current_key(self) -> str | None:
+        it = self.timeline.currentItem()
+        return it.data(self.ROLE) if it is not None else None
+
+    def _on_loaded(self, gen: int, snaps, exists):
+        if gen != self._gen:
+            return
+        self.b_reload.setEnabled(True)
+        keep = self._current_key()
+        if snaps is None:
+            self.snaps, self.by_name, self.exists = [], {}, {}
+            self.timeline.clear()
+            self.usage.setText("")
+            self._all, self._rows = [], []
+            self.title.setText(_("Recuperar"))
+            self.sub.setText("")
+            if self.target() is None:
+                self.empty.set(_("Elige una carpeta de destino"),
+                               _("Las versiones se guardan en el disco de copia, junto al destino."))
+            else:
+                self.empty.set(_("Conecta el disco de copia"),
+                               _("Las versiones se guardan en el propio disco de copia. Conéctalo (o enciende tu "
+                                 "nube) para verlas y recuperarlas."))
+            self.stack.setCurrentWidget(self.empty)
+            self.update_actions()
+            return
+        self.snaps, self.exists = snaps, exists
+        self.by_name = {s.name: s for s in snaps}
+        total = sum(s.size for s in snaps)
+        keep_text = self.win.keep_combo.currentText().lower()
+        self.usage.setText(_("{size} en versiones · se guardan {keep}").format(size=fmt_bytes(total), keep=keep_text)
+                           if snaps else _("Se guardan {keep}").format(keep=keep_text))
+        self._fill_timeline()
+        if not snaps:
+            self._all, self._rows = [], []
+            self.tree.clear()
+            self.title.setText(_("Recuperar"))
+            self.sub.setText("")
+            self.empty.set(_("Aún no hay nada que recuperar"),
+                           _("Cuando sincronices y algo se borre del origen o cambie, la versión de la copia se aparta "
+                             "aquí, por fecha, durante {keep}. Desde aquí la recuperas con un clic.").format(keep=keep_text))
+            self.stack.setCurrentWidget(self.empty)
+            self.update_actions()
+            return
+        row = 0
+        for i in range(self.timeline.count()):
+            if self.timeline.item(i).data(self.ROLE) == keep and keep is not None:
+                row = i
+                break
+        self.timeline.setCurrentRow(row)
+        self._show_selected()
+
+    def _fill_timeline(self):
+        d = TimelineDelegate
+        self.timeline.blockSignals(True)
+        self.timeline.clear()
+        files = len({rel for s in self.snaps for rel, _size, _m in s.files})
+        if self.snaps:
+            it = QListWidgetItem()
+            it.setData(self.ROLE, self.ALL)
+            it.setData(d.KIND, "all")
+            it.setData(d.TITLE, _("Todas las fechas"))
+            it.setData(d.SUB, _n("{n} archivo", "{n} archivos", files).format(n=fmt_int(files)) + "  ·  "
+                       + fmt_bytes(sum(s.size for s in self.snaps)))
+            it.setToolTip(_("La versión más reciente de cada archivo apartado"))
+            self.timeline.addItem(it)
+        keep = self.win.keep_combo.currentData() or KEEP_DEFAULT
+        last_group = None
+        now = datetime.now()
+        for s in self.snaps:
+            group = group_label(s.stamp)
+            if group != last_group:
+                last_group = group
+                head = QListWidgetItem()
+                head.setData(d.KIND, "head")
+                head.setData(d.TITLE, group)
+                head.setFlags(Qt.ItemFlag.NoItemFlags)
+                self.timeline.addItem(head)
+            it = QListWidgetItem()
+            it.setData(self.ROLE, s.name)
+            it.setData(d.KIND, "snap")
+            days = (now.date() - s.stamp.date()).days
+            when = s.stamp.strftime("%H:%M")
+            if days >= 2:
+                when = qlocale().toString(QDate(s.stamp.year, s.stamp.month, s.stamp.day), "ddd d MMM") + "  ·  " + when
+            it.setData(d.TITLE, when)
+            it.setData(d.SUB, _n("{n} archivo", "{n} archivos", len(s.files)).format(n=fmt_int(len(s.files)))
+                       + "  ·  " + fmt_bytes(s.size))
+            left = keep - (now - s.stamp).days
+            it.setData(d.SIDE, _("{n} d").format(n=max(0, left)))
+            it.setToolTip(_n("Se quita sola dentro de {n} día (plazo de {keep} días)",
+                             "Se quita sola dentro de {n} días (plazo de {keep} días)", max(0, left)).format(
+                n=max(0, left), keep=keep))
+            self.timeline.addItem(it)
+        self.timeline.blockSignals(False)
+
+    # ── lo que se enseña ──
+    def _status(self, rel: str) -> str:
+        return "p" if self.exists.get(rel) else "d"
+
+    def _show_selected(self):
+        key = self._current_key()
+        if key is None or not self.snaps:
+            return
+        if key == self.ALL:
+            seen: dict[str, list] = {}
+            for s in self.snaps:  # de la más reciente a la más antigua
+                for rel, size, mtime in s.files:
+                    if rel in seen:
+                        seen[rel][4] += 1
+                    else:
+                        seen[rel] = [rel, size, mtime, s, 1]
+            self._all = list(seen.values())
+            self.title.setText(_("Todas las fechas"))
+            self.sub.setText(_("La versión más reciente de cada archivo · {n} · {size}").format(
+                n=_n("{n} archivo", "{n} archivos", len(self._all)).format(n=fmt_int(len(self._all))),
+                size=fmt_bytes(sum(e[1] for e in self._all))))
+            self.tree.headerItem().setText(3, _("APARTADO"))
+        else:
+            s = self.by_name[key]
+            self._all = [[rel, size, mtime, s, 1] for rel, size, mtime in s.files]
+            self.title.setText(day_label(s.stamp) + "  ·  " + s.stamp.strftime("%H:%M"))
+            self.sub.setText(_("Apartado al sincronizar · {n} · {size}").format(
+                n=_n("{n} archivo", "{n} archivos", len(s.files)).format(n=fmt_int(len(s.files))),
+                size=fmt_bytes(s.size)))
+            self.tree.headerItem().setText(3, _("MODIFICADO"))
+        counts = {"d": 0, "p": 0}
+        for e in self._all:
+            counts[self._status(e[0])] += 1
+        for key2, b in self.kind_buttons.items():
+            n = len(self._all) if key2 is None else counts[key2]
+            b.setText(f"{b.property('label')}  {fmt_int(n)}")
+        self._apply_filter()
+
+    def _set_kind(self, kind: str | None):
+        self._kind = kind
+        self._apply_filter()
+
+    def _apply_filter(self):
+        text = self.search.text().strip().lower()
+        kind = self._kind
+        rows = [e for e in self._all
+                if (not text or text in e[0].lower()) and (kind is None or self._status(e[0]) == kind)]
+        self._rows = rows
+        if not self._all:
+            return
+        if not rows:
+            self.tree.clear()
+            self.empty.set(_("Nada coincide"), _("Prueba con otra búsqueda u otro filtro."))
+            self.stack.setCurrentWidget(self.empty)
+        else:
+            self._build_tree(rows, expand=bool(text) or kind is not None)
+            self.stack.setCurrentWidget(self.tree)
+        self.update_actions()
+
+    def _build_tree(self, rows: list[list], expand: bool):
+        all_dates = self._current_key() == self.ALL
+        tree = self.tree
+        tree.setUpdatesEnabled(False)
+        tree.clear()
+        root: dict = {}
+        for e in rows:
+            parts = e[0].split(os.sep)
+            node = root
+            for part in parts[:-1]:
+                node = node.setdefault(part, {})
+            node.setdefault("\x00", []).append(e)
+        right = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        gone_c, prev_c, faint_c, muted_c = QColor(C["warn"]), QColor(C["accent2"]), QColor(C["faint"]), QColor(C["muted"])
+
+        def add(parent: QTreeWidgetItem, node: dict, prefix: str) -> tuple[int, int, int]:
+            size = gone = prev = 0
+            for name in sorted((k for k in node if k != "\x00"), key=str.casefold):
+                rel = os.path.join(prefix, name) if prefix else name
+                it = QTreeWidgetItem(parent, [name, "", "", ""])
+                it.setIcon(0, self._ic_folder)
+                it.setData(0, self.ROLE, ("dir", rel))
+                a, b, c = add(it, node[name], rel)
+                parts = []
+                if b:
+                    parts.append(_n("{n} borrado", "{n} borrados", b).format(n=fmt_int(b)))
+                if c:
+                    parts.append(_n("{n} anterior", "{n} anteriores", c).format(n=fmt_int(c)))
+                it.setText(1, "  ·  ".join(parts))
+                it.setForeground(1, faint_c)
+                it.setText(2, fmt_bytes(a))
+                it.setTextAlignment(2, right)
+                it.setForeground(2, muted_c)
+                size, gone, prev = size + a, gone + b, prev + c
+            for e in sorted(node.get("\x00", []), key=lambda e: os.path.basename(e[0]).casefold()):
+                rel, fsize, mtime, snap, count = e
+                st = self._status(rel)
+                label = _("Borrado") if st == "d" else _("Versión anterior")
+                if count > 1:
+                    label += "  ·  " + _n("{n} fecha", "{n} fechas", count).format(n=count)
+                when = short_stamp(snap.stamp) if all_dates else short_stamp(datetime.fromtimestamp(mtime / 1e9))
+                it = QTreeWidgetItem(parent, [os.path.basename(rel), label, fmt_bytes(fsize), when])
+                it.setIcon(0, self._ic_gone if st == "d" else self._ic_prev)
+                it.setForeground(1, gone_c if st == "d" else prev_c)
+                it.setTextAlignment(2, right)
+                it.setForeground(2, muted_c)
+                it.setForeground(3, muted_c)
+                it.setToolTip(0, rel)
+                it.setData(0, self.ROLE, ("file", e))
+                size += fsize
+                gone += st == "d"
+                prev += st == "p"
+            return size, gone, prev
+
+        add(tree.invisibleRootItem(), root, "")
+        if expand and len(rows) <= 3000 or len(rows) <= 300:
+            tree.expandAll()
+        else:
+            for i in range(tree.topLevelItemCount()):
+                tree.topLevelItem(i).setExpanded(True)
+        tree.setUpdatesEnabled(True)
+
+    # ── selección y acciones ──
+    def _selected(self) -> list[tuple[list, str]]:
+        """Archivos seleccionados (las carpetas, con todo lo suyo) y la carpeta desde la que cuelgan."""
+        items = sorted(self.tree.selectedItems(), key=lambda it: (it.data(0, self.ROLE)[0] != "dir",
+                                                                  str(it.data(0, self.ROLE)[1]).count(os.sep)))
+        out, seen = [], set()
+        for it in items:
+            kind, val = it.data(0, self.ROLE)
+            if kind == "file":
+                found = [(val, os.path.dirname(val[0]))]
+            else:
+                prefix = val + os.sep
+                found = [(e, os.path.dirname(val)) for e in self._rows if e[0].startswith(prefix)]
+            for e, base in found:
+                if e[0] not in seen:
+                    seen.add(e[0])
+                    out.append((e, base))
+        return out
+
+    def update_actions(self):
+        if not hasattr(self, "b_restore"):
+            return
+        picked = self._selected()
+        n = len(picked)
+        items = self.tree.selectedItems()
+        running = self.win._state in RUNNING if hasattr(self.win, "_state") else False
+        src = self.win.src_card.path()
+        src_ok = bool(src) and os.path.isdir(src)
+        if self.busy:
+            pass
+        elif n:
+            self.sel_label.setText(_n("{n} archivo seleccionado · {size}", "{n} archivos seleccionados · {size}", n).format(
+                n=fmt_int(n), size=fmt_bytes(sum(e[1] for e, _b in picked))))
+        else:
+            self.sel_label.setText(_("Elige qué recuperar  ·  Ctrl o Mayús + clic para varios"))
+        one_file = len(items) == 1 and items[0].data(0, self.ROLE)[0] == "file"
+        self.b_open.setEnabled(one_file and not self.busy)
+        self.b_reveal.setEnabled(len(items) == 1 and not self.busy)
+        self.b_to.setEnabled(bool(n) and not self.busy)
+        self.b_restore.setEnabled(bool(n) and src_ok and not running and not self.busy)
+        if running:
+            self.b_restore.setToolTip(_("Espera a que termine la sincronización"))
+        elif not src_ok:
+            self.b_restore.setToolTip(_("La carpeta de origen no está disponible: usa «Recuperar en…»"))
+        else:
+            self.b_restore.setToolTip(_("Devuelve lo seleccionado a su sitio en el origen"))
+
+    def _version_file(self, e: list) -> str:
+        return os.path.join(e[3].path, e[0])
+
+    def _open(self):
+        items = self.tree.selectedItems()
+        if len(items) != 1 or items[0].data(0, self.ROLE)[0] != "file":
+            return
+        e = items[0].data(0, self.ROLE)[1]
+        path = self._version_file(e)
+        if e[1] > self.PREVIEW_MAX:
+            reveal_path(path)
+            return
+        folder = os.path.join(self.preview_dir(), e[3].name)
+        target = os.path.join(folder, os.path.basename(e[0]))
+        try:
+            os.makedirs(folder, exist_ok=True)
+            if os.path.exists(target):
+                os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+                os.remove(target)
+            shutil.copy2(engine.lp(path), target)
+            os.chmod(target, stat.S_IREAD)  # es una vista: de solo lectura
+        except OSError as exc:
+            QMessageBox.warning(self, APP_NAME, _("No se pudo abrir la versión.\n\n{error}").format(error=exc.strerror or exc))
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(target))
+
+    def _reveal(self):
+        items = self.tree.selectedItems()
+        if len(items) != 1:
+            return
+        kind, val = items[0].data(0, self.ROLE)
+        if kind == "file":
+            reveal_path(self._version_file(val))
+            return
+        prefix = val + os.sep
+        e = next((e for e in self._rows if e[0].startswith(prefix)), None)
+        if e is not None:
+            reveal_path(os.path.join(e[3].path, val))
+
+    def _restore(self, ask: bool = False):
+        picked = self._selected()
+        if not picked or self.busy:
+            return
+        src = self.win.src_card.path()
+        to_dir = None
+        if ask:
+            start = src if src and os.path.isdir(src) else os.path.expanduser("~")
+            to_dir = QFileDialog.getExistingDirectory(self, _("Recuperar en…"), start)
+            if not to_dir:
+                return
+        items = []
+        for (rel, size, mtime, snap, _c), base in picked:
+            if to_dir is None:
+                target = os.path.join(src, rel)
+            else:
+                target = os.path.join(to_dir, os.path.relpath(rel, base) if base else rel)
+            items.append((os.path.join(snap.path, rel), target, size, mtime))
+        self.busy = True
+        self._cancel.clear()
+        self.progress.setRange(0, max(1, len(items)))
+        self.progress.setValue(0)
+        self.progress.show()
+        self.b_cancel.setVisible(len(items) > 20)
+        self.sel_label.setText(_("Recuperando…"))
+        self.result.hide()
+        self.update_actions()
+        to_origin = to_dir is None
+        self._restore_dir = to_dir or src
+
+        def work():
+            step = max(1, len(items) // 200)
+
+            def progress(i, n, _target):
+                if i % step == 0 or i == n:
+                    self.restore_progress.emit(i, n)
+            try:
+                res = versions.restore(items, cancel=self._cancel, progress=progress)
+            except Exception as exc:  # noqa: BLE001
+                res = versions.RestoreResult(failed=[("", str(exc))])
+            self.restored.emit(res, to_origin)
+
+        threading.Thread(target=work, name="recuperar", daemon=True).start()
+
+    def _on_progress(self, i: int, n: int):
+        self.progress.setRange(0, max(1, n))
+        self.progress.setValue(i)
+        self.sel_label.setText(_("Recuperando…  {i} / {n}").format(i=fmt_int(i), n=fmt_int(n)))
+
+    def _on_restored(self, res: versions.RestoreResult, to_origin: bool):
+        self.busy = False
+        self.progress.hide()
+        self.b_cancel.hide()
+        total = res.done + res.same
+        where = _("en el origen") if to_origin else _("en {dir}").format(dir=self._restore_dir)
+        details = []
+        if res.renamed:
+            details.append(_n("{n} se guardó al lado, con «({tag} …)» en el nombre, porque ya había otro archivo "
+                              "distinto con ese nombre", "{n} se guardaron al lado, con «({tag} …)» en el nombre, "
+                              "porque ya había otros archivos distintos con ese nombre", res.renamed).format(
+                n=fmt_int(res.renamed), tag=_("recuperado")))
+        if res.same:
+            details.append(_n("{n} ya estaba igual", "{n} ya estaban iguales", res.same).format(n=fmt_int(res.same)))
+        if to_origin and res.done:
+            details.append(_("pasarán a la copia en la próxima sincronización"))
+        if res.failed:
+            details.append(_n("{n} no se pudo recuperar", "{n} no se pudieron recuperar", len(res.failed)).format(
+                n=fmt_int(len(res.failed))) + ": " + "; ".join(
+                f"{os.path.basename(p) or p}: {m}" for p, m in res.failed[:3]))
+        title = _n("{n} archivo recuperado {where}", "{n} archivos recuperados {where}", total).format(
+            n=fmt_int(total), where=where)
+        kind = "warn" if res.failed or self._cancel.is_set() else "ok"
+        if self._cancel.is_set():
+            title += "  ·  " + _("detenido")
+        text = ". ".join(d[:1].upper() + d[1:] for d in details) + ("." if details else "")
+        first = res.targets[0] if res.targets else None
+        self.result.set(kind, title, text, G.DONE if kind == "ok" else G.WARN,
+                        (_("Mostrar"), lambda: reveal_path(first)) if first else None)
+        self.result.show()
+        self.win._log(title + (("  ·  " + text) if text else ""), C["ok"] if kind == "ok" else C["warn"])
+        if to_origin and res.done:
+            self.win._invalidate_plan()
+        self.reload()
+
+    # ── menús ──
+    def _tree_menu(self, pos: QPoint):
+        if not self.tree.itemAt(pos):
+            return
+        menu = QMenu(self)
+        names = {self.b_restore: _("Recuperar"), self.b_to: _("Recuperar en…"), self.b_open: _("Ver"),
+                 self.b_reveal: _("Mostrar en su carpeta")}
+        for b, text in names.items():
+            a = menu.addAction(b.icon(), text)
+            a.setEnabled(b.isEnabled())
+            a.triggered.connect(b.click)
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _timeline_menu(self, pos: QPoint):
+        it = self.timeline.itemAt(pos)
+        key = it.data(self.ROLE) if it is not None else None
+        snap = self.by_name.get(key) if key else None
+        if snap is None:
+            return
+        menu = QMenu(self)
+        a_open = menu.addAction(glyph_icon(G.OPEN, C["text"], 14), _("Abrir la carpeta de esta fecha"))
+        menu.addSeparator()
+        a_del = menu.addAction(glyph_icon(G.TRASH, C["err"], 14), _("Eliminar estas versiones…"))
+        a_del.setEnabled(not self.busy and self.win._state not in RUNNING)
+        chosen = menu.exec(self.timeline.viewport().mapToGlobal(pos))
+        if chosen is a_open:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(snap.path))
+        elif chosen is a_del:
+            self._delete_snapshot(snap)
+
+    def _delete_snapshot(self, snap: versions.Snapshot):
+        when = day_label(snap.stamp) + " " + snap.stamp.strftime("%H:%M")
+        box = QMessageBox(QMessageBox.Icon.Warning, APP_NAME,
+                          _("¿Eliminar para siempre las versiones de {when}?").format(when=when),
+                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, self)
+        box.setInformativeText(_("Son {n} ({size}). Libera ese espacio en el disco de copia, pero ya no se podrán "
+                                 "recuperar. No se puede deshacer.").format(
+            n=_n("{n} archivo", "{n} archivos", len(snap.files)).format(n=fmt_int(len(snap.files))),
+            size=fmt_bytes(snap.size)))
+        box.setDefaultButton(QMessageBox.StandardButton.No)
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            return
+        meta = self._key[0] if self._key else engine.volume_root(self.win.dst_card.path())
+        self.busy = True
+        self.update_actions()
+        self.stack.setCurrentWidget(self.loading)
+
+        def work():
+            try:
+                versions.delete_snapshot(snap, meta)
+                self.snapshot_removed.emit("")
+            except OSError as exc:
+                self.snapshot_removed.emit(exc.strerror or str(exc))
+
+        threading.Thread(target=work, name="quitar-versiones", daemon=True).start()
+
+    def _on_snapshot_removed(self, error: str):
+        self.busy = False
+        if error:
+            QMessageBox.warning(self, APP_NAME, _("No se pudieron eliminar todas las versiones.\n\n{error}").format(error=error))
+        self.reload(force=bool(error))  # a medias: lo que queda hay que leerlo de nuevo
 
 
 class PairDialog(QDialog):
@@ -3632,7 +4688,7 @@ class MainWindow(QMainWindow):
         self.keep_combo = QComboBox()
         for days, text in KEEP_OPTIONS:
             self.keep_combo.addItem(text, days)
-        opts.body.addWidget(combo_row(_("Conservar versiones"), _("De lo que modificas o borras"), self.keep_combo))
+        opts.body.addWidget(combo_row(_("Conservar versiones"), _("Luego se quitan solas; antes si falta sitio"), self.keep_combo))
         self.threads_spin = QSpinBox()
         self.threads_spin.setRange(1, 32)
         self.threads_spin.valueChanged.connect(self._update_summary)
@@ -3892,7 +4948,8 @@ class MainWindow(QMainWindow):
         self.seg_group = QButtonGroup(self)
         self.seg_buttons = []
         for i, (text, glyph) in enumerate([(_("Carpetas"), G.TREE), (_("Cambios"), G.SYNC),
-                                           (_("Progreso"), G.SPEED), (_("Incidencias"), G.WARN)]):
+                                           (_("Progreso"), G.SPEED), (_("Incidencias"), G.WARN),
+                                           (_("Recuperar"), G.HISTORY)]):
             b = QPushButton(f"  {text}")
             b.setObjectName("seg")
             b.setCheckable(True)
@@ -3915,7 +4972,11 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self._build_changes_page())
         self.stack.addWidget(self._build_progress_page())
         self.stack.addWidget(self._build_issues_page())
+        self.recover = RecoverPage(self)
+        self.stack.addWidget(self.recover)
         self.seg_group.idClicked.connect(self.stack.setCurrentIndex)
+        self.stack.currentChanged.connect(lambda i: self.recover.show_page() if i == PAGE_RECOVER else None)
+        self.keep_combo.currentIndexChanged.connect(lambda *_a: self.recover.mark_stale())
         self.seg_buttons[PAGE_TREE].setChecked(True)
         col.addWidget(self.stack, 1)
         return col
@@ -4236,7 +5297,7 @@ class MainWindow(QMainWindow):
             "src": st.value("src", DEFAULT_SRC), "dst": st.value("dst", DEFAULT_DST),
             "mode": engine.LEGACY_MODES.get(mode, mode),
             "threads": int(st.value("threads", DEFAULT_THREADS)),
-            "keep_days": int(st.value("keep_days", 90)),
+            "keep_days": keep_days_setting(st.value("keep_days", KEEP_DEFAULT)),
             "connect": st.value("connect", "ask"),
             "watch": st.value("watch", "false") == "true",
             "verify": st.value("verify", "true") == "true",
@@ -4589,10 +5650,14 @@ class MainWindow(QMainWindow):
     def _on_src_changed(self):
         self._load_tree()
         self._invalidate_plan()
+        if hasattr(self, "recover"):
+            self.recover.mark_stale()
 
     def _on_dst_changed(self):
         self._adopt_disk()
         self._invalidate_plan()
+        if hasattr(self, "recover"):
+            self.recover.mark_stale()
         if hasattr(self, "cloud_state"):
             self._check_cloud()
 
@@ -4750,6 +5815,8 @@ class MainWindow(QMainWindow):
         scrubbing = running and self.job is not None and self.job.stats.step == "verificando"
         self.btn_cancel.setText(("  " + _("Omitir revisión")) if scrubbing else ("  " + _("Cancelar")))
         self.btn_open.setVisible(not running)
+        if hasattr(self, "recover"):
+            self.recover.update_actions()
         if state == "paused":
             self.btn_pause.setText(("  " + _("Reanudar")))
             self.btn_pause.setIcon(glyph_icon(G.PLAY, C["warn"], 14))
@@ -4827,9 +5894,10 @@ class MainWindow(QMainWindow):
                 self.seg_buttons[PAGE_PROGRESS].click()
                 return True
             # opciones que no cambian el plan: se toman de la pantalla
-            for attr in ("threads", "verify", "scrub_seconds"):
+            for attr in ("threads", "verify", "scrub_seconds", "keep_days"):
                 setattr(self.job, attr, getattr(job, attr))
             job = self.job
+            job.held = False  # antes de arrancar el hilo: la ventana no debe ver la retención anterior
         else:
             if self.job and self.job.phase == "ready":
                 self.job.discard()
@@ -4964,7 +6032,9 @@ class MainWindow(QMainWindow):
         self._last_tick = now
         # al reutilizar un análisis la fase sigue en «ready» hasta que arranca el hilo de copia
         terminal = ("done", "cancelled", "failed") if self._copy_requested else ("ready", "cancelled", "failed")
-        if phase in terminal and not self._finalized:
+        # detenida antes de copiar por un borrado masivo: espera a que se confirme
+        held = self._copy_requested and phase == "ready" and job.held
+        if (phase in terminal or held) and not self._finalized:
             self._finalized = True
             self.timer.stop()
             self._finish(job, phase)
@@ -5048,6 +6118,7 @@ class MainWindow(QMainWindow):
             "moviendo": _("Moviendo archivos renombrados o movidos…  {moves_done} / {moved_files}").format(moves_done=fmt_int(s.moves_done), moved_files=fmt_int(s.moved_files)),
             "versionando": _("Guardando en versiones lo borrado del origen…  {deletes_done} / {del_files}").format(deletes_done=fmt_int(s.deletes_done), del_files=fmt_int(s.del_files)),
             "purgando": _("Quitando versiones más antiguas que el plazo elegido…"),
+            "haciendo sitio": _("Falta espacio: quitando las versiones más antiguas para hacer sitio…"),
             "índice": _("Guardando el índice para que el próximo análisis sea rápido…"),
             "verificando": self._scrub_text(s),
         }.get(s.step, "")
@@ -5243,6 +6314,8 @@ class MainWindow(QMainWindow):
         self.ring.set_busy(False)
         if phase == "ready":
             self._finish_scan(job)
+            if job.held:
+                QTimer.singleShot(120, lambda: self._confirm_mass(job))
         elif phase == "cancelled" and not s.copy_start:
             self.ring.set_text("—", _("análisis interrumpido"), _("CANCELADO"))
             self.banner.set("warn", _("Análisis cancelado"), _("No se ha tocado nada. Pulsa Analizar o Sincronizar "
@@ -5287,6 +6360,15 @@ class MainWindow(QMainWindow):
             self.ring.set_value(0, animate=False)
             self.ring.set_text(fmt_int(s.ops_total), _("cambios por aplicar"), _("ANÁLISIS"))
             self.banner.set("info", _("Análisis completado en {scan}  ·  revisa la pestaña Cambios o pulsa «Sincronizar»").format(scan=fmt_clock(scan, ms=True)), detail, G.CHECK)
+        mass = job.mass_deletion() if s.has_changes else None
+        if mass:
+            what = (_("El origen está vacío: sincronizar dejaría la copia vacía") if mass["empty"] else
+                    _n("Atención: se apartarían {n} archivo de la copia ({pct})",
+                       "Atención: se apartarían {n} archivos de la copia ({pct})", mass["files"]).format(
+                        n=fmt_int(mass["files"]), pct=pct(mass["ratio"])))
+            self.banner.set("warn", what, _("Revisa la lista en Cambios → A versiones. Antes de apartar nada se pide "
+                                            "confirmación.") + "\n" + detail, G.WARN,
+                            (_("Ver la lista"), self._show_mass_list))
         self.t_elapsed.set(fmt_clock(scan, ms=True), _("duración del análisis"))
         eta = estimate_seconds(engine.volume_root(job.dst), s)
         self.t_left.set(fmt_clock(eta) if eta is not None else "—",
@@ -5304,8 +6386,39 @@ class MainWindow(QMainWindow):
         if not s.has_changes and job.phase == "ready":
             self._record_pair(job, copied=False)  # el destino ya era igual que el origen
 
+    def _show_mass_list(self):
+        self.seg_buttons[PAGE_CHANGES].click()
+        self.kind_buttons["d"].click()
+
+    def _confirm_mass(self, job: engine.BackupJob):
+        """La sincronización se paró antes de apartar mucho de la copia: se pregunta qué hacer."""
+        if job is not self.job or job.phase != "ready" or not job.held:
+            return
+        info = job.mass_deletion()
+        if not info:
+            return
+        self._log(_("Sincronización detenida antes de copiar: apartaría {n} archivos ({pct} de la copia). "
+                    "Se pide confirmación.").format(n=fmt_int(info["files"]), pct=pct(info["ratio"])), C["warn"])
+        if self.isHidden() or self.isMinimized():
+            self._show_window()
+        self._notify(_("Sincronización en espera"), _("Iba a apartar muchos archivos de la copia. Confírmalo en la "
+                                                       "ventana."))
+        dlg = MassDeleteDialog(self, job, info)
+        dlg.exec()
+        if job is not self.job or job.phase != "ready":
+            return
+        if dlg.choice == "go":
+            job.allow_mass_delete = True
+            self._log(_("Confirmado: se sincroniza y lo borrado del origen pasa a versiones."), C["warn"])
+            self._start(copy=True)
+        elif dlg.choice == "view":
+            self._show_mass_list()
+        else:
+            self._log(_("No se ha sincronizado: la copia sigue como estaba."), C["muted"])
+
     def _finish_copy(self, job: engine.BackupJob, phase: str):
         s = job.stats
+        self.recover.mark_stale()
         self._render_copy(job, time.perf_counter(), final=True)
         total = s.copy_end - self._op_start
         copy = s.copy_end - s.copy_start
@@ -5325,6 +6438,8 @@ class MainWindow(QMainWindow):
                  _("análisis {scan}").format(scan=fmt_clock(scan, ms=True)), _("copia {time}").format(time=fmt_clock(copy, ms=True))]
         if s.versions_purged:
             parts.append(_("{versions_purged} versiones antiguas retiradas").format(versions_purged=fmt_int(s.versions_purged)))
+        if s.space_freed:
+            parts.append(_("{size} liberados quitando versiones antiguas por falta de espacio").format(size=fmt_bytes(s.space_freed)))
         if job.verify and s.files_done:
             parts.append(_("{verified_copies} copias verificadas con SHA-256").format(verified_copies=fmt_int(s.verified_copies)))
         if s.scrub_files or s.scrub_total:
@@ -6318,6 +7433,82 @@ def selftest() -> int:
             assert (j.stats.new_files, j.stats.moved_files, j.stats.del_files) == (0, 4, 0), \
                 f"mover subcarpetas: {j.stats.new_files} nuevos, {j.stats.moved_files} movidos, {j.stats.del_files} a versiones"
         say("  renombrar y mover carpetas: enteras, a otra subcarpeta, exclusiones y mayúsculas, sin recopiar nada")
+        # borrado masivo: se detiene antes de copiar y pide confirmación; versiones: se recuperan sin pisar nada
+        assert [d for d, _t in KEEP_OPTIONS] == [7, 30, 60] and keep_days_setting(0) == 60             and keep_days_setting("365") == 60 and keep_days_setting(None) == KEEP_DEFAULT, "plazos de versiones"
+        with tempfile.TemporaryDirectory() as mass:
+            msrc, mdst, mvol = (os.path.join(mass, x) for x in ("src", "dst", "vol"))
+            os.makedirs(mvol)
+            for d in ("a", "b"):
+                for i in range(60):
+                    p = os.path.join(msrc, d, f"f{i}.txt")
+                    os.makedirs(os.path.dirname(p), exist_ok=True)
+                    with open(p, "w") as fh:
+                        fh.write(d * (i + 1))
+
+            def mass_run(allow=False):
+                j = engine.BackupJob(msrc, mdst, [], [], meta_root=mvol, scrub_seconds=0)
+                j.allow_mass_delete = allow
+                j.run()
+                return j
+
+            assert mass_run().phase == "done"
+            shutil.rmtree(os.path.join(msrc, "a"))
+            time.sleep(1.1)  # otra fecha de versiones
+            j = mass_run()
+            info = j.mass_deletion()
+            assert j.held and j.phase == "ready" and info and info["folders"][0][:2] == ("a", 60), "borrado masivo sin parar"
+            assert len(os.listdir(os.path.join(mdst, "a"))) == 60, "se apartó sin confirmar"
+            j.allow_mass_delete = True
+            j.run()
+            assert j.phase == "done" and j.stats.deletes_done == 60 and not os.path.exists(os.path.join(mdst, "a"))
+            with open(os.path.join(msrc, "b", "f1.txt"), "w") as fh:
+                fh.write("cambiado")
+            time.sleep(1.1)
+            assert mass_run().stats.versions_saved == 1
+            snaps = versions.load(mvol, mdst)
+            assert [len(x.files) for x in snaps] == [1, 60], [len(x.files) for x in snaps]
+            items = [(os.path.join(x.path, rel), os.path.join(msrc, rel), size, mt)
+                     for x in snaps for rel, size, mt in x.files]
+            res = versions.restore(items)
+            assert (res.restored, res.renamed, res.same, res.failed) == (60, 1, 0, []), vars(res)
+            with open(os.path.join(msrc, "b", "f1.txt")) as fh:
+                assert fh.read() == "cambiado", "recuperar sobrescribió el archivo actual"
+            assert versions.restore(items).same == 60, "recuperar dos veces duplica"
+            assert all(os.path.exists(i[0]) for i in items), "recuperar movió la versión"
+            # la página «Recuperar» lee las fechas y recupera desde la ventana
+            win.recover.target = lambda: (mvol, os.path.normpath(mdst), msrc)
+            user_src = win.src_card.path()  # al cerrar se guardan los ajustes: se deja como estaba
+            win.src_card.set_path(msrc)
+            win.recover.reload()
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline and win.recover.stack.currentWidget() is win.recover.loading:
+                app.processEvents()
+                time.sleep(0.05)
+            app.processEvents()
+            assert win.recover.timeline.count() == 4 and win.recover.tree.topLevelItemCount() == 2,                 f"página Recuperar: {win.recover.timeline.count()} filas"
+            shutil.rmtree(os.path.join(msrc, "a"))
+            win.recover.reload()
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline and not win.recover.kind_buttons["d"].text().endswith("60"):
+                app.processEvents()
+                time.sleep(0.05)
+            folder = next(win.recover.tree.topLevelItem(i) for i in range(2)
+                          if win.recover.tree.topLevelItem(i).text(0) == "a")
+            folder.setSelected(True)
+            win.recover._restore()
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline and win.recover.busy:
+                app.processEvents()
+                time.sleep(0.05)
+            assert len(os.listdir(os.path.join(msrc, "a"))) == 60, "la página no recuperó la carpeta"
+            win.recover.target = types.MethodType(RecoverPage.target, win.recover)
+            win.src_card.set_path(user_src)
+            # origen vacío: también se detiene
+            shutil.rmtree(msrc)
+            os.makedirs(msrc)
+            j = mass_run()
+            assert j.held and j.mass_deletion()["empty"], "origen vacío sin parar"
+        say("  borrado masivo: se detiene y pide confirmación · recuperar: sin sobrescribir, sin duplicar")
         pair = PairDialog(win)
         pair.accept()  # pasa por QDialog.done(): si algo lo tapa, el resultado no cambia
         assert pair.result() == QDialog.DialogCode.Accepted, "el diálogo «Conectar con mi nube» no se cierra"
