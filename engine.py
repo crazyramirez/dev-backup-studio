@@ -111,10 +111,26 @@ def lp(path: str) -> str:
     return "\\\\?\\" + path
 
 
+# Sistemas de archivos de Linux que distinguen mayúsculas. Cualquier otro (exFAT, FAT, NTFS, carpetas
+# de red…) se trata como en Windows y macOS: así un cambio de mayúsculas nunca borra el archivo.
+CASE_SENSITIVE_FS = {"ext2", "ext3", "ext4", "btrfs", "xfs", "zfs", "f2fs", "tmpfs", "reiserfs", "jfs",
+                     "bcachefs", "nilfs2", "overlay"}
+_case_sensitive = not (IS_WIN or IS_MAC)
+
+
 def fold(name: str) -> str:
     """Clave para comparar nombres. Los discos de Windows (NTFS, exFAT) y de macOS (APFS, exFAT) no
-    distinguen mayúsculas: «lib» y «Lib» son la misma carpeta. En Linux sí son distintas."""
-    return os.path.normcase(name).lower() if (IS_WIN or IS_MAC) else name
+    distinguen mayúsculas: «lib» y «Lib» son la misma carpeta. En Linux depende del destino."""
+    return name if _case_sensitive else os.path.normcase(name).lower()
+
+
+def set_case_mode(dst: str) -> bool:
+    """Linux: compara nombres distinguiendo mayúsculas solo si el destino lo hace (ext4, btrfs…).
+    Devuelve True si se distinguen."""
+    global _case_sensitive
+    if not (IS_WIN or IS_MAC) and dst:
+        _case_sensitive = _unix_fs_type(volume_root(dst)).lower() in CASE_SENSITIVE_FS
+    return _case_sensitive
 
 
 def norm_rel(rel: str) -> str:
@@ -147,6 +163,9 @@ def volume_root(path: str) -> str:
     «/Volumes/X» en macOS."""
     if IS_WIN:
         return os.path.splitdrive(os.path.abspath(path))[0].rstrip("\\/") + "\\"
+    share = gvfs_share(path)
+    if share:
+        return share
     p = os.path.abspath(path)
     while not os.path.ismount(p):
         parent = os.path.dirname(p)
@@ -154,6 +173,24 @@ def volume_root(path: str) -> str:
             break
         p = parent
     return p
+
+
+def gvfs_share(path: str) -> str | None:
+    """Linux: carpeta de red abierta desde el gestor de archivos (GVFS). Todas cuelgan de un solo
+    punto de montaje, así que la raíz de cada recurso es su carpeta en él:
+    /run/user/1000/gvfs/smb-share:server=nube.local,share=dev_backup_studio/…"""
+    if IS_WIN or IS_MAC:
+        return None
+    parts = os.path.abspath(path).split(os.sep)
+    if len(parts) >= 6 and parts[1] == "run" and parts[2] == "user" and parts[4] == "gvfs" and ":" in parts[5]:
+        return os.sep.join(parts[:6])
+    return None
+
+
+def _gvfs_host(share: str) -> str:
+    """«smb-share:server=nube.local,share=x,user=y» → «nube.local»."""
+    fields = os.path.basename(share).split(":", 1)[1].split(",")
+    return dict(f.split("=", 1) for f in fields if "=" in f).get("server", "")
 
 
 def rel_to_volume(path: str) -> str:
@@ -174,9 +211,19 @@ def volume_present(path: str) -> bool:
         if host is not None and not host_reachable(host):
             return False
         return os.path.exists(root)
+    share = gvfs_share(path)
+    if share:
+        host = network_host(share)
+        return (host is None or host_reachable(host)) and os.path.isdir(share)
     parts = os.path.abspath(path).split(os.sep)
-    if len(parts) > 2 and parts[1] in ("Volumes", "media", "mnt"):
-        top = os.sep.join(parts[:3 if parts[1] != "media" else 4])
+    # /Volumes/X y /mnt/X; /media/usuario/X (Ubuntu, Debian); /run/media/usuario/X (Fedora, Arch)
+    depth = {"Volumes": 3, "mnt": 3, "media": 4}.get(parts[1] if len(parts) > 1 else "", 0)
+    if len(parts) > 3 and parts[1] == "run" and parts[2] == "media":
+        depth = 5
+    elif depth == 4 and len(parts) > 2 and os.path.ismount(os.sep.join(parts[:3])):
+        depth = 3  # /media/usb0 sin carpeta de usuario
+    if depth and len(parts) >= depth:
+        top = os.sep.join(parts[:depth])
         host = network_host(top)
         if host is not None and not host_reachable(host):
             return False
@@ -200,6 +247,7 @@ def vol_name(root: str) -> str:
 
 NET_FS = {"SMBFS", "CIFS", "SMB3", "SMB2", "NFS", "NFS4", "AFPFS", "WEBDAV"}
 SMB_PORT = 445
+GVFS_NET = {"smb-share", "sftp", "afp-volume", "ftp", "dav", "davs", "nfs"}  # Linux: tipos de GVFS en red
 _NET_PROBE_TIMEOUT = 1.0
 _NET_CACHE_S = 3.0
 _net_cache: dict[str, tuple[float, bool]] = {}
@@ -240,6 +288,12 @@ def network_host(root: str) -> str | None:
                 size = ctypes.c_ulong(len(buf))
                 if _WNetGetConnectionW(root[:2], buf, ctypes.byref(size)) == 0:
                     host = _unc_host(buf.value)
+    elif gvfs_share(root):
+        share = gvfs_share(root)
+        kind = os.path.basename(share).split(":", 1)[0]
+        if kind in GVFS_NET:  # no un móvil (mtp:) ni una cámara (gphoto2:)
+            # solo de SMB se sabe el puerto que hay que probar; las demás se miran sin comprobar
+            host = _gvfs_host(share) if kind == "smb-share" else ""
     else:
         line = _unix_mount_line(root)
         if line and _unix_fs_type(root).upper() in NET_FS:
@@ -395,7 +449,9 @@ def mounted_volumes(network: bool = True, extra=()) -> set[str]:
         if network:
             found |= {r for r in extra if volume_present(r)}
         return found
-    bases = ["/Volumes"] if IS_MAC else [f"/media/{os.environ.get('USER', '')}", "/media", "/mnt"]
+    user = os.environ.get("USER", "")
+    bases = ["/Volumes"] if IS_MAC else [f"/run/media/{user}", f"/media/{user}", "/media", "/mnt",
+                                         f"/run/user/{os.getuid()}/gvfs"]
     found = set()
     for base in bases:
         try:
@@ -406,7 +462,7 @@ def mounted_volumes(network: bool = True, extra=()) -> set[str]:
                 host = network_host(p)
                 if host is not None and not (network and host_reachable(host)):
                     continue  # un recurso de red caído puede colgar ismount
-                if os.path.ismount(p):
+                if os.path.ismount(p) or gvfs_share(p):
                     found.add(p)
         except OSError:
             pass
@@ -982,6 +1038,7 @@ class BackupJob:
                  verify: bool = True, scrub_seconds: int = 300):
         self.src = os.path.normpath(src)
         self.dst = os.path.normpath(dst)
+        set_case_mode(self.dst)
         self.patterns = sorted({p.strip().lower() for p in patterns if p.strip()})
         self.excluded = {norm_rel(p) for p in excluded}
         self.mode = LEGACY_MODES.get(mode, mode)
@@ -1207,9 +1264,17 @@ class BackupJob:
                 self._error(sdir, exc)
                 continue
             subdirs = []
+            taken = set()
             for entry in entries:
                 name = entry.name
                 key = fold(name)
+                if key in taken:
+                    # Linux: «Foto.jpg» y «foto.jpg» no caben juntos en un destino que no distingue
+                    # mayúsculas; se avisa como error para que no se pierda en silencio
+                    self._error(os.path.join(sdir, name), OSError(
+                        _("no se copia: el destino no distingue mayúsculas y ya hay otro con el mismo nombre")))
+                    continue
+                taken.add(key)
                 try:
                     if is_link(entry):
                         s.links_skipped += 1

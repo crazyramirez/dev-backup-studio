@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=DEV Backup Studio
+Comment=Folder backup and sync
+Exec=dev-backup-studio
+Icon=dev-backup-studio
+Terminal=false
+Categories=Utility;System;Archiving;
+Keywords=backup;sync;copia;
+StartupWMClass=DEV Backup Studio

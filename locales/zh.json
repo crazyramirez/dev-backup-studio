@@ -768,6 +768,12 @@
   "{size} liberados quitando versiones antiguas por falta de espacio": "因空间不足移除旧版本，释放了 {size}",
   "demasiados archivos recuperados con el mismo nombre": "同名的已恢复文件过多",
   "la copia no tiene el tamaño del original": "副本大小与原文件不一致",
-  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "选择要恢复的内容  ·  按住 Ctrl 或 Shift 点击可多选"
+  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "选择要恢复的内容  ·  按住 Ctrl 或 Shift 点击可多选",
+  "Copia de seguridad y sincronización de carpetas": "文件夹备份与同步",
+  "Se inicia con la sesión, en la bandeja": "登录时启动，驻留系统托盘",
+  "El equipo no se suspende por inactividad (la pantalla sí puede apagarse) y el disco USB no se duerme. Si se suspende igualmente, la copia espera al disco y sigue sola.": "电脑不会因闲置而挂起（屏幕仍可关闭），USB 磁盘也不会休眠。如果仍然挂起，备份会等待磁盘并自动继续。",
+  "no se copia: el destino no distingue mayúsculas y ya hay otro con el mismo nombre": "未复制：目标位置不区分大小写，且已有同名项目",
+  "inhibición de systemd": "systemd 抑制锁",
+  "inhibición de systemd, solo inactividad": "systemd 抑制锁，仅闲置"
  }
 }

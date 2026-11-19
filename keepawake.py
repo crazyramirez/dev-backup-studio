@@ -3,7 +3,8 @@ Mantiene despiertos el equipo y el disco de copia mientras dura una operación.
 
 - Equipo. Windows: solicitud de energía con motivo (PowerCreateRequest), visible en
   `powercfg /requests`. macOS: aserciones de IOKit, como `caffeinate -i -m -s`, visibles
-  en `pmset -g assertions`. La pantalla sí puede apagarse.
+  en `pmset -g assertions`. Linux: inhibición de systemd-logind (`systemd-inhibit`), visible
+  en `systemd-inhibit --list`. La pantalla sí puede apagarse.
 - Disco. Ni el sistema ni el firmware de un disco USB saben que una copia sigue en marcha
   si el disco lleva un rato sin recibir escrituras (p. ej. mientras se analiza el origen),
   y lo apagan. Un latido escribe unos bytes en `.devbackup/latido` y los fuerza hasta el
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -25,6 +27,7 @@ from i18n import N_
 
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
 
 BEAT_SECONDS = 30.0   # sin actividad en el disco durante este tiempo → latido
 BEAT_FILE = "latido"
@@ -162,6 +165,44 @@ class _MacSystem:
             self._proc = None
 
 
+# ── equipo: Linux ────────────────────────────────────────────────────────────
+
+class _LinuxSystem:
+    """Sin suspensión por inactividad ni manual mientras viva el proceso; si la app muere, el
+    `tail --pid` termina y systemd quita la inhibición solo."""
+
+    def __init__(self, reason: str):
+        tool = shutil.which("systemd-inhibit")
+        if not tool:
+            raise OSError("systemd-inhibit no está disponible")
+        # Bloquear la suspensión solo se permite a la sesión activa del escritorio (polkit); si se
+        # niega (sesión remota, WSL…), al menos que la inactividad no cuente.
+        err = ""
+        for what in ("sleep:idle", "idle"):
+            self._proc = subprocess.Popen(
+                [tool, f"--what={what}", "--who=DEV Backup Studio", f"--why={reason[:200]}", "--mode=block",
+                 "tail", f"--pid={os.getpid()}", "-f", "/dev/null"],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)
+            try:
+                self._proc.wait(timeout=0.5)  # si no se puede (sin permiso, sin logind), sale enseguida
+            except subprocess.TimeoutExpired:
+                self._proc.stderr.close()
+                self.method = (N_("inhibición de systemd") if what == "sleep:idle"
+                               else N_("inhibición de systemd, solo inactividad"))
+                return
+            err = (self._proc.stderr.read() or b"").decode("utf-8", "replace").strip()
+            self._proc.stderr.close()
+        raise OSError(err or f"systemd-inhibit terminó con {self._proc.returncode}")
+
+    def release(self) -> None:
+        if self._proc.poll() is None:
+            self._proc.terminate()
+            try:
+                self._proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
+
+
 # ── disco: latido ────────────────────────────────────────────────────────────
 
 class _Heartbeat(threading.Thread):
@@ -242,6 +283,8 @@ class Guard:
                 self._system = _WindowsSystem(reason)
             elif IS_MAC:
                 self._system = _MacSystem(reason)
+            elif IS_LINUX:
+                self._system = _LinuxSystem(reason)
         except OSError as exc:
             self._system = None
             self.error = str(exc)

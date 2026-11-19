@@ -799,6 +799,12 @@
   "{size} liberados quitando versiones antiguas por falta de espacio": "{size} freed by removing old versions for lack of space",
   "demasiados archivos recuperados con el mismo nombre": "too many recovered files with the same name",
   "la copia no tiene el tamaño del original": "the copy doesn't have the original's size",
-  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "Choose what to recover  ·  Ctrl or Shift + click for several"
+  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "Choose what to recover  ·  Ctrl or Shift + click for several",
+  "Copia de seguridad y sincronización de carpetas": "Folder backup and sync",
+  "Se inicia con la sesión, en la bandeja": "Starts at login, in the system tray",
+  "El equipo no se suspende por inactividad (la pantalla sí puede apagarse) y el disco USB no se duerme. Si se suspende igualmente, la copia espera al disco y sigue sola.": "Your computer won't suspend when idle (the display can still turn off) and the USB drive won't spin down. If it suspends anyway, the backup waits for the drive and resumes by itself.",
+  "no se copia: el destino no distingue mayúsculas y ya hay otro con el mismo nombre": "not copied: the destination doesn't distinguish upper and lower case and another item already has the same name",
+  "inhibición de systemd": "systemd inhibitor",
+  "inhibición de systemd, solo inactividad": "systemd inhibitor, idle only"
  }
 }

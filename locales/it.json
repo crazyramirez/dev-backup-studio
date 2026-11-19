@@ -799,6 +799,12 @@
   "{size} liberados quitando versiones antiguas por falta de espacio": "{size} liberati togliendo versioni vecchie per mancanza di spazio",
   "demasiados archivos recuperados con el mismo nombre": "troppi file recuperati con lo stesso nome",
   "la copia no tiene el tamaño del original": "la copia non ha la dimensione dell'originale",
-  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "Scegli cosa recuperare  ·  Ctrl o Maiusc + clic per più elementi"
+  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "Scegli cosa recuperare  ·  Ctrl o Maiusc + clic per più elementi",
+  "Copia de seguridad y sincronización de carpetas": "Backup e sincronizzazione di cartelle",
+  "Se inicia con la sesión, en la bandeja": "Si avvia all'accesso, nell'area di notifica",
+  "El equipo no se suspende por inactividad (la pantalla sí puede apagarse) y el disco USB no se duerme. Si se suspende igualmente, la copia espera al disco y sigue sola.": "Il computer non va in sospensione per inattività (lo schermo può spegnersi) e il disco USB non va in stop. Se va comunque in sospensione, il backup attende il disco e riprende da solo.",
+  "no se copia: el destino no distingue mayúsculas y ya hay otro con el mismo nombre": "non copiato: la destinazione non distingue maiuscole e minuscole e c'è già un altro elemento con lo stesso nome",
+  "inhibición de systemd": "inibizione di systemd",
+  "inhibición de systemd, solo inactividad": "inibizione di systemd, solo inattività"
  }
 }

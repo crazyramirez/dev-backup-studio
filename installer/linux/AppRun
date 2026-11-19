@@ -1,0 +1,7 @@
+#!/bin/sh
+# Punto de entrada del AppImage: abre la app que hay dentro.
+HERE="$(dirname "$(readlink -f "$0")")"
+# X11 primero (también vale en Wayland vía XWayland): barra de título y bandeja del sistema en todos
+# los escritorios. Si no hay X, Wayland. Se puede forzar con QT_QPA_PLATFORM.
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb;wayland}"
+exec "$HERE/usr/lib/dev-backup-studio/DEV Backup Studio" "$@"

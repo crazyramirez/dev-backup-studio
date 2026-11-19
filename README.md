@@ -2,7 +2,7 @@
   <img src="docs/header.png" alt="DEV Backup Studio — tus proyectos, siempre a salvo" width="100%">
 </p>
 
-Copia de seguridad y sincronización de carpetas de proyectos a un disco externo, para Windows y macOS.
+Copia de seguridad y sincronización de carpetas de proyectos a un disco externo, para Windows, macOS y Linux.
 Detecta qué ha cambiado, mueve lo renombrado en vez de volver a copiarlo, guarda versiones de lo que
 borras o modificas, comprueba cada copia con SHA-256 y te pregunta si quieres sincronizar en cuanto
 conectas el disco.
@@ -15,9 +15,17 @@ En [Releases](https://github.com/crazyramirez/dev-backup-studio/releases/latest)
 |---|---|---|
 | Windows 10/11 (64 bits) | `DEV-Backup-Studio-Setup-x.y.z.exe` | Asistente de instalación. Por defecto se instala para tu usuario, sin pedir permisos de administrador; crea el acceso en el menú Inicio (y en el escritorio si lo marcas) y se desinstala desde *Configuración → Aplicaciones*. |
 | macOS 12+ (Apple Silicon) | `DEV-Backup-Studio-x.y.z-macOS.dmg` | Abre el `.dmg` y arrastra la app a *Aplicaciones*. |
+| Linux x86_64 (Ubuntu 22.04+, Debian 12+, Fedora 36+…) | `DEV-Backup-Studio-x.y.z-x86_64.AppImage` | Un solo archivo, sin instalar: guárdalo donde quieras (por ejemplo `~/Aplicaciones`), dale permiso de ejecución (*Propiedades → Permitir ejecutar*, o `chmod +x`) y ábrelo. Al abrirlo se añade solo al menú de aplicaciones. |
 
 Para actualizar, instala la versión nueva encima: si la app está abierta (también en la bandeja), el
-asistente pide cerrarla antes. Los ajustes, índices y copias se conservan, también al desinstalar.
+asistente pide cerrarla antes. Los ajustes, índices y copias se conservan, también al desinstalar. La
+app avisa cuando hay una versión nueva y, si aceptas, se actualiza sola (en Linux sustituye el
+`.AppImage` donde esté).
+
+En Linux, la bandeja del sistema funciona en KDE, XFCE, Cinnamon, MATE y Ubuntu; en GNOME sin
+modificar hace falta la extensión *AppIndicator*. Sin bandeja, la app arranca con la sesión minimizada.
+Para quitarla: borra el `.AppImage`, `~/.local/share/applications/dev-backup-studio.desktop` y, si lo
+activaste, `~/.config/autostart/dev-backup-studio.desktop`.
 
 Las aplicaciones no están firmadas con un certificado de desarrollador, así que el sistema avisa la
 primera vez:
@@ -67,7 +75,8 @@ primera vez:
   papelera (`$RECYCLE.BIN`), `System Volume Information` y las carpetas de sistema de macOS.
 - **Copia también en una carpeta de red.** El destino puede ser una carpeta compartida de otro equipo
   de casa, por ejemplo la carpeta `DEV_Backup_Studio` de [Personal Cloud Storage](#juntos-con-personal-cloud-storage): una unidad de red (`Z:`) o la
-  ruta `\\nube.local\DEV_Backup_Studio\MiPC` en Windows, o el recurso montado en `/Volumes` en macOS. Antes de
+  ruta `\\nube.local\DEV_Backup_Studio\MiPC` en Windows, el recurso montado en `/Volumes` en macOS o una carpeta
+  de red ya montada en Linux. Antes de
   tocarla comprueba en un segundo que el servidor responde, así que un servidor apagado no deja la app
   esperando. Al volver a la red se ofrece sincronizar, como al conectar el disco.
 - **Se conecta a Personal Cloud Storage con un código.** *Conectar con mi nube…* encuentra la nube en
@@ -75,7 +84,8 @@ primera vez:
   solo: no hay que escribir direcciones ni contraseñas.
 - **No deja que nada pare la copia.** Mientras analiza o sincroniza, el equipo no se suspende por
   inactividad y el disco USB no se duerme. Apagar o reiniciar pide confirmación: en Windows aparece
-  «Copia de seguridad en curso», y en macOS lo pide la propia app. Si el equipo se suspende igualmente
+  «Copia de seguridad en curso», y en macOS lo pide la propia app (en Linux se usa `systemd-inhibit`
+  para no suspender). Si el equipo se suspende igualmente
   o el disco se desconecta, la copia espera y sigue sola sin dar nada por fallido. Se desactiva en
   *Energía*.
 - **Te recuerda copiar.** Apunta cada copia que haces (origen y disco) y, si pasan los días que elijas
@@ -151,7 +161,8 @@ cambiado. Cada 7 días, o si cambia la configuración, se lee el destino entero.
   (`disco.json`), el historial de copias, las versiones y `latido`, el archivo diminuto que mantiene
   despierto el disco.
 - **En el equipo**: ajustes (con las copias habituales de los recordatorios), índices y registros en
-  `%APPDATA%\DEV Backup Studio` (Windows) o `~/Library/Application Support/DEV Backup Studio` (macOS).
+  `%APPDATA%\DEV Backup Studio` (Windows), `~/Library/Application Support/DEV Backup Studio` (macOS) o
+  `~/.config/DEV Backup Studio` (Linux).
 
 ## Ejecutar desde el código
 
@@ -168,11 +179,13 @@ verificación, movidos y reparación) y deja el resultado en `selftest.log`.
 Al publicar una etiqueta `v*` (que debe coincidir con `APP_VERSION` en `backup_studio.py` y tener su
 sección en `CHANGELOG.md`, de donde salen las notas de la versión), GitHub Actions:
 
-1. compila la app con PyInstaller en Windows y macOS y ejecuta la autoprueba sobre cada una;
+1. compila la app con PyInstaller en Windows, macOS y Linux y ejecuta la autoprueba sobre cada una;
 2. en Windows crea el instalador con Inno Setup (`installer/windows.iss`), lo instala sin ventanas,
    repite la autoprueba con la app instalada y la desinstala;
 3. en macOS empaqueta la `.app` en un `.dmg`;
-4. publica la versión con el instalador y el `.dmg`.
+4. en Linux (Ubuntu 22.04) crea el `.AppImage` (`installer/linux/build-appimage.sh`) y repite la
+   autoprueba con él;
+5. publica la versión con el instalador, el `.dmg` y el `.AppImage`.
 
 ```bash
 git tag v1.8.0
@@ -188,4 +201,9 @@ de la app: `python tools/make_tour.py` (Windows; monta datos de ejemplo con `sub
 - Una copia en un solo disco no protege de un incendio o un robo: para eso hace falta además una copia
   fuera de casa.
 - Las versiones guardan el archivo completo (no hay deduplicación por bloques como en restic).
-- La versión de macOS se compila para Apple Silicon.
+- La versión de macOS se compila para Apple Silicon y la de Linux para x86_64.
+- En Linux, *Conectar con mi nube…* todavía no monta la carpeta de red: hay que montarla antes (desde
+  el gestor de archivos, `smb://nube.local/DEV_Backup_Studio`) y elegirla como destino.
+- Linux distingue mayúsculas y los discos FAT, exFAT y NTFS no: si en una misma carpeta hay
+  `Foto.jpg` y `foto.jpg` y el destino es uno de esos discos, solo se copia uno y el otro aparece como
+  error.

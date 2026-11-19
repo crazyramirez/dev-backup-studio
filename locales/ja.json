@@ -768,6 +768,12 @@
   "{size} liberados quitando versiones antiguas por falta de espacio": "容量不足のため古いバージョンを削除して {size} 空けました",
   "demasiados archivos recuperados con el mismo nombre": "同じ名前の復元ファイルが多すぎます",
   "la copia no tiene el tamaño del original": "コピーのサイズが元のファイルと一致しません",
-  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "復元するものを選択  ·  複数は Ctrl または Shift + クリック"
+  "Elige qué recuperar  ·  Ctrl o Mayús + clic para varios": "復元するものを選択  ·  複数は Ctrl または Shift + クリック",
+  "Copia de seguridad y sincronización de carpetas": "フォルダーのバックアップと同期",
+  "Se inicia con la sesión, en la bandeja": "ログイン時にタスクトレイで起動",
+  "El equipo no se suspende por inactividad (la pantalla sí puede apagarse) y el disco USB no se duerme. Si se suspende igualmente, la copia espera al disco y sigue sola.": "コンピューターはアイドル状態でもサスペンドせず（画面はオフになることがあります）、USB ディスクもスリープしません。それでもサスペンドした場合、バックアップはディスクを待って自動で再開します。",
+  "no se copia: el destino no distingue mayúsculas y ya hay otro con el mismo nombre": "コピーしません：コピー先は大文字と小文字を区別せず、同じ名前の項目がすでにあります",
+  "inhibición de systemd": "systemd の抑止",
+  "inhibición de systemd, solo inactividad": "systemd の抑止（アイドルのみ）"
  }
 }

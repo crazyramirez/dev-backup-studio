@@ -1,5 +1,23 @@
 # Novedades
 
+## 2.1.0
+
+- **Versión para Linux.** Nuevo `DEV-Backup-Studio-x.y.z-x86_64.AppImage`: un solo archivo que funciona
+  sin instalar en Ubuntu 22.04+, Debian 12+, Fedora 36+ y similares.
+  - Al abrirlo se añade al menú de aplicaciones con su icono; si lo mueves, se corrige solo.
+  - *Iniciar con la sesión* y la bandeja del sistema funcionan igual que en Windows y macOS. En un
+    escritorio sin bandeja (GNOME sin la extensión *AppIndicator*) arranca minimizado.
+  - Se actualiza sola: descarga el `.AppImage` nuevo, comprueba su SHA-256 y sustituye el archivo.
+  - Mientras copia, el equipo no se suspende (`systemd-inhibit`) y el disco USB no se duerme.
+  - Reconoce los discos en `/media`, `/run/media` y `/mnt`, y las carpetas de red abiertas desde el
+    gestor de archivos (`smb://…`).
+  - En discos FAT, exFAT, NTFS y carpetas de red compara los nombres sin distinguir mayúsculas, como
+    Windows y macOS, para que renombrar `foto.jpg` a `Foto.jpg` nunca borre nada. Si dos archivos solo
+    se diferencian en las mayúsculas, avisa en vez de pisar uno con otro.
+  - *Mostrar* abre el gestor de archivos con el archivo seleccionado.
+  - *Conectar con mi nube…* llegará en una versión próxima; mientras, monta la carpeta desde el gestor
+    de archivos y elígela como destino.
+
 ## 2.0.2
 
 - **Transcurrido y Restante siempre en `hh:mm:ss`.** Al terminar el análisis, Transcurrido ya no

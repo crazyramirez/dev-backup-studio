@@ -58,11 +58,12 @@ import versions
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.0.2"
+APP_VERSION = "2.1.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
 
 
 def _data_dir() -> str:
@@ -261,9 +262,11 @@ def pick_fonts() -> None:
         return next((n for n in names if n in families), names[-1])
 
     FONT.update(
-        ui=pick("Segoe UI Variable Text", "Segoe UI", "SF Pro Text", "Inter", system),
-        display=pick("Segoe UI Variable Display", "Segoe UI", "SF Pro Display", "Inter", system),
-        mono=pick("Cascadia Mono", "Cascadia Code", "SF Mono", "Menlo", "Consolas", fixed),
+        ui=pick("Segoe UI Variable Text", "Segoe UI", "SF Pro Text", "Inter", "Ubuntu", "Noto Sans", "Cantarell", system),
+        display=pick("Segoe UI Variable Display", "Segoe UI", "SF Pro Display", "Inter", "Ubuntu", "Noto Sans",
+                     "Cantarell", system),
+        mono=pick("Cascadia Mono", "Cascadia Code", "SF Mono", "Menlo", "Consolas", "JetBrains Mono", "Ubuntu Mono",
+                  "DejaVu Sans Mono", fixed),
     )
     cjk = {"zh": ("Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC"),
            "ja": ("Yu Gothic UI", "Meiryo UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP")}
@@ -1719,6 +1722,13 @@ INSTANCE = "DevBackupStudio-" + getpass.getuser()
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "DEV Backup Studio"
 LAUNCH_AGENT = os.path.expanduser("~/Library/LaunchAgents/com.crazyramirez.devbackupstudio.plist")
+# Linux (freedesktop): arranque con la sesión, entrada del menú de aplicaciones e icono
+DESKTOP_ID = "dev-backup-studio"
+_XDG_CONFIG = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+_XDG_DATA = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+AUTOSTART_DESKTOP = os.path.join(_XDG_CONFIG, "autostart", DESKTOP_ID + ".desktop")
+MENU_DESKTOP = os.path.join(_XDG_DATA, "applications", DESKTOP_ID + ".desktop")
+MENU_ICON = os.path.join(_XDG_DATA, "icons", "hicolor", "256x256", "apps", DESKTOP_ID + ".png")
 
 
 def fmt_ago(iso: str | None) -> str:
@@ -1738,14 +1748,73 @@ def fmt_ago(iso: str | None) -> str:
     return _("ayer") if days == 1 else _n("hace {n} día", "hace {n} días", days).format(n=days)
 
 
-def autostart_command() -> list[str]:
+def app_command() -> list[str]:
+    """Orden que abre la app: el .AppImage en Linux (sys.executable está en un montaje temporal)."""
     if FROZEN:
-        return [sys.executable, "--tray"]
+        return [updater.appimage_path() or sys.executable]
     exe = sys.executable
     if IS_WIN:
         pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
         exe = pyw if os.path.exists(pyw) else exe
-    return [exe, os.path.join(APP_DIR, "backup_studio.py"), "--tray"]
+    return [exe, os.path.join(APP_DIR, "backup_studio.py")]
+
+
+def autostart_command() -> list[str]:
+    return app_command() + ["--tray"]
+
+
+def _desktop_exec(args: list[str]) -> str:
+    """Línea Exec= de un archivo .desktop: entre comillas lo que lo necesite (especificación freedesktop)."""
+    special = set(" \t\n\"'\\><~|&;$*?#()`")
+    out = []
+    for a in args:
+        a = a.replace("%", "%%")
+        if a and not special.intersection(a):
+            out.append(a)
+            continue
+        inner = "".join("\\" + c if c in "\"`$\\" else c for c in a)
+        out.append(('"' + inner + '"').replace("\\", "\\\\"))  # y la barra se escapa otra vez en el valor
+    return " ".join(out)
+
+
+def _desktop_entry(args: list[str], **extra: str) -> str:
+    lines = ["[Desktop Entry]", "Type=Application", f"Name={APP_NAME}",
+             "Comment=" + _("Copia de seguridad y sincronización de carpetas"),
+             f"Exec={_desktop_exec(args)}", f"Icon={DESKTOP_ID}", "Terminal=false",
+             "Categories=Utility;System;Archiving;", f"StartupWMClass={APP_NAME}"]
+    lines += [f"{k.replace('_', '-')}={v}" for k, v in extra.items()]
+    return "\n".join(lines) + "\n"
+
+
+def _write_if_changed(path: str, text: str) -> None:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            if fh.read() == text:
+                return
+    except OSError:
+        pass
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.replace(tmp, path)
+
+
+def install_linux_desktop() -> None:
+    """Linux: entrada en el menú de aplicaciones con su icono, apuntando a donde está ahora el
+    .AppImage (si se mueve, se corrige al abrirlo). También pone al día el arranque con la sesión."""
+    if not IS_LINUX:
+        return
+    try:
+        if not os.path.exists(MENU_ICON):
+            os.makedirs(os.path.dirname(MENU_ICON), exist_ok=True)
+            app_icon_pixmap(256).save(MENU_ICON, "PNG")
+        if FROZEN and updater.appimage_path():
+            _write_if_changed(MENU_DESKTOP, _desktop_entry(app_command(), Keywords="backup;sync;copia;"))
+        if os.path.exists(AUTOSTART_DESKTOP):
+            set_autostart(True)
+    except OSError:
+        pass
 
 
 def set_autostart(on: bool) -> None:
@@ -1769,6 +1838,15 @@ def set_autostart(on: bool) -> None:
         else:
             try:
                 os.remove(LAUNCH_AGENT)
+            except FileNotFoundError:
+                pass
+    elif IS_LINUX:
+        if on:
+            _write_if_changed(AUTOSTART_DESKTOP, _desktop_entry(
+                autostart_command(), NoDisplay="true", X_GNOME_Autostart_enabled="true"))
+        else:
+            try:
+                os.remove(AUTOSTART_DESKTOP)
             except FileNotFoundError:
                 pass
 
@@ -2217,6 +2295,22 @@ def short_stamp(d: datetime) -> str:
     return qlocale().toString(qdatetime(d), QLocale.FormatType.ShortFormat)
 
 
+def _show_items_linux(path: str) -> bool:
+    """Linux: pide al gestor de archivos (Nautilus, Dolphin, Nemo…) que enseñe el archivo seleccionado."""
+    try:
+        from PyQt6.QtDBus import QDBus, QDBusConnection, QDBusMessage
+    except ImportError:
+        return False
+    bus = QDBusConnection.sessionBus()
+    if not bus.isConnected():
+        return False
+    msg = QDBusMessage.createMethodCall("org.freedesktop.FileManager1", "/org/freedesktop/FileManager1",
+                                        "org.freedesktop.FileManager1", "ShowItems")
+    msg.setArguments([[QUrl.fromLocalFile(path).toString()], ""])
+    reply = bus.call(msg, QDBus.CallMode.Block, 3000)
+    return reply.type() == QDBusMessage.MessageType.ReplyMessage
+
+
 def reveal_path(path: str) -> None:
     """Abre la carpeta con el archivo seleccionado (Explorador o Finder)."""
     try:
@@ -2225,6 +2319,8 @@ def reveal_path(path: str) -> None:
             return
         if IS_MAC:
             subprocess.Popen(["open", "-R", path])
+            return
+        if IS_LINUX and _show_items_linux(path):
             return
     except OSError:
         pass
@@ -4653,6 +4749,8 @@ class MainWindow(QMainWindow):
                                     "que te da su web. Sin contraseñas."))
         self.cloud_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cloud_btn.clicked.connect(self._pair_cloud)
+        # Linux: todavía no monta la carpeta de red sola; se elige como destino una ya montada
+        self.cloud_btn.setVisible(not IS_LINUX)
         cloud_row = QHBoxLayout()
         cloud_row.setSpacing(10)
         self.cloud_state = QLabel("")
@@ -4750,7 +4848,9 @@ class MainWindow(QMainWindow):
         self.disk_status.setObjectName("faint")
         self.disk_status.setWordWrap(True)
         disk.body.addWidget(self.disk_status)
-        where = _("Se inicia con Windows, en la bandeja") if IS_WIN else _("Se inicia con la sesión, en la barra de menús")
+        where = (_("Se inicia con Windows, en la bandeja") if IS_WIN else
+                 _("Se inicia con la sesión, en la barra de menús") if IS_MAC else
+                 _("Se inicia con la sesión, en la bandeja"))
         self.watch_box = Toggle()
         self.watch_box.toggled.connect(self._on_watch_toggled)
         disk.body.addWidget(SettingRow(_("Vigilar en segundo plano"), where, self.watch_box))
@@ -4816,6 +4916,9 @@ class MainWindow(QMainWindow):
             how = (_("El Mac no reposa por inactividad ni duerme los discos (la pantalla sí puede apagarse), y "
                    "cerrar la app, la sesión o apagar pide confirmación. Si se duerme igualmente, la copia "
                    "espera al disco y sigue sola."))
+        elif IS_LINUX:
+            how = (_("El equipo no se suspende por inactividad (la pantalla sí puede apagarse) y el disco USB no "
+                   "se duerme. Si se suspende igualmente, la copia espera al disco y sigue sola."))
         else:
             how = (_("El equipo no se suspende por inactividad (la pantalla sí puede apagarse), el disco USB no "
                    "se duerme y Windows avisa si intentas apagar o reiniciar. Si se suspende igualmente (tapa, "
@@ -7006,7 +7109,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):  # noqa: N802
         self.excl_map[self._excl_key()] = self.tree.excluded
         self._save_settings()
-        if self.tray and self.tray.isVisible() and not self._quitting:
+        if self.tray and self.tray.isVisible() and QSystemTrayIcon.isSystemTrayAvailable() and not self._quitting:
             # con la vigilancia activa, cerrar la ventana la deja en la bandeja
             event.ignore()
             self.hide()
@@ -7074,8 +7177,9 @@ class MainWindow(QMainWindow):
             parts = [_("el equipo no se suspende ({v})").format(v=_(self.guard.method) if self.guard.method else _("no disponible"))]
             if root:
                 parts.append(_("latido al disco {root} si pasa {beat_seconds:.0f} s sin escribir").format(root=engine.vol_name(root), beat_seconds=keepawake.BEAT_SECONDS))
-            parts.append(_("apagar o reiniciar pide confirmación") if IS_WIN
-                         else _("cerrar sesión o apagar pide confirmación"))
+            if not IS_LINUX:
+                parts.append(_("apagar o reiniciar pide confirmación") if IS_WIN
+                             else _("cerrar sesión o apagar pide confirmación"))
             self._log((_("Mientras dure:") + " ") + "  ·  ".join(parts), C["muted"])
             if self.guard.error:
                 self._log(_("⚠ No se pudo impedir la suspensión: {error}").format(error=self.guard.error), C["warn"])
@@ -7121,8 +7225,9 @@ class MainWindow(QMainWindow):
                     else _("último latido hace {time}").format(time=fmt_human(time.time() - st['last_beat'])) if st["last_beat"]
                     else _("la copia mantiene el disco activo"))
             lines.append(_("Disco de copia ({st}): {beat}.").format(st=engine.vol_name(st['root']), beat=beat))
-        lines.append(_("Apagar o reiniciar: Windows pide confirmación.") if IS_WIN
-                     else _("Cerrar sesión o apagar: pide confirmación."))
+        if not IS_LINUX:
+            lines.append(_("Apagar o reiniciar: Windows pide confirmación.") if IS_WIN
+                         else _("Cerrar sesión o apagar: pide confirmación."))
         tip = "\n".join(lines)
         self.awake_chip.setToolTip(tip)
         since = _("Activo desde las {since:%H:%M:%S}").format(since=datetime.fromtimestamp(self.guard.since)) if st["active"] else ""
@@ -7439,7 +7544,11 @@ def selftest() -> int:
             excl = [new for _old, new in j.renamed_exclusions]
             os.rename(os.path.join(rsrc, "Q", "lib"), os.path.join(rsrc, "Q", "Lib"))
             j = ren_run()
-            assert j.stats.case_done == 1 and "Lib" in os.listdir(os.path.join(rdst, "Q")), "cambio de mayúsculas no aplicado"
+            names = os.listdir(os.path.join(rdst, "Q"))
+            if engine._case_sensitive:  # Linux con ext4/btrfs: «lib» y «Lib» son carpetas distintas
+                assert "Lib" in names and "lib" not in names, f"cambio de mayúsculas no aplicado: {names}"
+            else:
+                assert j.stats.case_done == 1 and "Lib" in names, "cambio de mayúsculas no aplicado"
             assert not ren_run().stats.has_changes, "tras renombrar quedan cambios pendientes"
             # mover dos subcarpetas hermanas a sitios distintos, una solo con archivos repetidos
             for rel in ["Q/x/__init__.py", "Q/x/n.py", "Q/y/__init__.py", "Q/y/k/__init__.py"]:
@@ -7577,8 +7686,21 @@ def selftest() -> int:
 _app_mutex = None
 
 
+def restore_child_env() -> None:
+    """Linux: la app compilada pone sus bibliotecas en LD_LIBRARY_PATH; los programas que abre
+    (gestor de archivos, navegador, xdg-open) tienen que usar las del sistema."""
+    if not (IS_LINUX and FROZEN):
+        return
+    orig = os.environ.pop("LD_LIBRARY_PATH_ORIG", None)
+    if orig is not None:
+        os.environ["LD_LIBRARY_PATH"] = orig
+    else:
+        os.environ.pop("LD_LIBRARY_PATH", None)
+
+
 def main() -> int:
     global _app_mutex
+    restore_child_env()
     if "--selftest" in sys.argv:
         return selftest()
     if IS_WIN:
@@ -7598,10 +7720,12 @@ def main() -> int:
             pass
     app = App(sys.argv)
     app.setApplicationName(APP_NAME)
+    app.setDesktopFileName(DESKTOP_ID)  # Wayland: une la ventana con su entrada del menú y su icono
     app.setQuitOnLastWindowClosed(False)
     install_qt_translations(app)
     if send_to_running("tray" if tray_mode else "show"):
         return 0
+    install_linux_desktop()
     app.setStyle("Fusion")
     pick_fonts()
     app.setFont(QFont(FONT["ui"], 10))
@@ -7620,6 +7744,11 @@ def main() -> int:
             and not win.tray_only_start else None)
     if not tray_mode:
         win.show()
+    elif IS_LINUX:
+        # GNOME sin extensión de bandeja: sin icono no habría forma de volver a la ventana. Se mira
+        # pasados unos segundos, que al iniciar sesión el panel puede tardar en aparecer.
+        QTimer.singleShot(8000, lambda: win.showMinimized()
+                          if win.isHidden() and not QSystemTrayIcon.isSystemTrayAvailable() else None)
     return app.exec()
 
 

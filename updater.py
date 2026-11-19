@@ -10,6 +10,8 @@ Actualizaciones desde GitHub Releases.
      con /AUTOUPDATE vuelve a abrir la app al terminar.
    - macOS: un pequeño script espera a que la app se cierre, sustituye la .app
      por la del .dmg y la vuelve a abrir; si algo falla, abre el .dmg.
+   - Linux: igual, pero con el archivo .AppImage (su ruta está en $APPIMAGE); si la
+     carpeta no se puede escribir, se abre la carpeta de la descarga.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
 import re
 import shlex
 import ssl
@@ -34,7 +37,15 @@ LATEST_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_URL = f"https://github.com/{REPO}/releases"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
 FROZEN = getattr(sys, "frozen", False)
+LINUX_ASSET = "-x86_64.AppImage"
+
+
+def appimage_path() -> str:
+    """Ruta del .AppImage que se está ejecutando, o "" si la app no corre desde uno."""
+    path = os.environ.get("APPIMAGE", "") if IS_LINUX and FROZEN else ""
+    return path if path and os.path.isfile(path) else ""
 
 
 @dataclass
@@ -81,6 +92,8 @@ def _wanted_asset(name: str) -> bool:
         return name.startswith("DEV-Backup-Studio-Setup-") and name.endswith(".exe")
     if IS_MAC:
         return name.endswith("-macOS.dmg")
+    if IS_LINUX:
+        return name.endswith(LINUX_ASSET) and platform.machine().lower() in ("x86_64", "amd64")
     return False
 
 
@@ -104,7 +117,7 @@ def fetch_latest(current: str) -> Release:
 
 def can_self_update() -> bool:
     """Solo la app instalada se puede sustituir sola; desde el código hay que hacer git pull."""
-    return FROZEN and (IS_WIN or IS_MAC)
+    return FROZEN and (IS_WIN or IS_MAC or bool(appimage_path()))
 
 
 def download(rel: Release, current: str, progress=None, stop: threading.Event | None = None) -> str:
@@ -173,5 +186,23 @@ open {q_dmg}
         with os.fdopen(fd, "w") as fh:
             fh.write(script)
         subprocess.Popen(["/bin/sh", script_path], start_new_session=True, close_fds=True)
+        return
+    if IS_LINUX and appimage_path():
+        q_app, q_new = shlex.quote(appimage_path()), shlex.quote(path)
+        q_dir = shlex.quote(os.path.dirname(path))
+        script = f"""#!/bin/sh
+while kill -0 {os.getpid()} 2>/dev/null; do sleep 0.5; done
+if cp -f {q_new} {q_app}.new && chmod 755 {q_app}.new && mv -f {q_app}.new {q_app}; then
+  rm -f {q_new}
+  exec {q_app} --updated
+fi
+rm -f {q_app}.new
+xdg-open {q_dir}
+"""
+        fd, script_path = tempfile.mkstemp(prefix="devbackup-update-", suffix=".sh")
+        with os.fdopen(fd, "w") as fh:
+            fh.write(script)
+        env = {k: v for k, v in os.environ.items() if k not in ("APPIMAGE", "APPDIR", "ARGV0", "OWD")}
+        subprocess.Popen(["/bin/sh", script_path], start_new_session=True, close_fds=True, env=env)
         return
     raise OSError(_("actualización automática no disponible en este sistema"))
