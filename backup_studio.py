@@ -58,7 +58,7 @@ import versions
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.0.1"
+APP_VERSION = "2.0.2"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -6390,7 +6390,7 @@ class MainWindow(QMainWindow):
             self.banner.set("warn", what, _("Revisa la lista en Cambios → A versiones. Antes de apartar nada se pide "
                                             "confirmación.") + "\n" + detail, G.WARN,
                             (_("Ver la lista"), self._show_mass_list))
-        self.t_elapsed.set(fmt_clock(scan, ms=True), _("duración del análisis"))
+        self.t_elapsed.set(fmt_clock(scan), _("duración del análisis"))
         eta = estimate_seconds(engine.volume_root(job.dst), s)
         self.t_left.set(fmt_clock(eta) if eta is not None else "—",
                         _("previsto según la última copia") if eta is not None else _("se mide al copiar"))

@@ -1,5 +1,10 @@
 # Novedades
 
+## 2.0.2
+
+- **Transcurrido y Restante siempre en `hh:mm:ss`.** Al terminar el análisis, Transcurrido ya no
+  muestra milésimas en los segundos.
+
 ## 2.0.1
 
 - **La rueda del ratón ya no cambia los desplegables ni los contadores.** Al pasar por encima
