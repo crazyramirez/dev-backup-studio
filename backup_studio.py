@@ -4256,7 +4256,8 @@ class MainWindow(QMainWindow):
         self.custom_rules = [r for r in js("custom_rules", []) if r not in self.rules]
         for r in self.custom_rules:
             self.rules[r] = saved.get(r, True)
-        self.excl_map = {k: set(v) for k, v in js("excluded", {}).items()}
+        # norm_rel: las guardadas en macOS antes de 1.9.6 conservaban las mayúsculas
+        self.excl_map = {k: {engine.norm_rel(x) for x in v} for k, v in js("excluded", {}).items()}
         geo = st.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)

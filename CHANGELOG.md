@@ -14,6 +14,9 @@
   `Proyecto-v2`, la exclusión pasa sola a `Proyecto-v2\build` (lo dice el registro) y no se copia.
 - **Cambios solo de mayúsculas.** `proyecto` → `Proyecto` (o un archivo `readme.md` → `README.md`)
   se renombra también en la copia, sin volver a copiar el contenido.
+- **macOS: mayúsculas.** En macOS, «lib» y «Lib» se trataban como carpetas distintas aunque el disco
+  no lo distinga, y al cambiar solo las mayúsculas la copia de su contenido pasaba a versiones hasta
+  la sincronización siguiente. Ahora los nombres se comparan igual que en Windows.
 - El autodiagnóstico comprueba los tres casos y que recargar el árbol conserva las exclusiones.
 
 ## 1.9.5

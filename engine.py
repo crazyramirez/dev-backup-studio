@@ -104,8 +104,14 @@ def lp(path: str) -> str:
     return "\\\\?\\" + path
 
 
+def fold(name: str) -> str:
+    """Clave para comparar nombres. Los discos de Windows (NTFS, exFAT) y de macOS (APFS, exFAT) no
+    distinguen mayúsculas: «lib» y «Lib» son la misma carpeta. En Linux sí son distintas."""
+    return os.path.normcase(name).lower() if (IS_WIN or IS_MAC) else name
+
+
 def norm_rel(rel: str) -> str:
-    return os.path.normcase(os.path.normpath(rel)) if rel else ""
+    return fold(os.path.normpath(rel)) if rel else ""
 
 
 def match_rule(name: str, patterns: list[str]) -> str | None:
@@ -731,11 +737,11 @@ class IndexReader:
 
     def files(self, rel: str) -> dict[str, tuple[str, int, int]]:
         cur = self.con.execute("SELECT name, size, mtime FROM files WHERE dir=?", (norm_rel(rel),))
-        return {os.path.normcase(n): (n, s, m) for n, s, m in cur}
+        return {fold(n): (n, s, m) for n, s, m in cur}
 
     def subdirs(self, rel: str) -> dict[str, str]:
         cur = self.con.execute("SELECT path FROM dirs WHERE parent=?", (norm_rel(rel),))
-        return {os.path.normcase(os.path.basename(p)): os.path.basename(p) for (p,) in cur}
+        return {fold(os.path.basename(p)): os.path.basename(p) for (p,) in cur}
 
     def close(self) -> None:
         self.con.close()
@@ -1159,7 +1165,7 @@ class BackupJob:
             subdirs = []
             for entry in entries:
                 name = entry.name
-                key = os.path.normcase(name)
+                key = fold(name)
                 try:
                     if is_link(entry):
                         s.links_skipped += 1
@@ -1257,9 +1263,9 @@ class BackupJob:
                             continue
                         if e.is_file(follow_symlinks=False):
                             st = e.stat(follow_symlinks=False)
-                            files[os.path.normcase(e.name)] = (e.name, st.st_size, st.st_mtime_ns)
+                            files[fold(e.name)] = (e.name, st.st_size, st.st_mtime_ns)
                         elif e.is_dir(follow_symlinks=False):
-                            dirs[os.path.normcase(e.name)] = e.name
+                            dirs[fold(e.name)] = e.name
                     except OSError:
                         pass
                 return files, dirs
@@ -1340,7 +1346,7 @@ class BackupJob:
                     pairs[cs[0]] = js[0]
                     used.add(js[0])
 
-        match(lambda n, s, m: (os.path.normcase(n), s, m), 1)   # carpeta movida o renombrada
+        match(lambda n, s, m: (fold(n), s, m), 1)   # carpeta movida o renombrada
         match(lambda n, s, m: (s, m), MOVE_MIN_SIZE)            # archivo renombrado
         self._match_renamed_dirs(pairs, used)
         if not pairs:
@@ -1375,30 +1381,30 @@ class BackupJob:
             new = self._rel_parts(self.copies[i][0], self.src)
             old = self._rel_parts(self.deletes[j][0], self.dst)
             k = 0
-            while k < min(len(new), len(old)) and os.path.normcase(new[-1 - k]) == os.path.normcase(old[-1 - k]):
+            while k < min(len(new), len(old)) and fold(new[-1 - k]) == fold(old[-1 - k]):
                 k += 1
             if k == 0 or (k == len(new) and k == len(old)):
                 continue  # archivo renombrado (el nombre cambia) o nada que deducir
-            old_pre = tuple(os.path.normcase(p) for p in old[:len(old) - k])
+            old_pre = tuple(fold(p) for p in old[:len(old) - k])
             new_pre = tuple(new[:len(new) - k])
             votes.setdefault(old_pre, {}).setdefault(new_pre, 0)
             votes[old_pre][new_pre] += 1
         mapping: dict[tuple, tuple] = {}
         for old_pre, cands in votes.items():
             if len(cands) == 1:  # una carpeta antigua, un único destino: sin dudas
-                mapping[tuple(os.path.normcase(p) for p in next(iter(cands)))] = (old_pre, next(iter(cands)))
+                mapping[tuple(fold(p) for p in next(iter(cands)))] = (old_pre, next(iter(cands)))
         if not mapping:
             return
         self.renamed_dirs = sorted({(os.sep.join(o), os.sep.join(n)) for o, n in mapping.values()})
         left: dict[str, int] = {}
         for j, (path, _size, _mtime) in enumerate(self.deletes):
             if j not in used:
-                left[os.sep.join(os.path.normcase(p) for p in self._rel_parts(path, self.dst))] = j
+                left[os.sep.join(fold(p) for p in self._rel_parts(path, self.dst))] = j
         for i, (src, size, mtime, kind, _have) in enumerate(self.copies):
             if kind != "n" or i in pairs:
                 continue
             parts = self._rel_parts(src, self.src)
-            low = [os.path.normcase(p) for p in parts]
+            low = [fold(p) for p in parts]
             for cut in range(len(parts) - 1, 0, -1):  # la carpeta renombrada más profunda que la contenga
                 hit = mapping.get(tuple(low[:cut]))
                 if hit is None:
