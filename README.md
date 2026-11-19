@@ -2,6 +2,8 @@
   <img src="docs/header.png" alt="DEV Backup Studio — tus proyectos, siempre a salvo" width="100%">
 </p>
 
+<p align="center"><b>Español</b> · <a href="README.de.md">Deutsch</a></p>
+
 Copia de seguridad y sincronización de carpetas de proyectos a un disco externo, para Windows, macOS y Linux.
 Detecta qué ha cambiado, mueve lo renombrado en vez de volver a copiarlo, guarda versiones de lo que
 borras o modificas, comprueba cada copia con SHA-256 y te pregunta si quieres sincronizar en cuanto
@@ -199,7 +201,8 @@ git push origin v1.8.0
 ```
 
 Los textos se traducen con `locales/<idioma>.json` (lista de textos: `python tools/i18n_extract.py`,
-comprobación: `--check`). Las ilustraciones de la guía rápida (`assets/tour/<idioma>/`) y `docs/guia.png` se generan con capturas reales
+comprobación: `--check`). Las ilustraciones de la guía rápida (`assets/tour/<idioma>/`) y las capturas de los README (`docs/` y
+`docs/de/` para `README.de.md`) se generan con capturas reales
 de la app: `python tools/make_tour.py` (Windows; monta datos de ejemplo con `subst`).
 
 ## Limitaciones

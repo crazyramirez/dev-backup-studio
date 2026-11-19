@@ -1,5 +1,12 @@
 # Novedades
 
+## 2.3.1
+
+- **README en alemán** (`README.de.md`) con sus propias capturas de la app en alemán.
+- El título del gráfico de velocidad («VELOCIDAD») ya se traduce en todos los idiomas.
+- En alemán, las etiquetas dentro de una frase conservan la mayúscula de los sustantivos
+  («Versionen: 30 Tage», no «30 tage»).
+
 ## 2.3.0
 
 - **Alemán.** La app ya está en siete idiomas: español, inglés, francés, alemán, italiano, chino y

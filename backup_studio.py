@@ -58,7 +58,7 @@ import versions
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.3.1"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -203,6 +203,11 @@ def fmt_int(n) -> str:
 def fmt_dec(x: float, d: int = 1) -> str:
     thousands, decimal, _pct = i18n.numbers()
     return f"{x:,.{d}f}".replace(",", "\x00").replace(".", decimal).replace("\x00", thousands)
+
+
+def mid(text: str) -> str:
+    """Un texto de etiqueta dentro de una frase: en minúscula, salvo en alemán (los sustantivos van en mayúscula)."""
+    return text if i18n.current() == "de" else text.lower()
 
 
 def fmt_bytes(n) -> str:
@@ -1073,7 +1078,7 @@ class SpeedChart(QWidget):
         f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.0)
         p.setFont(f)
         p.setPen(QColor(C["muted"]))
-        p.drawText(QRectF(2, 0, w / 2, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "VELOCIDAD")
+        p.drawText(QRectF(2, 0, w / 2, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, _("Velocidad").upper())
         f = QFont(FONT["display"])
         f.setPixelSize(15)
         f.setWeight(QFont.Weight.DemiBold)
@@ -2173,7 +2178,7 @@ class MassDeleteDialog(QDialog):
         head.addWidget(glyph_label(G.WARN, C["warn"], 34), 0, Qt.AlignmentFlag.AlignTop)
         col = QVBoxLayout()
         col.setSpacing(6)
-        keep = win.keep_combo.currentText().lower()
+        keep = mid(win.keep_combo.currentText())
         if info["empty"]:
             title = _("El origen está vacío")
             text = _("No hay ningún archivo en {src}. Si el disco o la carpeta de origen no está bien conectado, "
@@ -2782,7 +2787,7 @@ class RecoverPage(QWidget):
         self.snaps, self.exists = snaps, exists
         self.by_name = {s.name: s for s in snaps}
         total = sum(s.size for s in snaps)
-        keep_text = self.win.keep_combo.currentText().lower()
+        keep_text = mid(self.win.keep_combo.currentText())
         self.usage.setText(_("{size} en versiones · se guardan {keep}").format(size=fmt_bytes(total), keep=keep_text)
                            if snaps else _("Se guardan {keep}").format(keep=keep_text))
         self._fill_timeline()
@@ -5059,13 +5064,13 @@ class MainWindow(QMainWindow):
             sec["reglas"].set_summary(_("Ninguna regla activa: se copia todo"))
         mode = {engine.MODE_MIRROR: _("Espejo con versiones"), engine.MODE_UPDATE: _("Solo añadir y actualizar")}.get(
             self.mode_combo.currentData(), self.mode_combo.currentText())
-        sec["modo"].set_summary(_("{mode}  ·  versiones {lower}  ·  {value} hilos").format(mode=mode, lower=self.keep_combo.currentText().lower(), value=self.threads_spin.value()))
+        sec["modo"].set_summary(_("{mode}  ·  versiones {lower}  ·  {value} hilos").format(mode=mode, lower=mid(self.keep_combo.currentText()), value=self.threads_spin.value()))
         scrub = self.scrub_combo.currentData()
         sec["integridad"].set_summary(
             (_("SHA-256 en cada copia") if self.verify_box.isChecked() else _("Sin verificar al copiar")) + "  ·  "
             + (_("revisión {period}").format(period=self.scrub_combo.currentText()) if scrub else _("sin revisión")))
         sec["disco"].set_summary((_("Vigilando") if self.watch_box.isChecked() else _("Sin vigilar"))
-                                 + "  ·  " + self.connect_combo.currentText().lower())
+                                 + "  ·  " + mid(self.connect_combo.currentText()))
         if self.remind_box.isChecked():
             n = len(self.registry.items)
             alerts = len(self.registry.alerts())
@@ -5986,7 +5991,7 @@ class MainWindow(QMainWindow):
             self.taskbar.state({"scanning": Taskbar.BUSY, "copying": Taskbar.NORMAL,
                                 "paused": Taskbar.PAUSED}.get(state, Taskbar.OFF))
         if self.tray:
-            self.tray.setToolTip(f"{APP_NAME} · {text.lower()}")
+            self.tray.setToolTip(f"{APP_NAME} · {mid(text)}")
         if not running:
             self.setWindowTitle(APP_NAME)
         if hasattr(self, "remind_bar"):
@@ -6053,7 +6058,7 @@ class MainWindow(QMainWindow):
             self._op_start = time.perf_counter()
             self._op_wall = datetime.now()
             self._log(_("Análisis iniciado  ·  {src}  →  {dst}").format(src=src, dst=dst), C["accent2"])
-            self._log(_("Modo: {lower}  ·  reglas: {v}  ·  excluidas a mano: {excluded}").format(lower=_(engine.MODES[job.mode]).lower(), v=', '.join(job.patterns) or _("ninguna"), excluded=len(job.excluded)))
+            self._log(_("Modo: {lower}  ·  reglas: {v}  ·  excluidas a mano: {excluded}").format(lower=mid(_(engine.MODES[job.mode])), v=', '.join(job.patterns) or _("ninguna"), excluded=len(job.excluded)))
         self.job = job
         self._finalized = False
         self._copy_seen = False
@@ -6908,7 +6913,7 @@ class MainWindow(QMainWindow):
     def _refresh_remind_bar(self, roots: dict | None = None):
         alerts = self.registry.alerts() if self.remind_box.isChecked() else []
         if self.tray:
-            tip = f"{APP_NAME} · {PILL[self._state][0].lower()}"
+            tip = f"{APP_NAME} · {mid(PILL[self._state][0])}"
             if alerts:
                 tip += " · " + _n("{n} copia con cambios sin copiar", "{n} copias con cambios sin copiar",
                                   len(alerts)).format(n=len(alerts))

@@ -4,7 +4,7 @@
     python tools/make_tour.py --lang en          # solo un idioma
     python tools/make_tour.py --lang en --compose  # solo recompone a partir de la última captura
 
-En español también rehace las capturas del README (docs/).
+En español también rehace las capturas del README (docs/), y en alemán las de README.de.md (docs/de/).
 
 Solo Windows: monta los datos de ejemplo como S:\\Proyectos y X:\\Copia con «subst» para que las
 rutas de las capturas queden limpias. Las capturas se hacen a 2× para pantallas de alta densidad.
@@ -28,6 +28,9 @@ LANG = sys.argv[sys.argv.index("--lang") + 1] if "--lang" in sys.argv else ""
 OUT = os.path.join(ROOT, "assets", "tour", LANG)
 WORK = os.path.join(tempfile.gettempdir(), f"devbackup_tour_{LANG}")
 RAW = os.path.join(WORK, "raw")
+# idiomas con README propio y dónde van sus capturas (README.md → docs/, README.de.md → docs/de/)
+DOC_DIRS = {"es": "docs", "de": os.path.join("docs", "de")}
+DOCS = os.path.join(ROOT, DOC_DIRS.get(LANG, "docs"))
 
 # datos de ejemplo en el idioma de cada captura
 DEMO = {
@@ -378,8 +381,8 @@ def capture() -> None:
         win.show_tour(animate=False)
 
     def tour_doc():
-        # captura del README (en español): la guía abierta sobre la app
-        if LANG != "es":
+        # captura del README (README.md en español, README.<idioma>.md en otros): la guía abierta sobre la app
+        if LANG not in DOC_DIRS:
             win.tour.finish(False)
             return
         size = win.size()
@@ -387,8 +390,9 @@ def capture() -> None:
         pm.setDevicePixelRatio(DPR)
         win.render(pm)
         out = pm.toImage().scaledToWidth(1800, Qt.TransformationMode.SmoothTransformation)
-        out.save(os.path.join(ROOT, "docs", "guia.png"))
-        print("captura docs/guia.png", flush=True)
+        os.makedirs(DOCS, exist_ok=True)
+        out.save(os.path.join(DOCS, "guia.png"))
+        print(f"captura {DOCS}\\guia.png", flush=True)
         win.tour.finish(False)
 
     after(300, tour_open)
@@ -640,13 +644,14 @@ def compose() -> None:
     _r, dlg_at = panel(p, "dialog", W - dlg["w"] * dsc - 28, H - dlg["h"] * dsc - 18, scale=dsc, strong=True)
     save(img, p, "6-conecta", [bar_at("go", 4), dlg_at("sync", 4)])
 
-    # capturas del README (en español) con el diseño actual
-    docs = os.path.join(ROOT, "docs")
-    for name, out, width in [] if LANG != "es" else (("window_copy", "progreso.png", 1800), ("window_changes", "cambios.png", 1800),
-                             ("dialog", "conectar.png", 875), ("window_recover", "recuperar.png", 1800)):
+    # capturas del README de este idioma con el diseño actual
+    for name, out, width in [] if LANG not in DOC_DIRS else (
+            ("window_copy", "progreso.png", 1800), ("window_changes", "cambios.png", 1800),
+            ("dialog", "conectar.png", 875), ("window_recover", "recuperar.png", 1800)):
+        os.makedirs(DOCS, exist_ok=True)
         raw(name).toImage().scaledToWidth(width, Qt.TransformationMode.SmoothTransformation).save(
-            os.path.join(docs, out))
-        print("captura docs/" + out, flush=True)
+            os.path.join(DOCS, out))
+        print(f"captura {DOCS}\\{out}", flush=True)
 
     with open(os.path.join(OUT, "tour.json"), "w", encoding="utf-8") as fh:
         json.dump({"size": [W, H], "spots": spots}, fh, indent=1, ensure_ascii=False)
