@@ -37,7 +37,8 @@ from PyQt6.QtGui import (QBrush, QColor, QConicalGradient, QDesktopServices, QFo
                          QPainter, QPainterPath, QPalette, QPen, QPixmap, QRadialGradient, QShortcut)
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtSvg import QSvgRenderer
-from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QApplication, QButtonGroup, QComboBox,
+from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox,
+                             QApplication, QButtonGroup, QComboBox,
                              QDialog, QFileDialog, QFrame, QGraphicsBlurEffect, QGraphicsOpacityEffect,
                              QGraphicsPixmapItem, QGraphicsScene, QGridLayout, QHBoxLayout, QHeaderView,
                              QLabel, QLayout, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMenu,
@@ -57,7 +58,7 @@ import versions
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.0.1"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -578,9 +579,29 @@ def install_qt_translations(app: QApplication) -> bool:
     return False
 
 
+class WheelGuard(QObject):
+    """La rueda del ratón no cambia desplegables ni contadores: al pasar por encima
+    se desplaza la página, como en el resto de la ventana."""
+
+    def eventFilter(self, obj, e):
+        if e.type() != QEvent.Type.Wheel or not isinstance(obj, (QComboBox, QAbstractSpinBox)):
+            return False
+        w = obj.parentWidget()
+        while w is not None and not isinstance(w, QAbstractScrollArea):
+            w = w.parentWidget()
+        if w is not None:
+            QApplication.sendEvent(w.viewport(), e)
+        return True
+
+
 class App(QApplication):
     """Deja que la ventana decida si se puede salir cuando lo pide el sistema."""
     quit_guard = None  # función que devuelve True si se puede salir
+
+    def __init__(self, argv):
+        super().__init__(argv)
+        self._wheel_guard = WheelGuard(self)
+        self.installEventFilter(self._wheel_guard)
 
     def event(self, e):
         if e.type() == QEvent.Type.Quit and self.quit_guard is not None and not self.quit_guard():

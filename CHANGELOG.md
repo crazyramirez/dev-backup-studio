@@ -1,5 +1,10 @@
 # Novedades
 
+## 2.0.1
+
+- **La rueda del ratón ya no cambia los desplegables ni los contadores.** Al pasar por encima
+  sigue desplazándose la página; para cambiar un valor hay que hacer clic.
+
 ## 2.0.0
 
 - **Nueva pestaña «Recuperar»: una máquina del tiempo de tu copia.** Todo lo que la sincronización
