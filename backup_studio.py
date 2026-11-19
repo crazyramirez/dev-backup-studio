@@ -53,7 +53,7 @@ import updater
 from i18n import _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "1.9.6"
+APP_VERSION = "1.9.7"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -6305,7 +6305,19 @@ def selftest() -> int:
             j = ren_run()
             assert j.stats.case_done == 1 and "Lib" in os.listdir(os.path.join(rdst, "Q")), "cambio de mayúsculas no aplicado"
             assert not ren_run().stats.has_changes, "tras renombrar quedan cambios pendientes"
-        say("  renombrar: carpeta entera, exclusión que la sigue y mayúsculas, sin recopiar nada")
+            # mover dos subcarpetas hermanas a sitios distintos, una solo con archivos repetidos
+            for rel in ["Q/x/__init__.py", "Q/x/n.py", "Q/y/__init__.py", "Q/y/k/__init__.py"]:
+                os.makedirs(os.path.dirname(os.path.join(rsrc, rel)), exist_ok=True)
+                with open(os.path.join(rsrc, rel), "wb") as fh:
+                    fh.write(os.urandom(120) if rel.endswith("n.py") else b"")
+            ren_run()
+            os.makedirs(os.path.join(rsrc, "R", "S"))
+            os.rename(os.path.join(rsrc, "Q", "x"), os.path.join(rsrc, "R", "x"))
+            os.rename(os.path.join(rsrc, "Q", "y"), os.path.join(rsrc, "R", "S", "y"))
+            j = ren_run()
+            assert (j.stats.new_files, j.stats.moved_files, j.stats.del_files) == (0, 4, 0), \
+                f"mover subcarpetas: {j.stats.new_files} nuevos, {j.stats.moved_files} movidos, {j.stats.del_files} a versiones"
+        say("  renombrar y mover carpetas: enteras, a otra subcarpeta, exclusiones y mayúsculas, sin recopiar nada")
         pair = PairDialog(win)
         pair.accept()  # pasa por QDialog.done(): si algo lo tapa, el resultado no cambia
         assert pair.result() == QDialog.DialogCode.Accepted, "el diálogo «Conectar con mi nube» no se cierra"

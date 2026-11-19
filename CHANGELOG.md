@@ -1,5 +1,17 @@
 # Novedades
 
+## 1.9.7
+
+- **Mover carpetas a otra subcarpeta sin recopiar nada, en todos los casos.** Además de deducir el
+  movimiento por los archivos únicos, ahora se reconoce la carpeta entera: si lo que desaparece de
+  una carpeta coincide archivo a archivo (ruta interna, tamaño y fecha) con lo nuevo de otra, y la
+  coincidencia es única, es la misma carpeta en otro sitio. Así se mueven también:
+  - varias subcarpetas de una misma carpeta llevadas a sitios distintos (`A\X` → `B\X` y
+    `A\Y` → `C\Y`), con sus archivos repetidos;
+  - una carpeta que solo tiene archivos repetidos (por ejemplo, paquetes con `__init__.py` vacíos).
+- Una carpeta distinta con el mismo nombre no se confunde con una movida: se copia.
+- El autodiagnóstico comprueba también mover subcarpetas hermanas a sitios distintos.
+
 ## 1.9.6
 
 - **Corregido (importante): las carpetas excluidas a mano se olvidaban.** Desde la 1.0.0, recargar el

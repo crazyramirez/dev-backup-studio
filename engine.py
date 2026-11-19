@@ -1348,6 +1348,7 @@ class BackupJob:
 
         match(lambda n, s, m: (fold(n), s, m), 1)   # carpeta movida o renombrada
         match(lambda n, s, m: (s, m), MOVE_MIN_SIZE)            # archivo renombrado
+        self._match_whole_dirs(pairs, used)
         self._match_renamed_dirs(pairs, used)
         if not pairs:
             return
@@ -1395,7 +1396,7 @@ class BackupJob:
                 mapping[tuple(fold(p) for p in next(iter(cands)))] = (old_pre, next(iter(cands)))
         if not mapping:
             return
-        self.renamed_dirs = sorted({(os.sep.join(o), os.sep.join(n)) for o, n in mapping.values()})
+        self.renamed_dirs = sorted(set(self.renamed_dirs) | {(os.sep.join(o), os.sep.join(n)) for o, n in mapping.values()})
         left: dict[str, int] = {}
         for j, (path, _size, _mtime) in enumerate(self.deletes):
             if j not in used:
@@ -1416,6 +1417,63 @@ class BackupJob:
                         pairs[i] = j
                         used.add(j)
                 break
+
+    def _match_whole_dirs(self, pairs: dict[int, int], used: set[int]) -> None:
+        """Carpetas movidas o renombradas enteras, aunque no tengan ningún archivo único.
+
+        Si lo que ha desaparecido de una carpeta del destino coincide archivo a archivo (misma ruta
+        dentro de la carpeta y mismo tamaño) con lo nuevo de una carpeta del origen, y esa
+        coincidencia es única a los dos lados, es la misma carpeta en otro sitio: «A\\X» → «B\\X»,
+        también varias hermanas que van a sitios distintos o una carpeta llena de __init__.py vacíos.
+        Para no comparar contenidos enteros, cada carpeta se resume en (número de archivos, suma de
+        huellas); los candidatos se comprueban después archivo a archivo, con la fecha.
+        """
+        mask = (1 << 64) - 1
+
+        def tables(items, base):
+            out: dict[tuple, list] = {}
+            for idx, path, size in items:
+                parts = [fold(p) for p in self._rel_parts(path, base)]
+                for cut in range(1, len(parts)):  # cada carpeta que lo contiene (la raíz no)
+                    rest = "/".join(parts[cut:])
+                    e = out.setdefault(tuple(parts[:cut]), [0, 0, {}])
+                    e[0] += 1
+                    e[1] = (e[1] + hash((rest, size))) & mask
+                    e[2][rest] = idx
+            return out
+
+        # la huella incluye lo ya emparejado (así dos carpetas con un __init__.py vacío, pero cada una
+        # con su archivo único, no se confunden); solo se empareja lo que falta
+        olds = tables([(j, d[0], d[1]) for j, d in enumerate(self.deletes)], self.dst)
+        news = tables([(i, c[0], c[1]) for i, c in enumerate(self.copies) if c[3] == "n"], self.src)
+        if not olds or not news:
+            return
+        by_sig: dict[tuple, list] = {}
+        for d, (n, h, _m) in olds.items():
+            by_sig.setdefault((n, h), [[], []])[0].append(d)
+        for d, (n, h, _m) in news.items():
+            if (n, h) in by_sig:
+                by_sig[(n, h)][1].append(d)
+        cands = [(o[0], nw[0]) for o, nw in by_sig.values() if len(o) == 1 and len(nw) == 1 and o[0] != nw[0]]
+        done: list[tuple] = []
+        for old_dir, new_dir in sorted(cands, key=lambda c: len(c[0])):  # las de arriba primero
+            if any(old_dir[:len(d)] == d for d in done):
+                continue  # ya emparejada con su carpeta madre
+            om, nm = olds[old_dir][2], news[new_dir][2]
+            if om.keys() != nm.keys():
+                continue  # misma huella por casualidad
+            ok = all(self._same(self.copies[nm[r]][1], self.copies[nm[r]][2],
+                                (None, self.deletes[om[r]][1], self.deletes[om[r]][2])) for r in nm)
+            # lo ya emparejado tiene que cuadrar con esta carpeta; lo que falta, estar libre
+            if not ok or any(pairs[nm[r]] != om[r] if nm[r] in pairs else om[r] in used for r in nm):
+                continue
+            for r in nm:
+                if nm[r] not in pairs:
+                    pairs[nm[r]] = om[r]
+                    used.add(om[r])
+            done.append(old_dir)
+            new_parts = self._rel_parts(self.copies[next(iter(nm.values()))][0], self.src)[:len(new_dir)]
+            self.renamed_dirs.append((os.sep.join(old_dir), os.sep.join(new_parts)))
 
     def _follow_exclusions(self) -> None:
         """Una carpeta excluida a mano dentro de una carpeta renombrada sigue excluida con el nombre nuevo."""

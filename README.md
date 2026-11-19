@@ -33,9 +33,9 @@ primera vez:
 - **Sincronización en espejo con versiones.** El destino queda igual que el origen. Lo que modificas o
   borras no se pierde: la versión anterior pasa a `.devbackup/versiones/<fecha>/` en el propio disco de
   copia y se conserva el tiempo que elijas (30 días, 90 días, 1 año o siempre).
-- **Detecta movidos y renombrados.** Una carpeta renombrada se mueve dentro del disco en segundos en
-  lugar de copiarse otra vez, incluidos sus archivos repetidos (varios `__init__.py` vacíos,
-  `.gitkeep`…). Las subcarpetas que habías excluido a mano siguen excluidas con el nombre nuevo, y
+- **Detecta movidos y renombrados.** Una carpeta renombrada o movida a otra subcarpeta se mueve
+  dentro del disco en segundos en lugar de copiarse otra vez, incluidos sus archivos repetidos
+  (varios `__init__.py` vacíos, `.gitkeep`…) y aunque no tenga ningún archivo único. Las subcarpetas que habías excluido a mano siguen excluidas con el nombre nuevo, y
   un cambio solo de mayúsculas (`proyecto` → `Proyecto`) también se aplica a la copia.
 - **Excluye lo que se regenera.** `node_modules`, `.venv`, `__pycache__`, `dist`… por nombre en
   cualquier nivel, o carpetas concretas desmarcándolas en el árbol.
