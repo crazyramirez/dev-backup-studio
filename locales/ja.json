@@ -946,6 +946,16 @@
   "Desconectar": "接続を解除",
   "Plesk: {name} desconectado": "Plesk：{name} の接続を解除しました",
   "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk：{name} の接続をここでは解除しましたが、サーバーに通知できませんでした：{error}",
-  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "このコンピューターで {name} の接続を解除しましたが、サーバーが応答しませんでした。Plesk でもこのコンピューターを削除してください：DEV Backup Studio 拡張機能 → 接続済みのコンピューター → 接続を解除。"
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "このコンピューターで {name} の接続を解除しましたが、サーバーが応答しませんでした。Plesk でもこのコンピューターを削除してください：DEV Backup Studio 拡張機能 → 接続済みのコンピューター → 接続を解除。",
+  "Preparado en el servidor: {size}": "サーバーで準備済み：{size}",
+  "≈ {pct} según la copia anterior": "≈ {pct}（前回のバックアップから推定）",
+  "con avisos de Plesk": "Plesk の警告あり",
+  "Ver detalles": "詳細を表示",
+  "Copia guardada con avisos de Plesk": "Plesk の警告付きでバックアップを保存しました",
+  "Plesk terminó con errores en algo concreto, pero hizo la copia: {warning}": "Plesk は一部でエラーを出して終了しましたが、バックアップは作成されました：{warning}",
+  "Lo que contó Plesk": "Plesk からの報告",
+  "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "完全なログはサーバーの /var/log/plesk/PMM/（この日付の backup-… または restore-… フォルダー）と、拡張機能のページにあります。",
+  "Registro de Plesk (PMM)": "Plesk のログ（PMM）",
+  "Salida de la herramienta de Plesk": "Plesk ツールの出力"
  }
 }

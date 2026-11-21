@@ -75,7 +75,8 @@ class IndexController extends pm_Controller_Action
             $j = Modules_DevBackupStudio_Jobs::info($id);
             $dev = Modules_DevBackupStudio_Jobs::read($id, 'device');
             $j['device'] = isset($devices[$dev]) ? $devices[$dev]['name'] : '—';
-            unset($j['log']);
+            $j['line'] = self::lastLine($j);
+            unset($j['log'], $j['activity']);
             $jobs[] = $j;
         }
         usort($jobs, function ($a, $b) {
@@ -101,10 +102,25 @@ class IndexController extends pm_Controller_Action
     public function statusAction()
     {
         $code = Modules_DevBackupStudio_Store::currentCode();
+        $running = [];
+        foreach (Modules_DevBackupStudio_Jobs::all() as $id) {
+            if (in_array(Modules_DevBackupStudio_Jobs::state($id), ['queued', 'running'], true)) {
+                $j = Modules_DevBackupStudio_Jobs::info($id);
+                $running[$id] = ['prepared' => $j['prepared'], 'line' => self::lastLine($j)];
+            }
+        }
         $this->_helper->json([
             'signature' => Modules_DevBackupStudio_Jobs::pageSignature(),
             'code_left' => $code ? $code[1] : 0,
+            'running' => $running,
         ]);
+    }
+
+    // Lo último que ha contado Plesk de un trabajo (su registro; si aún no hay, el nuestro).
+    public static function lastLine(array $job)
+    {
+        $lines = $job['activity'] ?: $job['log'];
+        return $lines ? (string)end($lines) : '';
     }
 
     private function panelAddress()

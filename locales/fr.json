@@ -986,6 +986,16 @@
   "Desconectar": "Déconnecter",
   "Plesk: {name} desconectado": "Plesk : {name} déconnecté",
   "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk : {name} déconnecté ici, mais le serveur n'a pas pu être prévenu : {error}",
-  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} a été déconnecté sur cet ordinateur, mais le serveur n'a pas répondu. Retirez aussi cet ordinateur dans Plesk : extension DEV Backup Studio → Ordinateurs connectés → Déconnecter."
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} a été déconnecté sur cet ordinateur, mais le serveur n'a pas répondu. Retirez aussi cet ordinateur dans Plesk : extension DEV Backup Studio → Ordinateurs connectés → Déconnecter.",
+  "Preparado en el servidor: {size}": "Préparé sur le serveur : {size}",
+  "≈ {pct} según la copia anterior": "≈ {pct} d'après la sauvegarde précédente",
+  "con avisos de Plesk": "avec avertissements de Plesk",
+  "Ver detalles": "Voir les détails",
+  "Copia guardada con avisos de Plesk": "Sauvegarde enregistrée avec des avertissements de Plesk",
+  "Plesk terminó con errores en algo concreto, pero hizo la copia: {warning}": "Plesk a terminé avec des erreurs sur un élément précis, mais a fait la sauvegarde : {warning}",
+  "Lo que contó Plesk": "Ce qu'a indiqué Plesk",
+  "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "Son journal complet se trouve sur le serveur, dans /var/log/plesk/PMM/ (le dossier backup-… ou restore-… de cette date), et sur la page de l'extension.",
+  "Registro de Plesk (PMM)": "Journal de Plesk (PMM)",
+  "Salida de la herramienta de Plesk": "Sortie de l'outil de Plesk"
  }
 }

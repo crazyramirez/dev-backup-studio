@@ -59,7 +59,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.4.1"
+APP_VERSION = "2.4.2"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -4110,11 +4110,16 @@ class PleskPage(QWidget):
         folder = self._folder_of(self._selected) if self._selected else None
         backups = plesklink.list_backups(folder) if folder else []
         for b in backups:
+            warned = bool(b.info.get("warning"))
             it = QTreeWidgetItem([f"{day_label(b.when)}  ·  {b.when.strftime('%H:%M')}", fmt_bytes(b.size),
                                   str(b.info.get("plesk_version") or "—"),
+                                  _("con avisos de Plesk") if warned else
                                   _("SHA-256 comprobado") if b.sha256 else _("sin comprobar")])
             it.setIcon(0, plesk_icon(16))
-            it.setIcon(3, glyph_icon(G.SHIELD if b.sha256 else G.WARN, C["ok"] if b.sha256 else C["warn"], 14))
+            ok = b.sha256 and not warned
+            it.setIcon(3, glyph_icon(G.SHIELD if ok else G.WARN, C["ok"] if ok else C["warn"], 14))
+            if warned:
+                it.setToolTip(3, str(b.info["warning"]))
             it.setData(0, self.ROLE, b)
             it.setToolTip(0, b.path)
             self.tree.addTopLevelItem(it)
@@ -4458,13 +4463,21 @@ class PleskPage(QWidget):
             frac = op.bytes_done / op.bytes_total if op.bytes_total else 0.0
             if op.phase == "connect":
                 title, text, bar = _("Conectando con {name}…").format(name=srv.label), "", None
-            elif op.phase == "server":
-                title = _("Plesk está haciendo la copia completa del servidor")
-                text, bar = (op.message or _("Preparando…")), None
-            elif op.phase == "restore":
-                title = (_("Plesk está restaurando el servidor") if getattr(op, "mode", "") == "server"
-                         else _("Plesk está añadiendo la copia a su Gestor de copias"))
-                text, bar = (op.message or _("Preparando…")), None
+            elif op.phase in ("server", "restore"):
+                if op.phase == "server":
+                    title = _("Plesk está haciendo la copia completa del servidor")
+                else:
+                    title = (_("Plesk está restaurando el servidor") if getattr(op, "mode", "") == "server"
+                             else _("Plesk está añadiendo la copia a su Gestor de copias"))
+                # pleskbackup no cuenta su avance: lo que lleva escrito en el servidor y su registro
+                bar, facts = None, []
+                if op.prepared:
+                    facts.append(_("Preparado en el servidor: {size}").format(size=fmt_bytes(op.prepared)))
+                    if op.phase == "server" and srv.last_size:
+                        est = min(0.99, op.prepared / srv.last_size)
+                        facts.append(_("≈ {pct} según la copia anterior").format(pct=pct(est)))
+                        bar = est
+                text = "  ·  ".join(facts + [op.message or _("Preparando…")])
             elif op.phase == "verify":
                 title = _("Comprobando el SHA-256")
                 text, bar = f"{fmt_bytes(op.bytes_done)} / {fmt_bytes(op.bytes_total)}", frac
@@ -4515,9 +4528,16 @@ class PleskPage(QWidget):
         return "  ·  " + (_("copia automática cada día") if days == 1 else _("copia automática cada semana"))
 
     def _result_banner(self, op: plesklink.Operation):
+        details = (_("Ver detalles"), lambda: self._show_details(op))
         if op.phase == "done" and op.kind == "backup":
             r = op.result
             extra = _("  ·  quitadas {n} antiguas").format(n=len(op.pruned)) if getattr(op, "pruned", None) else ""
+            if op.warning:
+                self.banner.set("warn", _("Copia guardada con avisos de Plesk"),
+                                _("Plesk terminó con errores en algo concreto, pero hizo la copia: {warning}").format(
+                                    warning=op.warning) + "\n" + _("{size} · SHA-256 comprobado · {path}").format(
+                                    size=fmt_bytes(r.size), path=r.path), G.WARN, details)
+                return
             self.banner.set("ok", _("Copia completa guardada"),
                             _("{size} · SHA-256 comprobado · {path}").format(size=fmt_bytes(r.size), path=r.path) + extra,
                             G.DONE, (_("Mostrar"), lambda: reveal_path(r.path)))
@@ -4542,10 +4562,56 @@ class PleskPage(QWidget):
                             else _("La copia no se ha restaurado."), G.WARN)
         else:
             err = op.error
+            action = details if op.log or op.activity else None
+            if err and err.kind in ("auth", "cert"):
+                action = (_("Volver a conectar…"), lambda: self.pair(op.server.url, replace=op.server))
             self.banner.set("err", _("No se pudo copiar el servidor") if op.kind == "backup"
-                            else _("No se pudo restaurar"), plesk_error_text(err), G.ERROR,
-                            (_("Volver a conectar…"), lambda: self.pair(op.server.url, replace=op.server))
-                            if err and err.kind in ("auth", "cert") else None)
+                            else _("No se pudo restaurar"), plesk_error_text(err), G.ERROR, action)
+
+    def _show_details(self, op: plesklink.Operation):
+        """Lo que contó Plesk: su registro propio (PMM) y la salida de su herramienta, para saber qué pasó."""
+        dlg = QDialog(self.win)
+        dlg.setWindowTitle(APP_NAME)
+        dlg.setWindowIcon(app_icon())
+        dlg.resize(900, 560)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 18)
+        lay.setSpacing(10)
+        title = QLabel(_("Lo que contó Plesk"))
+        title.setObjectName("h1")
+        lay.addWidget(title)
+        hint = QLabel(_("Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o "
+                        "restore-… de esta fecha), y en la página de la extensión."))
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        text = []
+        if op.error:
+            text += [plesk_error_text(op.error), ""]
+        if op.warning and op.warning != "auth":
+            text += [op.warning, ""]
+        if op.activity:
+            text += ["── " + _("Registro de Plesk (PMM)") + " ──"] + op.activity + [""]
+        if op.log:
+            text += ["── " + _("Salida de la herramienta de Plesk") + " ──"] + op.log
+        box = QPlainTextEdit("\n".join(text))
+        box.setReadOnly(True)
+        box.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        lay.addWidget(box, 1)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        b_copy = QPushButton("  " + _("Copiar"))
+        b_copy.setIcon(glyph_icon(G.COPY, C["text"], 14))
+        b_copy.clicked.connect(lambda: QApplication.clipboard().setText(box.toPlainText()))
+        b_close = QPushButton(_("Cerrar"))
+        b_close.setObjectName("primary")
+        b_close.clicked.connect(dlg.accept)
+        for b in (b_copy, b_close):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            row.addWidget(b)
+        lay.addLayout(row)
+        set_dark_titlebar(dlg)
+        dlg.exec()
 
     def _finish(self, op: plesklink.Operation):
         self._finalized = True
@@ -4569,7 +4635,7 @@ class PleskPage(QWidget):
             if op.kind == "backup":
                 srv.last_error = text
             self.win._log(_("Plesk: {name}: {text}").format(name=name, text=text), C["err"])
-            for line in op.log[-15:]:
+            for line in (op.activity or op.log)[-15:]:
                 self.win._log("    " + line, C["muted"])
             self.win._notify(_("Copia de Plesk") if op.kind == "backup" else _("Restauración de Plesk"),
                              f"{name}: {text}")

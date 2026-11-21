@@ -1,5 +1,21 @@
 # Novedades
 
+## 2.4.2
+
+- **Se ve cómo avanza la copia de Plesk** (extensión 1.0.2). Mientras Plesk prepara la copia o
+  restaura, la app y la página de la extensión enseñan cada 10 segundos cuánto lleva escrito en el
+  servidor y lo último de su propio registro (por ejemplo «Domains [7/9] dumping domain…»); a partir de
+  la segunda copia, también un porcentaje aproximado con su barra, según el tamaño de la anterior.
+  Hasta ahora solo se veía la línea de arranque durante todo el rato. Para tenerlo en Plesk, sube
+  `DEV-Backup-Studio-Plesk-1.0.2.zip` encima de la extensión.
+- **Cuando Plesk falla, se ve por qué.** En vez del genérico «The backup failed with errors!», el aviso
+  enseña el error real de su registro (por ejemplo, una base de datos que no pudo volcar), y *Ver
+  detalles* abre el registro completo de Plesk, con botón para copiarlo. El trabajo fallido se queda
+  en la página de la extensión para revisarlo (se borra solo a los 3 días).
+- **Copias con errores parciales.** Si Plesk termina «con errores» pero hace la copia (un buzón o una
+  base de datos concreta que no pudo leer), se guarda marcada *con avisos de Plesk*, como en su Gestor
+  de copias, en lugar de perderla entera.
+
 ## 2.4.1
 
 - **La extensión de Plesk se pone al día sola** (versión 1.0.1 de la extensión): en cuanto la app usa

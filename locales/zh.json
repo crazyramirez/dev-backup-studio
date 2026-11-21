@@ -946,6 +946,16 @@
   "Desconectar": "断开连接",
   "Plesk: {name} desconectado": "Plesk：已断开 {name}",
   "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk：已在本机断开 {name}，但无法通知服务器：{error}",
-  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "已在这台电脑上断开 {name}，但服务器没有响应。请在 Plesk 中也移除这台电脑：DEV Backup Studio 扩展 → 已连接的电脑 → 断开连接。"
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "已在这台电脑上断开 {name}，但服务器没有响应。请在 Plesk 中也移除这台电脑：DEV Backup Studio 扩展 → 已连接的电脑 → 断开连接。",
+  "Preparado en el servidor: {size}": "服务器上已准备：{size}",
+  "≈ {pct} según la copia anterior": "≈ {pct}（根据上一份备份估算）",
+  "con avisos de Plesk": "有 Plesk 警告",
+  "Ver detalles": "查看详情",
+  "Copia guardada con avisos de Plesk": "备份已保存，但有 Plesk 警告",
+  "Plesk terminó con errores en algo concreto, pero hizo la copia: {warning}": "Plesk 在某些具体项目上出错，但已完成备份：{warning}",
+  "Lo que contó Plesk": "Plesk 的报告",
+  "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "完整日志在服务器上的 /var/log/plesk/PMM/（此日期的 backup-… 或 restore-… 文件夹）中，也可在扩展页面查看。",
+  "Registro de Plesk (PMM)": "Plesk 日志（PMM）",
+  "Salida de la herramienta de Plesk": "Plesk 工具的输出"
  }
 }

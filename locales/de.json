@@ -986,6 +986,16 @@
   "Desconectar": "Trennen",
   "Plesk: {name} desconectado": "Plesk: {name} getrennt",
   "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk: {name} hier getrennt, aber der Server konnte nicht benachrichtigt werden: {error}",
-  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} wurde auf diesem Computer getrennt, aber der Server hat nicht geantwortet. Entfernen Sie diesen Computer auch in Plesk: Erweiterung DEV Backup Studio → Verbundene Computer → Trennen."
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} wurde auf diesem Computer getrennt, aber der Server hat nicht geantwortet. Entfernen Sie diesen Computer auch in Plesk: Erweiterung DEV Backup Studio → Verbundene Computer → Trennen.",
+  "Preparado en el servidor: {size}": "Auf dem Server vorbereitet: {size}",
+  "≈ {pct} según la copia anterior": "≈ {pct} laut der vorherigen Sicherung",
+  "con avisos de Plesk": "mit Plesk-Warnungen",
+  "Ver detalles": "Details anzeigen",
+  "Copia guardada con avisos de Plesk": "Sicherung mit Plesk-Warnungen gespeichert",
+  "Plesk terminó con errores en algo concreto, pero hizo la copia: {warning}": "Plesk hat bei etwas Bestimmtem mit Fehlern abgeschlossen, die Sicherung aber erstellt: {warning}",
+  "Lo que contó Plesk": "Was Plesk gemeldet hat",
+  "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "Das vollständige Protokoll liegt auf dem Server unter /var/log/plesk/PMM/ (im Ordner backup-… oder restore-… dieses Datums) und auf der Seite der Erweiterung.",
+  "Registro de Plesk (PMM)": "Plesk-Protokoll (PMM)",
+  "Salida de la herramienta de Plesk": "Ausgabe des Plesk-Werkzeugs"
  }
 }

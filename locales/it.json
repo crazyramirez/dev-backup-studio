@@ -986,6 +986,16 @@
   "Desconectar": "Scollega",
   "Plesk: {name} desconectado": "Plesk: {name} scollegato",
   "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk: {name} scollegato qui, ma non è stato possibile avvisare il server: {error}",
-  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} è stato scollegato su questo computer, ma il server non ha risposto. Rimuovi questo computer anche in Plesk: estensione DEV Backup Studio → Computer collegati → Scollega."
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} è stato scollegato su questo computer, ma il server non ha risposto. Rimuovi questo computer anche in Plesk: estensione DEV Backup Studio → Computer collegati → Scollega.",
+  "Preparado en el servidor: {size}": "Preparato sul server: {size}",
+  "≈ {pct} según la copia anterior": "≈ {pct} in base al backup precedente",
+  "con avisos de Plesk": "con avvisi di Plesk",
+  "Ver detalles": "Mostra dettagli",
+  "Copia guardada con avisos de Plesk": "Backup salvato con avvisi di Plesk",
+  "Plesk terminó con errores en algo concreto, pero hizo la copia: {warning}": "Plesk ha terminato con errori su qualcosa di specifico, ma ha creato il backup: {warning}",
+  "Lo que contó Plesk": "Cosa ha riportato Plesk",
+  "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "Il suo registro completo è sul server, in /var/log/plesk/PMM/ (la cartella backup-… o restore-… di questa data), e nella pagina dell'estensione.",
+  "Registro de Plesk (PMM)": "Registro di Plesk (PMM)",
+  "Salida de la herramienta de Plesk": "Output dello strumento di Plesk"
  }
 }

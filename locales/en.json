@@ -986,6 +986,16 @@
   "Desconectar": "Disconnect",
   "Plesk: {name} desconectado": "Plesk: {name} disconnected",
   "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk: {name} disconnected here, but the server could not be notified: {error}",
-  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} has been disconnected on this computer, but the server did not respond. Also remove this computer in Plesk: DEV Backup Studio extension → Connected computers → Disconnect."
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} has been disconnected on this computer, but the server did not respond. Also remove this computer in Plesk: DEV Backup Studio extension → Connected computers → Disconnect.",
+  "Preparado en el servidor: {size}": "Prepared on the server: {size}",
+  "≈ {pct} según la copia anterior": "≈ {pct} based on the previous backup",
+  "con avisos de Plesk": "with Plesk warnings",
+  "Ver detalles": "Show details",
+  "Copia guardada con avisos de Plesk": "Backup saved with Plesk warnings",
+  "Plesk terminó con errores en algo concreto, pero hizo la copia: {warning}": "Plesk finished with errors in something specific, but made the backup: {warning}",
+  "Lo que contó Plesk": "What Plesk reported",
+  "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "Its full log is on the server, in /var/log/plesk/PMM/ (the backup-… or restore-… folder for this date), and on the extension page.",
+  "Registro de Plesk (PMM)": "Plesk log (PMM)",
+  "Salida de la herramienta de Plesk": "Output of the Plesk tool"
  }
 }

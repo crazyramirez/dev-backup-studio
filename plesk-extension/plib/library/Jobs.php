@@ -145,8 +145,14 @@ class Modules_DevBackupStudio_Jobs
             if ($size > 32768) {
                 array_shift($lines);   // la primera puede estar cortada
             }
-            $log = array_values(array_filter(array_map('rtrim', $lines), 'strlen'));
+            $log = array_values(array_filter(array_map([self::class, 'clean'], $lines), 'strlen'));
             $log = array_slice($log, -200);
+        }
+        $activity = [];
+        $f = self::dir($id) . 'activity';
+        if (is_file($f)) {
+            $lines = preg_split('/\r\n|\r|\n/', (string)@file_get_contents($f, false, null, 0, 65536));
+            $activity = array_slice(array_values(array_filter(array_map([self::class, 'clean'], $lines), 'strlen')), -20);
         }
         $started = (int)self::read($id, 'started', '0');
         $finished = (int)self::read($id, 'finished', '0');
@@ -160,8 +166,17 @@ class Modules_DevBackupStudio_Jobs
             'size' => (int)self::read($id, 'size', '0'),
             'sha256' => self::read($id, 'sha256'),
             'error' => self::read($id, 'error'),
+            'warning' => self::read($id, 'warning'),     // terminó con errores parciales de Plesk
             'log' => $log,
+            'prepared' => (int)self::read($id, 'progress', '0'),   // bytes que Plesk lleva escritos
+            'activity' => $activity,                               // lo último de su registro
         ];
+    }
+
+    // Una línea de registro para enseñar: sin colores de terminal ni espacios de más.
+    public static function clean($line)
+    {
+        return trim(preg_replace('/\x1b\[[0-9;?]*[A-Za-z]/', '', (string)$line));
     }
 
     // Lo que enseña la página de la extensión, resumido: si cambia (un ordenador se conecta, se gasta

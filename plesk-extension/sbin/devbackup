@@ -11,7 +11,10 @@
 #   devbackup check                → versión de Plesk y herramientas disponibles
 #
 # Cada trabajo escribe su estado en archivos sueltos: state (queued|running|done|failed|canceled),
-# pid, started, finished, size, sha256, error, log y alive (se toca cada 20 s mientras sigue vivo).
+# pid, started, finished, size, sha256, error, log y alive (se toca cada 10 s mientras sigue vivo).
+# Mientras trabaja, cada 10 s también: progress (bytes que Plesk lleva escritos para la copia) y
+# activity (las últimas líneas de su propio registro, /var/log/plesk/PMM/<backup|restore>-<fecha>/):
+# con la salida en un archivo, pleskbackup no cuenta nada hasta el final.
 
 set -u
 umask 077
@@ -28,6 +31,13 @@ ROOT="${DBS_PRODUCT_ROOT:-$(product_root)}"   # DBS_PRODUCT_ROOT: solo para las 
 VAR="$ROOT/var/modules/$EXT"
 JOBS="$VAR/jobs"
 PLESK="${DBS_PLESK:-plesk}"
+
+conf() {  # conf <CLAVE>: valor de /etc/psa/psa.conf
+    [ -r /etc/psa/psa.conf ] && awk -v k="$1" '$1==k{print $2; exit}' /etc/psa/psa.conf
+}
+# dónde escribe Plesk mientras prepara la copia y dónde deja su registro (DBS_*: solo para las pruebas)
+DUMP_DIRS="${DBS_DUMP_DIRS:-$(conf DUMP_D) $(conf DUMP_TMP_D)}"
+PMM_LOGS="${DBS_PMM_LOGS:-/var/log/plesk/PMM $ROOT/PMM/logs}"
 
 die() { echo "$*" >&2; exit 1; }
 
@@ -51,13 +61,40 @@ put() {  # put <dir> <archivo> <valor>
 
 log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$1/log"; }
 
-heartbeat() {  # mientras viva el proceso $2, «alive» se renueva cada 20 s
+heartbeat() {  # mientras viva el proceso $2: «alive» y el progreso, cada 10 s
     local d="$1" pid="$2"
     while kill -0 "$pid" 2>/dev/null; do
         touch "$d/alive" 2>/dev/null
         chown "$(owner)" "$d/alive" 2>/dev/null
-        sleep 20
+        progress "$d"
+        sleep 10
     done
+}
+
+progress() {
+    local d="$1" kind dirs=() p total newest log
+    kind=$(cat "$d/kind" 2>/dev/null)
+    for p in $DUMP_DIRS; do
+        [ -d "$p" ] && dirs+=("$p")
+    done
+    # lo escrito desde que empezó el trabajo: el repositorio de Plesk, su carpeta temporal y la salida
+    total=$(find ${dirs[@]+"${dirs[@]}"} "$d" -xdev -type f -newer "$d/started" -printf '%s\n' 2>/dev/null \
+            | awk '{s += $1} END {printf "%.0f", s}')
+    put "$d" progress "${total:-0}"
+    newest=""
+    for p in $PMM_LOGS; do
+        for log in "$p/$kind"-*; do
+            [ -d "$log" ] && [ "$log" -nt "$d/started" ] || continue
+            [ -z "$newest" ] || [ "$log" -nt "$newest" ] && newest="$log"
+        done
+    done
+    [ -n "$newest" ] || return 0
+    log=$(ls -t "$newest"/*.log 2>/dev/null | head -n 1)
+    [ -n "$log" ] || return 0
+    tail -n 40 "$log" | tr -d '\r' | grep -v '^[[:space:]]*$' | cut -c1-300 > "$d/activity.tmp"
+    chown "$(owner)" "$d/activity.tmp" 2>/dev/null
+    chmod 0640 "$d/activity.tmp"
+    mv -f "$d/activity.tmp" "$d/activity"
 }
 
 start() {  # start <run-backup|run-restore> <id>: se separa del panel y vuelve enseguida
@@ -97,8 +134,20 @@ finish() {  # finish <dir> <estado> [error]
     rm -f -- "$d/password"
 }
 
-last_error() {  # la última línea del registro que parece un error (para enseñarla en la app)
-    grep -iE 'error|fail|unable|cannot|denied|not enough|no space' "$1/log" | tail -n 1 | cut -c1-400
+ERRORS='error|fail|unable|cannot|can.t|denied|not enough|no space|timed? ?out|refused|abort'
+GENERIC='failed with errors|completed with (errors|warnings)|exit [0-9]'
+
+last_error() {  # los últimos errores con sentido: del registro de Plesk y de la salida de su herramienta
+    { cat "$1/activity" 2>/dev/null; cat "$1/log" 2>/dev/null; } | tr -d '\r' \
+        | grep -iE "$ERRORS" | grep -viE "$GENERIC" | grep -v 'DEV Backup Studio' \
+        | tail -n 3 | cut -c1-300 | paste -sd '|' - | sed 's/|/ · /g'
+}
+
+summary_error() {  # last_error, o la línea genérica de Plesk si no hay nada mejor
+    local e
+    e=$(last_error "$1")
+    [ -n "$e" ] || e=$(tr -d '\r' < "$1/log" | grep -iE "$ERRORS" | tail -n 1 | cut -c1-300)
+    echo "$e"
 }
 
 run_backup() {
@@ -126,10 +175,16 @@ run_backup() {
         finish "$d" failed "pleskbackup split the backup into several files"
         return
     fi
-    if [ "$code" -ne 0 ] || [ ! -s "$out" ]; then
-        rm -f -- "$out"   # una copia a medias no sirve y puede ocupar mucho
-        finish "$d" failed "$(last_error "$d") (exit $code)"
+    progress "$d"   # el registro de Plesk, ya completo, para explicar lo que haya pasado
+    if [ ! -s "$out" ]; then
+        finish "$d" failed "$(summary_error "$d") (exit $code)"
         return
+    fi
+    if [ "$code" -ne 0 ]; then
+        # Plesk terminó «con errores» pero hizo la copia (p. ej. un buzón o una base de datos que no pudo
+        # leer): como en su Gestor de copias, se guarda, avisando de lo que falló
+        put "$d" warning "$(summary_error "$d") (exit $code)"
+        log "$d" "pleskbackup reported errors but wrote the backup: kept with warnings"
     fi
     log "$d" "SHA-256…"
     put "$d" size "$(stat -c %s "$out")"
@@ -137,6 +192,7 @@ run_backup() {
     chown "$(owner)" "$out"
     chmod 0640 "$out"
     log "$d" "done: $(stat -c %s "$out") bytes"
+    progress "$d"
     finish "$d" done
 }
 
@@ -176,10 +232,11 @@ run_restore() {
     pw=""
     log "$d" "exit $code"
     rm -f -- "$file"
+    progress "$d"
     if [ "$code" -eq 116 ]; then
         finish "$d" failed "signature: Plesk does not accept a backup made on another server in the Backup Manager"
     elif [ "$code" -ne 0 ]; then
-        finish "$d" failed "$(last_error "$d") (exit $code)"
+        finish "$d" failed "$(summary_error "$d") (exit $code)"
     else
         finish "$d" done
     fi

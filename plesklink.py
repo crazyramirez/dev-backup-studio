@@ -686,6 +686,8 @@ class Operation:
         self.client = Client(server.url, token, server.fingerprint)
         self.phase = "connect"   # connect | server | download | verify | upload | restore | done | failed | cancelled
         self.message = ""        # última línea del registro de Plesk
+        self.prepared = 0        # bytes que Plesk lleva escritos en el servidor (copia o restauración)
+        self.activity: list[str] = []   # lo último del registro propio de Plesk (/var/log/plesk/PMM)
         self.log: list[str] = []
         self.bytes_done = 0
         self.bytes_total = 0
@@ -722,7 +724,18 @@ class Operation:
         lines = [str(x) for x in (job.get("log") or []) if str(x).strip()]
         if lines:
             self.log = lines[-200:]
-            self.message = lines[-1].strip()[:300]
+        # lo que cuenta Plesk en su propio registro; si aún no hay nada, lo nuestro (sin la línea de
+        # arranque «DEV Backup Studio: plesk bin …», que no dice nada a quien mira)
+        activity = [str(x).strip() for x in (job.get("activity") or []) if str(x).strip()]
+        if activity:
+            self.activity = activity[-60:]
+        ours = [x.strip() for x in lines if "DEV Backup Studio:" not in x]
+        shown = activity or ours
+        self.message = shown[-1][:300] if shown else ""
+        try:
+            self.prepared = max(0, int(job.get("prepared") or 0))
+        except (TypeError, ValueError):
+            pass
 
     def run(self) -> None:
         try:
@@ -814,11 +827,15 @@ class BackupRun(Operation):
             job = self._wait_job(self.job_id)
         except PleskError as exc:
             if exc.kind in ("server", "cancelled", "missing"):
-                # sin copia que bajar: fuera del servidor, y la próxima vez se empieza de cero
-                self._release()
+                # sin copia que bajar: la próxima vez se empieza de cero. Si Plesk falló, el trabajo se
+                # queda en el servidor con su registro (la extensión lo enseña y lo borra a los 3 días)
+                if exc.kind == "cancelled":
+                    self._release()
                 srv.pending_job = srv.pending_stamp = ""
                 self._changed()
             raise
+        if job.get("warning"):
+            self.warning = str(job["warning"])
         self._download(job)
 
     def _release(self) -> None:
@@ -895,6 +912,7 @@ class BackupRun(Operation):
             "server": srv.label, "url": srv.url, "plesk_version": srv.plesk_version, "os": srv.os,
             "created": job.get("finished") or self.wall.isoformat(timespec="seconds"),
             "size": size, "sha256": got, "password": bool(self.password), "job": self.job_id,
+            "warning": self.warning,
             "tool": "plesk bin pleskbackup server", "app": USER_AGENT,
         }
         with open(final[:-len(BACKUP_EXT)] + META_EXT, "w", encoding="utf-8") as fh:

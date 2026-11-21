@@ -90,8 +90,9 @@ $size = function ($n) {
                 <tr><td><?php echo $e($when($j['started'])) ?></td><td><?php echo $e($kind) ?></td>
                     <td><?php echo $e($j['device']) ?></td>
                     <td class="<?php echo $cls ?>"><?php echo $e($m('state_' . $j['state'])) ?>
-                        <?php if ($j['state'] === 'failed' && $j['error']): ?><br><span class="dbs-muted"><?php echo $e($j['error']) ?></span><?php endif ?></td>
-                    <td><?php echo $j['size'] ? $e($size($j['size'])) : '—' ?></td></tr>
+                        <?php if ($j['state'] === 'failed' && $j['error']): ?><br><span class="dbs-muted"><?php echo $e($j['error']) ?></span><?php endif ?>
+                        <?php if (in_array($j['state'], ['queued', 'running'], true)): ?><br><span class="dbs-muted dbs-mono" id="dbs-line-<?php echo $e($j['id']) ?>"><?php echo $e($j['line']) ?></span><?php endif ?></td>
+                    <td><?php if (in_array($j['state'], ['queued', 'running'], true)): ?><span id="dbs-prep-<?php echo $e($j['id']) ?>"><?php echo $j['prepared'] ? $e($size($j['prepared'])) : '…' ?></span><?php else: ?><?php echo $j['size'] ? $e($size($j['size'])) : '—' ?><?php endif ?></td></tr>
                 <?php endforeach ?>
             </table>
         <?php endif ?>
@@ -124,6 +125,15 @@ $size = function ($n) {
         shown.textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
     }
 
+    function bytes(n) {
+        var units = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+        while (n >= 1024 && i < units.length - 1) {
+            n /= 1024;
+            i += 1;
+        }
+        return (i ? n.toFixed(n < 10 ? 2 : 1) : n) + ' ' + units[i];
+    }
+
     function poll() {
         if (reloading || document.hidden) {
             return;
@@ -139,10 +149,24 @@ $size = function ($n) {
                 var data = JSON.parse(xhr.responseText);
                 if (data.signature && data.signature !== signature) {
                     reload();
-                } else if (typeof data.code_left === 'number' && shown) {
+                    return;
+                }
+                if (typeof data.code_left === 'number' && shown) {
                     left = data.code_left;
                     draw();
                 }
+                // copias en marcha: lo preparado y lo último que cuenta Plesk, sin recargar
+                var running = data.running || {};
+                Object.keys(running).forEach(function (id) {
+                    var line = document.getElementById('dbs-line-' + id);
+                    var prep = document.getElementById('dbs-prep-' + id);
+                    if (line) {
+                        line.textContent = running[id].line || '';
+                    }
+                    if (prep && running[id].prepared) {
+                        prep.textContent = bytes(running[id].prepared);
+                    }
+                });
             } catch (err) {
                 // la sesión de Plesk caducó (llega la página de inicio): no se insiste
             }
@@ -159,7 +183,8 @@ $size = function ($n) {
             }
         }, 1000);
     }
-    setInterval(poll, left > 0 ? 2000 : 5000);
+    var busy = <?php echo json_encode((bool)array_filter($this->jobs, function ($j) { return in_array($j['state'], ['queued', 'running'], true); })) ?>;
+    setInterval(poll, left > 0 || busy ? 2000 : 5000);
     document.addEventListener('visibilitychange', function () {
         if (!document.hidden) {
             poll();
