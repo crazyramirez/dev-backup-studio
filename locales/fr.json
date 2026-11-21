@@ -905,7 +905,6 @@
   ],
   "Servidor Plesk conectado: {name} ({url})": "Serveur Plesk connecté : {name} ({url})",
   "{name} está conectado. ¿Hacer ya su primera copia completa?": "{name} est connecté. Faire maintenant sa première sauvegarde complète ?",
-  "¿Quitar {name}? Este ordenador deja de estar conectado a ese Plesk. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando.": "Retirer {name} ? Cet ordinateur ne sera plus connecté à ce Plesk. Les sauvegardes déjà enregistrées sur le disque sont conservées et peuvent toujours être restaurées.",
   "Contraseña de las copias de {name}": "Mot de passe des sauvegardes de {name}",
   "Plesk cifra con ella las contraseñas que guarda la copia (de buzones, bases de datos, FTP…). La app la recuerda, pero anótala en un sitio seguro: si restauras desde otro ordenador o subes la copia a mano en Plesk, te la pedirá.": "Plesk chiffre avec lui les mots de passe que contient la sauvegarde (boîtes mail, bases de données, FTP…). L'application le retient, mais notez-le en lieu sûr : si vous restaurez depuis un autre ordinateur ou envoyez la sauvegarde à la main dans Plesk, il vous sera demandé.",
   "Copiar": "Copier",
@@ -913,7 +912,6 @@
   "Volver a conectar con un código…": "Reconnecter avec un code…",
   "Abrir la carpeta de las copias": "Ouvrir le dossier des sauvegardes",
   "Eliminar esta copia del disco…": "Supprimer cette sauvegarde du disque…",
-  "Quitar este servidor…": "Retirer ce serveur…",
   "¿Eliminar la copia del {date} ({size}) del disco de copia? No se puede deshacer.": "Supprimer la sauvegarde du {date} ({size}) du disque de sauvegarde ? Impossible d'annuler.",
   "No se pudo eliminar:\n{exc}": "Suppression impossible :\n{exc}",
   "Conecta el disco de copia: las copias de Plesk se guardan en su carpeta PLESK.": "Connectez le disque de sauvegarde : les sauvegardes Plesk sont enregistrées dans son dossier PLESK.",
@@ -978,6 +976,16 @@
   ],
   "Copias completas de tus servidores Plesk": "Sauvegardes complètes de vos serveurs Plesk",
   "Hay una copia o restauración de Plesk en curso. ¿Detenerla y salir?\n\nLo ya descargado se aprovecha la próxima vez.": "Une sauvegarde ou restauration Plesk est en cours. L'arrêter et quitter ?\n\nCe qui a été téléchargé est réutilisé la prochaine fois.",
-  "reservada para las copias de Plesk": "réservé aux sauvegardes Plesk"
+  "reservada para las copias de Plesk": "réservé aux sauvegardes Plesk",
+  "¿No ves «Subir extensión»? Plesk lo esconde: añade a su panel.ini (o con la extensión Panel.ini Editor) [ext-catalog] y extensionUpload = true.": "Vous ne voyez pas « Envoyer une extension » ? Plesk le masque : ajoutez [ext-catalog] et extensionUpload = true à son panel.ini (ou avec l'extension Panel.ini Editor).",
+  "Desconectar…": "Déconnecter…",
+  "Este ordenador deja de estar conectado a ese servidor Plesk. Las copias ya guardadas se conservan.": "Cet ordinateur ne sera plus connecté à ce serveur Plesk. Les sauvegardes déjà enregistrées sont conservées.",
+  "Espera a que termine la operación en curso con {name}, o detenla.": "Attendez la fin de l'opération en cours avec {name}, ou arrêtez-la.",
+  "¿Desconectar {name}?": "Déconnecter {name} ?",
+  "Este ordenador deja de estar conectado a ese Plesk: no hará más copias de él y desaparece de la extensión. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando. Para volver a conectarlo hará falta un código nuevo.": "Cet ordinateur ne sera plus connecté à ce Plesk : il n'en fera plus de sauvegardes et disparaît de l'extension. Les sauvegardes déjà enregistrées sur le disque sont conservées et peuvent toujours être restaurées. Pour le reconnecter, il faudra un nouveau code.",
+  "Desconectar": "Déconnecter",
+  "Plesk: {name} desconectado": "Plesk : {name} déconnecté",
+  "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk : {name} déconnecté ici, mais le serveur n'a pas pu être prévenu : {error}",
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} a été déconnecté sur cet ordinateur, mais le serveur n'a pas répondu. Retirez aussi cet ordinateur dans Plesk : extension DEV Backup Studio → Ordinateurs connectés → Déconnecter."
  }
 }

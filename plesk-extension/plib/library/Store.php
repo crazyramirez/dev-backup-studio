@@ -85,7 +85,18 @@ class Modules_DevBackupStudio_Store
             'ip' => (string)$ip,
         ];
         self::saveDevices($devices);
+        pm_Settings::set('just_paired', $devices[$id]['name']);   // la página lo anuncia al ponerse al día
         return [$id, $token];
+    }
+
+    // El ordenador que acaba de conectarse (una sola vez), para anunciarlo en la página.
+    public static function takeJustPaired()
+    {
+        $name = (string)pm_Settings::get('just_paired', '');
+        if ($name !== '') {
+            pm_Settings::set('just_paired', '');
+        }
+        return $name;
     }
 
     public static function deviceForToken($token)

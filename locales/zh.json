@@ -868,7 +868,6 @@
   "{n} copia guardada · {size}": "已保存 {n} 份备份 · {size}",
   "Servidor Plesk conectado: {name} ({url})": "已连接 Plesk 服务器：{name}（{url}）",
   "{name} está conectado. ¿Hacer ya su primera copia completa?": "{name} 已连接。现在就进行第一次完整备份吗？",
-  "¿Quitar {name}? Este ordenador deja de estar conectado a ese Plesk. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando.": "移除 {name}？这台电脑将不再连接到该 Plesk。已保存在磁盘上的备份会保留，仍可恢复。",
   "Contraseña de las copias de {name}": "{name} 的备份密码",
   "Plesk cifra con ella las contraseñas que guarda la copia (de buzones, bases de datos, FTP…). La app la recuerda, pero anótala en un sitio seguro: si restauras desde otro ordenador o subes la copia a mano en Plesk, te la pedirá.": "Plesk 用它加密备份中保存的密码（邮箱、数据库、FTP 等）。应用会记住它，但请把它记在安全的地方：如果你从另一台电脑恢复，或在 Plesk 中手动上传备份，系统会要求输入。",
   "Copiar": "复制",
@@ -876,7 +875,6 @@
   "Volver a conectar con un código…": "用代码重新连接…",
   "Abrir la carpeta de las copias": "打开备份文件夹",
   "Eliminar esta copia del disco…": "从磁盘删除此备份…",
-  "Quitar este servidor…": "移除此服务器…",
   "¿Eliminar la copia del {date} ({size}) del disco de copia? No se puede deshacer.": "从备份磁盘删除 {date} 的备份（{size}）？此操作无法撤销。",
   "No se pudo eliminar:\n{exc}": "无法删除：\n{exc}",
   "Conecta el disco de copia: las copias de Plesk se guardan en su carpeta PLESK.": "请连接备份磁盘：Plesk 备份保存在其 PLESK 文件夹中。",
@@ -938,6 +936,16 @@
   "{n} servidor conectado": "已连接 {n} 台服务器",
   "Copias completas de tus servidores Plesk": "完整备份你的 Plesk 服务器",
   "Hay una copia o restauración de Plesk en curso. ¿Detenerla y salir?\n\nLo ya descargado se aprovecha la próxima vez.": "Plesk 备份或恢复正在进行。要停止并退出吗？\n\n已下载的部分下次会继续使用。",
-  "reservada para las copias de Plesk": "为 Plesk 备份保留"
+  "reservada para las copias de Plesk": "为 Plesk 备份保留",
+  "¿No ves «Subir extensión»? Plesk lo esconde: añade a su panel.ini (o con la extensión Panel.ini Editor) [ext-catalog] y extensionUpload = true.": "看不到“上传扩展”？Plesk 默认隐藏了它：在其 panel.ini 中（或用 Panel.ini Editor 扩展）添加 [ext-catalog] 和 extensionUpload = true。",
+  "Desconectar…": "断开连接…",
+  "Este ordenador deja de estar conectado a ese servidor Plesk. Las copias ya guardadas se conservan.": "这台电脑将不再连接到该 Plesk 服务器。已保存的备份会保留。",
+  "Espera a que termine la operación en curso con {name}, o detenla.": "请等待与 {name} 相关的当前操作完成，或将其停止。",
+  "¿Desconectar {name}?": "断开与 {name} 的连接？",
+  "Este ordenador deja de estar conectado a ese Plesk: no hará más copias de él y desaparece de la extensión. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando. Para volver a conectarlo hará falta un código nuevo.": "这台电脑将不再连接到该 Plesk：不会再为它备份，并会从扩展中消失。已保存在磁盘上的备份会保留，仍可恢复。要重新连接需要新的代码。",
+  "Desconectar": "断开连接",
+  "Plesk: {name} desconectado": "Plesk：已断开 {name}",
+  "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk：已在本机断开 {name}，但无法通知服务器：{error}",
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "已在这台电脑上断开 {name}，但服务器没有响应。请在 Plesk 中也移除这台电脑：DEV Backup Studio 扩展 → 已连接的电脑 → 断开连接。"
  }
 }

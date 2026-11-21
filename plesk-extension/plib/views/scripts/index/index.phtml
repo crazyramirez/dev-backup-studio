@@ -23,6 +23,10 @@ $size = function ($n) {
 .dbs th, .dbs td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid #eef1f4; vertical-align: top; }
 .dbs th { color: #737f8c; font-weight: 600; font-size: 12px; text-transform: uppercase; }
 .dbs-ok { color: #2a9d5b; } .dbs-err { color: #d0383d; } .dbs-run { color: #28aade; }
+.dbs-wait { color: #28aade; font-weight: 600; }
+.dbs-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%;
+           background: #28aade; vertical-align: middle; animation: dbs-pulse 1.2s ease-in-out infinite; }
+@keyframes dbs-pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
 </style>
 <div class="dbs">
     <p><?php echo $e($m('intro')) ?>
@@ -36,7 +40,11 @@ $size = function ($n) {
         <?php if ($this->code): ?>
             <p><?php echo $e($m('codeHelp')) ?></p>
             <div class="dbs-code"><?php echo $e(substr($this->code[0], 0, 3) . ' ' . substr($this->code[0], 3)) ?></div>
-            <p class="dbs-muted"><?php echo $e($m('codeExpires', ['minutes' => max(1, (int)ceil($this->code[1] / 60))])) ?></p>
+            <p class="dbs-muted"><?php
+                $left = (int)$this->code[1];
+                echo str_replace('@@LEFT@@', '<span id="dbs-left">' . sprintf('%d:%02d', intdiv($left, 60), $left % 60) . '</span>',
+                                 $e($m('codeExpires', ['time' => '@@LEFT@@']))) ?></p>
+            <p class="dbs-wait"><span class="dbs-dot"></span><?php echo $e($m('waitingPair')) ?></p>
             <table>
                 <tr><th style="width:220px"><?php echo $e($m('serverAddress')) ?></th><td class="dbs-mono"><?php echo $e($this->address) ?></td></tr>
                 <?php if ($this->fingerprint): ?>
@@ -91,3 +99,71 @@ $size = function ($n) {
     </div>
     <p class="dbs-muted">DEV Backup Studio <?php echo $e($this->version) ?></p>
 </div>
+<script>
+// La página se pone al día sola: cuando un ordenador usa el código, cuando caduca o cuando una copia
+// cambia de estado, se recarga (con el código en pantalla se pregunta cada 2 s; si no, cada 5 s).
+(function () {
+    var url = <?php echo json_encode((string)$this->statusUrl) ?>;
+    var signature = <?php echo json_encode((string)$this->signature) ?>;
+    var left = <?php echo $this->code ? (int)$this->code[1] : 0 ?>;
+    var shown = document.getElementById('dbs-left');
+    var reloading = false;
+
+    function reload() {
+        if (!reloading) {
+            reloading = true;
+            window.location.reload();
+        }
+    }
+
+    function draw() {
+        if (!shown) {
+            return;
+        }
+        var s = Math.max(0, left);
+        shown.textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+    }
+
+    function poll() {
+        if (reloading || document.hidden) {
+            return;
+        }
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url + (url.indexOf('?') < 0 ? '?' : '&') + '_=' + Date.now(), true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.onload = function () {
+            if (xhr.status !== 200) {
+                return;
+            }
+            try {
+                var data = JSON.parse(xhr.responseText);
+                if (data.signature && data.signature !== signature) {
+                    reload();
+                } else if (typeof data.code_left === 'number' && shown) {
+                    left = data.code_left;
+                    draw();
+                }
+            } catch (err) {
+                // la sesión de Plesk caducó (llega la página de inicio): no se insiste
+            }
+        };
+        xhr.send();
+    }
+
+    if (left > 0) {
+        setInterval(function () {
+            left -= 1;
+            draw();
+            if (left <= 0) {
+                reload();
+            }
+        }, 1000);
+    }
+    setInterval(poll, left > 0 ? 2000 : 5000);
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) {
+            poll();
+        }
+    });
+})();
+</script>

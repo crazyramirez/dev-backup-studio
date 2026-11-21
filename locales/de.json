@@ -905,7 +905,6 @@
   ],
   "Servidor Plesk conectado: {name} ({url})": "Plesk-Server verbunden: {name} ({url})",
   "{name} está conectado. ¿Hacer ya su primera copia completa?": "{name} ist verbunden. Jetzt die erste vollständige Sicherung erstellen?",
-  "¿Quitar {name}? Este ordenador deja de estar conectado a ese Plesk. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando.": "{name} entfernen? Dieser Computer ist dann nicht mehr mit diesem Plesk verbunden. Bereits auf dem Laufwerk gespeicherte Sicherungen bleiben erhalten und lassen sich weiterhin wiederherstellen.",
   "Contraseña de las copias de {name}": "Passwort der Sicherungen von {name}",
   "Plesk cifra con ella las contraseñas que guarda la copia (de buzones, bases de datos, FTP…). La app la recuerda, pero anótala en un sitio seguro: si restauras desde otro ordenador o subes la copia a mano en Plesk, te la pedirá.": "Plesk verschlüsselt damit die in der Sicherung gespeicherten Passwörter (Postfächer, Datenbanken, FTP …). Die App merkt es sich, aber notieren Sie es an einem sicheren Ort: Wenn Sie von einem anderen Computer wiederherstellen oder die Sicherung in Plesk von Hand hochladen, wird danach gefragt.",
   "Copiar": "Kopieren",
@@ -913,7 +912,6 @@
   "Volver a conectar con un código…": "Mit einem Code erneut verbinden…",
   "Abrir la carpeta de las copias": "Ordner der Sicherungen öffnen",
   "Eliminar esta copia del disco…": "Diese Sicherung vom Laufwerk löschen…",
-  "Quitar este servidor…": "Diesen Server entfernen…",
   "¿Eliminar la copia del {date} ({size}) del disco de copia? No se puede deshacer.": "Die Sicherung vom {date} ({size}) vom Sicherungslaufwerk löschen? Das lässt sich nicht rückgängig machen.",
   "No se pudo eliminar:\n{exc}": "Löschen nicht möglich:\n{exc}",
   "Conecta el disco de copia: las copias de Plesk se guardan en su carpeta PLESK.": "Verbinden Sie das Sicherungslaufwerk: Plesk-Sicherungen werden in seinem Ordner PLESK gespeichert.",
@@ -978,6 +976,16 @@
   ],
   "Copias completas de tus servidores Plesk": "Vollständige Sicherungen Ihrer Plesk-Server",
   "Hay una copia o restauración de Plesk en curso. ¿Detenerla y salir?\n\nLo ya descargado se aprovecha la próxima vez.": "Eine Plesk-Sicherung oder -Wiederherstellung läuft. Stoppen und beenden?\n\nBereits Heruntergeladenes wird beim nächsten Mal weiterverwendet.",
-  "reservada para las copias de Plesk": "für Plesk-Sicherungen reserviert"
+  "reservada para las copias de Plesk": "für Plesk-Sicherungen reserviert",
+  "¿No ves «Subir extensión»? Plesk lo esconde: añade a su panel.ini (o con la extensión Panel.ini Editor) [ext-catalog] y extensionUpload = true.": "Sie sehen „Erweiterung hochladen“ nicht? Plesk blendet es aus: Fügen Sie [ext-catalog] und extensionUpload = true in seine panel.ini ein (oder mit der Erweiterung Panel.ini Editor).",
+  "Desconectar…": "Trennen…",
+  "Este ordenador deja de estar conectado a ese servidor Plesk. Las copias ya guardadas se conservan.": "Dieser Computer ist dann nicht mehr mit diesem Plesk-Server verbunden. Bereits gespeicherte Sicherungen bleiben erhalten.",
+  "Espera a que termine la operación en curso con {name}, o detenla.": "Warten Sie, bis der laufende Vorgang mit {name} abgeschlossen ist, oder stoppen Sie ihn.",
+  "¿Desconectar {name}?": "{name} trennen?",
+  "Este ordenador deja de estar conectado a ese Plesk: no hará más copias de él y desaparece de la extensión. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando. Para volver a conectarlo hará falta un código nuevo.": "Dieser Computer ist dann nicht mehr mit diesem Plesk verbunden: Er erstellt keine Sicherungen mehr davon und verschwindet aus der Erweiterung. Bereits auf dem Laufwerk gespeicherte Sicherungen bleiben erhalten und lassen sich weiterhin wiederherstellen. Zum erneuten Verbinden ist ein neuer Code nötig.",
+  "Desconectar": "Trennen",
+  "Plesk: {name} desconectado": "Plesk: {name} getrennt",
+  "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk: {name} hier getrennt, aber der Server konnte nicht benachrichtigt werden: {error}",
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} wurde auf diesem Computer getrennt, aber der Server hat nicht geantwortet. Entfernen Sie diesen Computer auch in Plesk: Erweiterung DEV Backup Studio → Verbundene Computer → Trennen."
  }
 }

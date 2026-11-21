@@ -11,7 +11,7 @@ $messages = [
     'pairButton' => 'Connect a computer',
     'newCodeButton' => 'New code',
     'codeHelp' => 'In the app, enter the server address and this code:',
-    'codeExpires' => 'Single use, expires in %%minutes%% min.',
+    'codeExpires' => 'Single use, expires in %%time%%.',
     'serverAddress' => 'Server address',
     'fingerprint' => 'Certificate fingerprint (SHA-256)',
     'fingerprintHelp' => 'If the panel certificate is not from a recognized authority, the app will show you this fingerprint so you can confirm you are connecting to this server.',
@@ -40,4 +40,6 @@ $messages = [
     'state_failed' => 'Failed',
     'state_canceled' => 'Canceled',
     'howItWorks' => 'The backup is made with "plesk bin pleskbackup --server"; the app downloads it and checks its SHA-256, then it is deleted here. Anything not collected is deleted automatically after 3 days.',
+    'waitingPair' => 'Waiting for the computer to use the code… This page updates by itself.',
+    'pairedNow' => '%%name%% is now connected.',
 ];

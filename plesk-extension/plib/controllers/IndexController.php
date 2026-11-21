@@ -66,6 +66,10 @@ class IndexController extends pm_Controller_Action
         }
 
         Modules_DevBackupStudio_Jobs::cleanup();
+        $paired = Modules_DevBackupStudio_Store::takeJustPaired();
+        if ($paired !== '') {
+            $this->_status->addMessage('info', pm_Locale::lmsg('pairedNow', ['name' => $paired]));
+        }
         $jobs = [];
         foreach (Modules_DevBackupStudio_Jobs::all() as $id) {
             $j = Modules_DevBackupStudio_Jobs::info($id);
@@ -88,6 +92,19 @@ class IndexController extends pm_Controller_Action
         $this->view->jobs = array_slice($jobs, 0, 20);
         $this->view->version = Modules_DevBackupStudio_Api::VERSION;
         $this->view->tools = is_executable('/usr/local/psa/bin/pleskbackup') || !is_dir('/usr/local/psa/bin');
+        $this->view->signature = Modules_DevBackupStudio_Jobs::pageSignature();
+        $this->view->statusUrl = pm_Context::getActionUrl('index', 'status');
+    }
+
+    // La página pregunta aquí cada pocos segundos si ha cambiado algo (un ordenador se ha conectado
+    // con el código, el código ha caducado, una copia ha avanzado) para ponerse al día sola.
+    public function statusAction()
+    {
+        $code = Modules_DevBackupStudio_Store::currentCode();
+        $this->_helper->json([
+            'signature' => Modules_DevBackupStudio_Jobs::pageSignature(),
+            'code_left' => $code ? $code[1] : 0,
+        ]);
     }
 
     private function panelAddress()

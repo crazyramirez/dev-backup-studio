@@ -11,7 +11,7 @@ $messages = [
     'pairButton' => 'Conectar un ordenador',
     'newCodeButton' => 'Generar otro código',
     'codeHelp' => 'Escribe en la app la dirección del servidor y este código:',
-    'codeExpires' => 'Sirve una vez y caduca en %%minutes%% min.',
+    'codeExpires' => 'Sirve una vez y caduca en %%time%%.',
     'serverAddress' => 'Dirección del servidor',
     'fingerprint' => 'Huella del certificado (SHA-256)',
     'fingerprintHelp' => 'Si el certificado del panel no es de una autoridad reconocida, la app te enseñará esta huella para que confirmes que te conectas a este servidor.',
@@ -40,4 +40,6 @@ $messages = [
     'state_failed' => 'Falló',
     'state_canceled' => 'Cancelado',
     'howItWorks' => 'La copia se hace con «plesk bin pleskbackup --server» y la app la descarga y comprueba su SHA-256; después se borra de aquí. Lo que nadie recoge se borra solo a los 3 días.',
+    'waitingPair' => 'Esperando a que el ordenador use el código… Esta página se actualiza sola.',
+    'pairedNow' => '%%name%% se ha conectado.',
 ];

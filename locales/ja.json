@@ -868,7 +868,6 @@
   "{n} copia guardada · {size}": "{n} 件のバックアップを保存 · {size}",
   "Servidor Plesk conectado: {name} ({url})": "Plesk サーバーを接続しました：{name}（{url}）",
   "{name} está conectado. ¿Hacer ya su primera copia completa?": "{name} を接続しました。最初の完全バックアップを今すぐ作成しますか？",
-  "¿Quitar {name}? Este ordenador deja de estar conectado a ese Plesk. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando.": "{name} を削除しますか？このコンピューターはその Plesk に接続されなくなります。ディスクに保存済みのバックアップは残り、引き続き復元できます。",
   "Contraseña de las copias de {name}": "{name} のバックアップのパスワード",
   "Plesk cifra con ella las contraseñas que guarda la copia (de buzones, bases de datos, FTP…). La app la recuerda, pero anótala en un sitio seguro: si restauras desde otro ordenador o subes la copia a mano en Plesk, te la pedirá.": "Plesk はこのパスワードで、バックアップに保存されるパスワード（メールボックス、データベース、FTP など）を暗号化します。アプリが記憶しますが、安全な場所に控えておいてください。別のコンピューターから復元したり、Plesk でバックアップを手動でアップロードしたりするときに求められます。",
   "Copiar": "コピー",
@@ -876,7 +875,6 @@
   "Volver a conectar con un código…": "コードで再接続…",
   "Abrir la carpeta de las copias": "バックアップのフォルダーを開く",
   "Eliminar esta copia del disco…": "このバックアップをディスクから削除…",
-  "Quitar este servidor…": "このサーバーを削除…",
   "¿Eliminar la copia del {date} ({size}) del disco de copia? No se puede deshacer.": "{date} のバックアップ（{size}）をバックアップディスクから削除しますか？元に戻せません。",
   "No se pudo eliminar:\n{exc}": "削除できませんでした：\n{exc}",
   "Conecta el disco de copia: las copias de Plesk se guardan en su carpeta PLESK.": "バックアップディスクを接続してください。Plesk のバックアップはその PLESK フォルダーに保存されます。",
@@ -938,6 +936,16 @@
   "{n} servidor conectado": "{n} 台のサーバーを接続済み",
   "Copias completas de tus servidores Plesk": "Plesk サーバーの完全バックアップ",
   "Hay una copia o restauración de Plesk en curso. ¿Detenerla y salir?\n\nLo ya descargado se aprovecha la próxima vez.": "Plesk のバックアップまたは復元が実行中です。停止して終了しますか？\n\nダウンロード済みの分は次回に再利用されます。",
-  "reservada para las copias de Plesk": "Plesk のバックアップ用に予約済み"
+  "reservada para las copias de Plesk": "Plesk のバックアップ用に予約済み",
+  "¿No ves «Subir extensión»? Plesk lo esconde: añade a su panel.ini (o con la extensión Panel.ini Editor) [ext-catalog] y extensionUpload = true.": "「拡張機能をアップロード」が見当たりませんか？Plesk は既定で隠しています。panel.ini に（または Panel.ini Editor 拡張機能で）[ext-catalog] と extensionUpload = true を追加してください。",
+  "Desconectar…": "接続を解除…",
+  "Este ordenador deja de estar conectado a ese servidor Plesk. Las copias ya guardadas se conservan.": "このコンピューターはその Plesk サーバーに接続されなくなります。保存済みのバックアップは残ります。",
+  "Espera a que termine la operación en curso con {name}, o detenla.": "{name} で実行中の操作が終わるまでお待ちいただくか、停止してください。",
+  "¿Desconectar {name}?": "{name} の接続を解除しますか？",
+  "Este ordenador deja de estar conectado a ese Plesk: no hará más copias de él y desaparece de la extensión. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando. Para volver a conectarlo hará falta un código nuevo.": "このコンピューターはその Plesk に接続されなくなります。今後バックアップを作成せず、拡張機能からも表示されなくなります。ディスクに保存済みのバックアップは残り、引き続き復元できます。再接続するには新しいコードが必要です。",
+  "Desconectar": "接続を解除",
+  "Plesk: {name} desconectado": "Plesk：{name} の接続を解除しました",
+  "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk：{name} の接続をここでは解除しましたが、サーバーに通知できませんでした：{error}",
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "このコンピューターで {name} の接続を解除しましたが、サーバーが応答しませんでした。Plesk でもこのコンピューターを削除してください：DEV Backup Studio 拡張機能 → 接続済みのコンピューター → 接続を解除。"
  }
 }

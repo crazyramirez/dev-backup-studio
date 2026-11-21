@@ -1,5 +1,22 @@
 # Novedades
 
+## 2.4.1
+
+- **La extensión de Plesk se pone al día sola** (versión 1.0.1 de la extensión): en cuanto la app usa
+  el código, el ordenador aparece como conectado con un aviso, sin recargar la página. La cuenta atrás
+  del código corre en vivo y la actividad de las copias se actualiza sola. Para tenerla, sube en Plesk
+  el `.zip` nuevo encima del anterior.
+- **Desconectar un servidor Plesk**, con un botón a la vista junto a su nombre (y con clic derecho en la
+  lista). Plesk borra la llave de este ordenador y la extensión deja de mostrarlo; las copias ya
+  guardadas se conservan y se pueden seguir restaurando. Si el servidor no responde, la app lo
+  desconecta igualmente y explica cómo quitarlo también desde la extensión.
+- Arreglado: con algunos errores (servidor inalcanzable, fallo de Plesk) la pestaña *Plesk* fallaba al
+  enseñar el mensaje en vez de explicarlo.
+- En la pestaña *Plesk* ya no se corta el texto bajo «Aún no hay copias de este servidor» (ni los
+  mensajes de *Recuperar*) al partirse en dos líneas.
+- *Conectar un servidor Plesk* explica cómo hacer aparecer el botón *Subir extensión*, que Plesk
+  esconde por defecto.
+
 ## 2.4.0
 
 - **Copias completas de servidores Plesk.** Nueva pestaña *Plesk*: conecta tus servidores Plesk y

@@ -905,7 +905,6 @@
   ],
   "Servidor Plesk conectado: {name} ({url})": "Server Plesk collegato: {name} ({url})",
   "{name} está conectado. ¿Hacer ya su primera copia completa?": "{name} è collegato. Fare ora il suo primo backup completo?",
-  "¿Quitar {name}? Este ordenador deja de estar conectado a ese Plesk. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando.": "Rimuovere {name}? Questo computer non sarà più collegato a quel Plesk. I backup già salvati sul disco vengono conservati e si possono ancora ripristinare.",
   "Contraseña de las copias de {name}": "Password dei backup di {name}",
   "Plesk cifra con ella las contraseñas que guarda la copia (de buzones, bases de datos, FTP…). La app la recuerda, pero anótala en un sitio seguro: si restauras desde otro ordenador o subes la copia a mano en Plesk, te la pedirá.": "Plesk la usa per cifrare le password contenute nel backup (caselle di posta, database, FTP…). L'app la ricorda, ma annotala in un posto sicuro: se ripristini da un altro computer o carichi il backup a mano in Plesk, ti verrà chiesta.",
   "Copiar": "Copia",
@@ -913,7 +912,6 @@
   "Volver a conectar con un código…": "Ricollega con un codice…",
   "Abrir la carpeta de las copias": "Apri la cartella dei backup",
   "Eliminar esta copia del disco…": "Elimina questo backup dal disco…",
-  "Quitar este servidor…": "Rimuovi questo server…",
   "¿Eliminar la copia del {date} ({size}) del disco de copia? No se puede deshacer.": "Eliminare il backup del {date} ({size}) dal disco di backup? Non si può annullare.",
   "No se pudo eliminar:\n{exc}": "Impossibile eliminare:\n{exc}",
   "Conecta el disco de copia: las copias de Plesk se guardan en su carpeta PLESK.": "Collega il disco di backup: i backup di Plesk vengono salvati nella sua cartella PLESK.",
@@ -978,6 +976,16 @@
   ],
   "Copias completas de tus servidores Plesk": "Backup completi dei tuoi server Plesk",
   "Hay una copia o restauración de Plesk en curso. ¿Detenerla y salir?\n\nLo ya descargado se aprovecha la próxima vez.": "È in corso un backup o un ripristino di Plesk. Interromperlo e uscire?\n\nQuanto già scaricato viene riutilizzato la prossima volta.",
-  "reservada para las copias de Plesk": "riservata ai backup di Plesk"
+  "reservada para las copias de Plesk": "riservata ai backup di Plesk",
+  "¿No ves «Subir extensión»? Plesk lo esconde: añade a su panel.ini (o con la extensión Panel.ini Editor) [ext-catalog] y extensionUpload = true.": "Non vedi «Carica estensione»? Plesk lo nasconde: aggiungi [ext-catalog] ed extensionUpload = true al suo panel.ini (o con l'estensione Panel.ini Editor).",
+  "Desconectar…": "Scollega…",
+  "Este ordenador deja de estar conectado a ese servidor Plesk. Las copias ya guardadas se conservan.": "Questo computer non sarà più collegato a quel server Plesk. I backup già salvati vengono conservati.",
+  "Espera a que termine la operación en curso con {name}, o detenla.": "Attendi che finisca l'operazione in corso con {name}, oppure interrompila.",
+  "¿Desconectar {name}?": "Scollegare {name}?",
+  "Este ordenador deja de estar conectado a ese Plesk: no hará más copias de él y desaparece de la extensión. Las copias ya guardadas en el disco se conservan y se pueden seguir restaurando. Para volver a conectarlo hará falta un código nuevo.": "Questo computer non sarà più collegato a quel Plesk: non ne farà più backup e scompare dall'estensione. I backup già salvati sul disco vengono conservati e si possono ancora ripristinare. Per ricollegarlo servirà un nuovo codice.",
+  "Desconectar": "Scollega",
+  "Plesk: {name} desconectado": "Plesk: {name} scollegato",
+  "Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}": "Plesk: {name} scollegato qui, ma non è stato possibile avvisare il server: {error}",
+  "{name} se ha desconectado en este ordenador, pero el servidor no respondió. Quita también este ordenador en Plesk: extensión DEV Backup Studio → Ordenadores conectados → Desconectar.": "{name} è stato scollegato su questo computer, ma il server non ha risposto. Rimuovi questo computer anche in Plesk: estensione DEV Backup Studio → Computer collegati → Scollega."
  }
 }

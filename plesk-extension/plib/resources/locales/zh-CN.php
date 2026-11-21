@@ -11,7 +11,7 @@ $messages = [
     'pairButton' => '连接一台电脑',
     'newCodeButton' => '新代码',
     'codeHelp' => '在应用中输入服务器地址和此代码：',
-    'codeExpires' => '仅限使用一次，%%minutes%% 分钟后失效。',
+    'codeExpires' => '仅限使用一次，%%time%% 后失效。',
     'serverAddress' => '服务器地址',
     'fingerprint' => '证书指纹（SHA-256）',
     'fingerprintHelp' => '如果面板证书不是由受信任的机构签发的，应用会显示此指纹，以便你确认连接的是这台服务器。',
@@ -40,4 +40,6 @@ $messages = [
     'state_failed' => '失败',
     'state_canceled' => '已取消',
     'howItWorks' => '备份通过“plesk bin pleskbackup --server”创建；应用下载并校验其 SHA-256 后，会从这里删除。无人领取的备份会在 3 天后自动删除。',
+    'waitingPair' => '正在等待电脑使用此代码… 本页面会自动更新。',
+    'pairedNow' => '%%name%% 已连接。',
 ];

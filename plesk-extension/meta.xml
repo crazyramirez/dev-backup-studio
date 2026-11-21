@@ -5,7 +5,7 @@
     <description>Full server backups (settings, subscriptions, websites, databases and mail) made with Plesk's own backup tool and kept on your own disk by the DEV Backup Studio desktop app. Restore them the official Plesk way.</description>
     <category>backup</category>
     <url>https://github.com/crazyramirez/dev-backup-studio</url>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <release>1</release>
     <vendor>DEV Backup Studio</vendor>
     <plesk_min_version>18.0.0</plesk_min_version>

@@ -11,7 +11,7 @@ $messages = [
     'pairButton' => 'コンピューターを接続',
     'newCodeButton' => '新しいコード',
     'codeHelp' => 'アプリにサーバーのアドレスとこのコードを入力してください：',
-    'codeExpires' => '1 回限り有効、%%minutes%% 分後に失効します。',
+    'codeExpires' => '1 回限り有効、残り %%time%% で失効します。',
     'serverAddress' => 'サーバーのアドレス',
     'fingerprint' => '証明書のフィンガープリント（SHA-256）',
     'fingerprintHelp' => 'パネルの証明書が認証局のものでない場合、アプリにこのフィンガープリントが表示されるので、このサーバーに接続していることを確認できます。',
@@ -40,4 +40,6 @@ $messages = [
     'state_failed' => '失敗',
     'state_canceled' => 'キャンセル',
     'howItWorks' => 'バックアップは「plesk bin pleskbackup --server」で作成され、アプリがダウンロードして SHA-256 を確認した後、ここから削除されます。受け取られなかったものは 3 日後に自動で削除されます。',
+    'waitingPair' => 'コンピューターがコードを使うのを待っています… このページは自動で更新されます。',
+    'pairedNow' => '%%name%% が接続されました。',
 ];

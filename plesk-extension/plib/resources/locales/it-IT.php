@@ -11,7 +11,7 @@ $messages = [
     'pairButton' => 'Collega un computer',
     'newCodeButton' => 'Nuovo codice',
     'codeHelp' => 'Nell\'app, inserisci l\'indirizzo del server e questo codice:',
-    'codeExpires' => 'Monouso, scade tra %%minutes%% min.',
+    'codeExpires' => 'Monouso, scade tra %%time%%.',
     'serverAddress' => 'Indirizzo del server',
     'fingerprint' => 'Impronta del certificato (SHA-256)',
     'fingerprintHelp' => 'Se il certificato del pannello non è di un\'autorità riconosciuta, l\'app ti mostrerà questa impronta per confermare che ti stai collegando a questo server.',
@@ -40,4 +40,6 @@ $messages = [
     'state_failed' => 'Non riuscito',
     'state_canceled' => 'Annullato',
     'howItWorks' => 'Il backup viene creato con «plesk bin pleskbackup --server»; l\'app lo scarica e ne verifica lo SHA-256, poi viene eliminato da qui. Ciò che nessuno ritira viene eliminato automaticamente dopo 3 giorni.',
+    'waitingPair' => 'In attesa che il computer usi il codice… Questa pagina si aggiorna da sola.',
+    'pairedNow' => '%%name%% è ora collegato.',
 ];

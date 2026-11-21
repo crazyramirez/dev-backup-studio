@@ -164,6 +164,21 @@ class Modules_DevBackupStudio_Jobs
         ];
     }
 
+    // Lo que enseña la página de la extensión, resumido: si cambia (un ordenador se conecta, se gasta
+    // o caduca el código, un trabajo avanza de estado), la página se recarga sola.
+    public static function pageSignature()
+    {
+        $parts = [Modules_DevBackupStudio_Store::currentCode() ? 'code' : 'nocode'];
+        foreach (Modules_DevBackupStudio_Store::devices() as $id => $d) {
+            $parts[] = 'd:' . $id;
+        }
+        foreach (self::all() as $id) {
+            $parts[] = 'j:' . $id . ':' . self::state($id);
+        }
+        sort($parts);
+        return sha1(implode('|', $parts));
+    }
+
     public static function backupFile($id)
     {
         return self::dir($id) . 'backup.tar';

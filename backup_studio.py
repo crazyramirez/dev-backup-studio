@@ -59,7 +59,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -2460,7 +2460,13 @@ class EmptyState(QWidget):
         self.text.setWordWrap(True)
         self.text.setMaximumWidth(520)
         v.addWidget(self.title)
-        v.addWidget(self.text, 0, Qt.AlignmentFlag.AlignHCenter)
+        # centrado con márgenes elásticos y no con AlignHCenter: con la alineación, Qt le da al texto
+        # su ancho preferido y no el alto que necesita al partirse en varias líneas, y se corta
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(self.text, 100)
+        row.addStretch(1)
+        v.addLayout(row)
         if busy:
             bar = thin_bar(4)
             bar.setRange(0, 0)
@@ -2468,11 +2474,28 @@ class EmptyState(QWidget):
             v.addSpacing(6)
             v.addWidget(bar, 0, Qt.AlignmentFlag.AlignHCenter)
         v.addStretch(2)
+        for lbl in (self.title, self.text):
+            lbl.installEventFilter(self)
+
+    def eventFilter(self, obj, e):  # noqa: N802
+        # el alto que necesita el texto partido en líneas con su ancho de verdad (los layouts de Qt, y
+        # más dentro de un QStackedWidget, a veces le dan el de una sola línea y lo cortan)
+        if e.type() == QEvent.Type.Resize and isinstance(obj, QLabel):
+            self._fit(obj)
+        return False
+
+    @staticmethod
+    def _fit(lbl: QLabel) -> None:
+        need = lbl.heightForWidth(lbl.width()) if lbl.width() > 0 else -1
+        if need > 0 and lbl.minimumHeight() != need:
+            lbl.setMinimumHeight(need)
 
     def set(self, title: str, text: str = "") -> "EmptyState":
         self.title.setText(title)
         self.text.setText(text)
         self.text.setVisible(bool(text))
+        for lbl in (self.title, self.text):
+            self._fit(lbl)
         return self
 
 
@@ -3436,6 +3459,10 @@ def plesk_error_text(exc: plesklink.PleskError | None) -> str:
     if exc is None:
         return ""
     d = exc.detail
+    try:  # solo «space» y «serverspace» traen un número; los demás, texto
+        size = fmt_bytes(int(float(d)))
+    except (TypeError, ValueError):
+        size = "—"
     return {
         "code": _("El código no es correcto o ha caducado. Pide uno nuevo en Plesk y vuelve a probar."),
         "unreachable": _("No se puede llegar al servidor ({detail}). Comprueba la dirección y que el puerto del panel "
@@ -3448,9 +3475,8 @@ def plesk_error_text(exc: plesklink.PleskError | None) -> str:
         "old": _("La extensión de Plesk es de una versión antigua: actualízala en Extensiones → Mis extensiones."),
         "busy": _("Demasiados intentos. Espera unos minutos y vuelve a probar."),
         "server": _("Plesk no pudo terminar: {detail}").format(detail=d or "—"),
-        "space": _("No cabe en el disco de copia: faltan {size}.").format(size=fmt_bytes(int(d or 0))),
-        "serverspace": _("No hay sitio en el servidor Plesk para recibir la copia: faltan {size}.").format(
-            size=fmt_bytes(int(float(d or 0)))),
+        "space": _("No cabe en el disco de copia: faltan {size}.").format(size=size),
+        "serverspace": _("No hay sitio en el servidor Plesk para recibir la copia: faltan {size}.").format(size=size),
         "running": _("Ya hay una copia o restauración en marcha en ese servidor. Espera a que termine."),
         "signature": _("El Gestor de copias de Plesk no admite una copia hecha en otro servidor. Elige «Restaurar todo "
                        "el servidor», o súbela a mano en Plesk marcando «Subir archivos de copia sin firma válida»."),
@@ -3491,7 +3517,11 @@ class PleskPairDialog(QDialog):
             "<ol style='margin-left:-22px'>"
             f"<li>{html.escape(_('En Plesk, abre Extensiones → Mis extensiones → Subir extensión y sube la extensión DEV Backup Studio.'))} "
             f"<a href='{PLESK_EXT_URL}' style='color:{C['accent2']}; text-decoration:none'>"
-            f"{html.escape(_('Descargar la extensión'))}</a></li>"
+            f"{html.escape(_('Descargar la extensión'))}</a><br>"
+            f"<span style='color:{C['faint']}'>"
+            + html.escape(_("¿No ves «Subir extensión»? Plesk lo esconde: añade a su panel.ini (o con la extensión "
+                            "Panel.ini Editor) [ext-catalog] y extensionUpload = true."))
+            + "</span></li>"
             f"<li>{html.escape(_('Ábrela y pulsa «Conectar un ordenador».'))}</li>"
             f"<li>{html.escape(_('Escribe aquí la dirección del panel y el código que aparece.'))}</li></ol>")
         steps.setObjectName("muted")
@@ -3739,7 +3769,7 @@ class PleskPage(QWidget):
     Las copias automáticas se miran cada 10 minutos y al conectar el disco de copia.
     """
     op_changed = pyqtSignal()      # desde el hilo: hay que guardar los ajustes del servidor
-    unpaired = pyqtSignal(str)
+    unpaired = pyqtSignal(str, str)   # servidor, error al avisar a Plesk ("" si fue bien)
     ROLE = Qt.ItemDataRole.UserRole
 
     def __init__(self, win: "MainWindow"):
@@ -3756,6 +3786,7 @@ class PleskPage(QWidget):
         self._load()
         self._build()
         self.op_changed.connect(self._save)
+        self.unpaired.connect(self._on_unpaired)
         self.timer = QTimer(self)
         self.timer.setInterval(400)
         self.timer.timeout.connect(self._tick)
@@ -3865,6 +3896,8 @@ class PleskPage(QWidget):
         self.list.setSpacing(2)
         self.list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.list.currentItemChanged.connect(lambda cur, _p: self._select(cur.data(self.ROLE) if cur else ""))
+        self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._list_menu)
         left.body.addWidget(self.list, 1)
         self.disk_note = QLabel("")
         self.disk_note.setObjectName("faint")
@@ -3875,15 +3908,26 @@ class PleskPage(QWidget):
 
         right = QVBoxLayout()
         right.setSpacing(10)
-        head = QVBoxLayout()
-        head.setSpacing(2)
+        head = QHBoxLayout()
+        head.setSpacing(10)
         head.setContentsMargins(4, 2, 0, 0)
+        names = QVBoxLayout()
+        names.setSpacing(2)
         self.title = ElideLabel("", Qt.TextElideMode.ElideRight)
         self.title.setObjectName("bannerTitle")
         self.sub = ElideLabel("", Qt.TextElideMode.ElideRight)
         self.sub.setObjectName("faint")
-        head.addWidget(self.title)
-        head.addWidget(self.sub)
+        names.addWidget(self.title)
+        names.addWidget(self.sub)
+        head.addLayout(names, 1)
+        self.b_disconnect = QPushButton("  " + _("Desconectar…"))
+        self.b_disconnect.setObjectName("danger")
+        self.b_disconnect.setIcon(glyph_icon(G.CLOSE, C["muted"], 13))
+        self.b_disconnect.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.b_disconnect.setToolTip(_("Este ordenador deja de estar conectado a ese servidor Plesk. Las copias ya "
+                                       "guardadas se conservan."))
+        self.b_disconnect.clicked.connect(self._disconnect_selected)
+        head.addWidget(self.b_disconnect, 0, Qt.AlignmentFlag.AlignVCenter)
         right.addLayout(head)
         self.banner = Banner()
         right.addWidget(self.banner)
@@ -4102,6 +4146,8 @@ class PleskPage(QWidget):
         self.b_reveal.setEnabled(b is not None)
         self.b_more.setEnabled(bool(self._selected))
         self.b_add.setEnabled(not busy)
+        self.b_disconnect.setVisible(srv is not None)
+        self.b_disconnect.setEnabled(srv is not None and not (busy and self.op.server is srv))
         self.schedule.setEnabled(srv is not None)
         self.keep.setEnabled(srv is not None)
         n = self.tree.topLevelItemCount()
@@ -4149,19 +4195,39 @@ class PleskPage(QWidget):
             if ans == QMessageBox.StandardButton.Yes:
                 self.start_backup(srv.id)
 
-    def remove(self, srv: plesklink.Server):
-        ans = QMessageBox.question(
-            self.win, APP_NAME, _("¿Quitar {name}? Este ordenador deja de estar conectado a ese Plesk. Las copias ya "
-                                  "guardadas en el disco se conservan y se pueden seguir restaurando.").format(name=srv.label))
-        if ans != QMessageBox.StandardButton.Yes:
+    def remove(self, srv: plesklink.Server, ask: bool = True):
+        """Desconectar: Plesk borra la llave de este ordenador y la app olvida el servidor. Las copias
+        del disco (y la contraseña para restaurarlas) se quedan."""
+        if self.busy and self.op.server is srv:
+            QMessageBox.information(self.win, APP_NAME, _("Espera a que termine la operación en curso con {name}, o "
+                                                          "detenla.").format(name=srv.label))
             return
+        if ask:
+            box = QMessageBox(QMessageBox.Icon.Question, APP_NAME, "", parent=self.win)
+            box.setText(_("¿Desconectar {name}?").format(name=srv.label))
+            box.setInformativeText(_("Este ordenador deja de estar conectado a ese Plesk: no hará más copias de él y "
+                                     "desaparece de la extensión. Las copias ya guardadas en el disco se conservan y se "
+                                     "pueden seguir restaurando. Para volver a conectarlo hará falta un código nuevo."))
+            box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
+            box.button(QMessageBox.StandardButton.Yes).setText(_("Desconectar"))
+            box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+            if box.exec() != QMessageBox.StandardButton.Yes:
+                return
         token = self.secrets.get(plesklink.token_key(srv.id))
+        name = srv.label
 
         def work():
+            error = ""
             try:
-                plesklink.Client(srv.url, token, srv.fingerprint, timeout=10).unpair()
-            except plesklink.PleskError:
-                pass  # si no responde, la conexión se puede quitar también desde Plesk
+                if token:
+                    plesklink.Client(srv.url, token, srv.fingerprint, timeout=10).unpair()
+            except plesklink.PleskError as exc:
+                # si Plesk ya no lo reconocía, allí ya estaba desconectado
+                error = "" if exc.kind == "auth" else plesk_error_text(exc)
+            try:
+                self.unpaired.emit(name, error)
+            except RuntimeError:  # la ventana ya se cerró
+                pass
 
         threading.Thread(target=work, name="plesk-desconectar", daemon=True).start()
         self.servers.remove(srv)
@@ -4169,6 +4235,39 @@ class PleskPage(QWidget):
         self._save()
         self.refresh()
         self.refresh_summary()
+
+    def _disconnect_selected(self):
+        srv = self.server(self._selected)
+        if srv is not None:
+            self.remove(srv)
+
+    def _on_unpaired(self, name: str, error: str):
+        if not error:
+            self.win._log(_("Plesk: {name} desconectado").format(name=name), C["muted"])
+            return
+        self.win._log(_("Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}").format(
+            name=name, error=error), C["warn"])
+        QMessageBox.warning(self.win, APP_NAME, _("{name} se ha desconectado en este ordenador, pero el servidor no "
+                                                  "respondió. Quita también este ordenador en Plesk: extensión DEV "
+                                                  "Backup Studio → Ordenadores conectados → Desconectar.").format(name=name))
+
+    def _list_menu(self, pos):
+        it = self.list.itemAt(pos)
+        if it is None:
+            return
+        self.list.setCurrentItem(it)
+        srv = self.server(it.data(self.ROLE))
+        if srv is None:
+            return
+        menu = QMenu(self)
+        menu.addAction(glyph_icon(G.GLOBE, C["text"], 14), _("Abrir Plesk en el navegador"),
+                       lambda: QDesktopServices.openUrl(QUrl(srv.url)))
+        menu.addAction(glyph_icon(G.REFRESH, C["text"], 14), _("Volver a conectar con un código…"),
+                       lambda: self.pair(srv.url, replace=srv))
+        menu.addSeparator()
+        act = menu.addAction(glyph_icon(G.CLOSE, C["err"], 14), _("Desconectar…"), lambda: self.remove(srv))
+        act.setEnabled(not (self.busy and self.op.server is srv))
+        menu.exec(self.list.viewport().mapToGlobal(pos))
 
     def _show_password(self):
         srv = self.server(self._selected)
@@ -4207,7 +4306,7 @@ class PleskPage(QWidget):
                            lambda: self._delete_backup(b))
         if srv is not None and not self.busy:
             menu.addSeparator()
-            menu.addAction(glyph_icon(G.CLOSE, C["err"], 14), _("Quitar este servidor…"), lambda: self.remove(srv))
+            menu.addAction(glyph_icon(G.CLOSE, C["err"], 14), _("Desconectar…"), lambda: self.remove(srv))
         menu.exec(self.b_more.mapToGlobal(QPoint(0, self.b_more.height() + 4)))
 
     def _tree_menu(self, pos):
@@ -8618,6 +8717,10 @@ def selftest_plesk(win: "MainWindow", say) -> None:
                 raise AssertionError("Plesk: aceptó un código erróneo")
             except plesklink.PleskError as exc:
                 assert exc.kind == "code", exc.kind
+            for kind in ("code", "unreachable", "cert", "auth", "noext", "old", "busy", "running", "server", "space",
+                         "serverspace", "signature", "verify", "missing", "cancelled", "otro"):
+                for detail in ("", "[WinError 10061] rechazada", "1234567"):
+                    assert plesk_error_text(plesklink.PleskError(kind, detail)), f"Plesk: sin texto para {kind}"
             srv, token = plesklink.pair(url, "123 456", "PC")
             assert srv.label == "plesk.test" and token == "t" * 64, "Plesk: emparejar"
             folder = os.path.join(plesklink.plesk_root(vol), srv.folder_name)
