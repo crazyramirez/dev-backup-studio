@@ -18,6 +18,7 @@ Unter [Releases](https://github.com/crazyramirez/dev-backup-studio/releases/late
 | Windows 10/11 (64 Bit) | `DEV-Backup-Studio-Setup-x.y.z.exe` | Installationsassistent. Standardmäßig nur für Ihr Benutzerkonto, ohne Administratorrechte; legt eine Verknüpfung im Startmenü an (auf Wunsch auch auf dem Desktop) und wird unter *Einstellungen → Apps* deinstalliert. |
 | macOS 12+ (Apple Silicon) | `DEV-Backup-Studio-x.y.z-macOS.dmg` | Die `.dmg` öffnen und die App in *Programme* ziehen. |
 | Linux x86_64 (Ubuntu 22.04+, Debian 12+, Fedora 36+ …) | `DEV-Backup-Studio-x.y.z-x86_64.AppImage` | Eine einzige Datei, ohne Installation: an einem beliebigen Ort speichern (z. B. `~/Anwendungen`), ausführbar machen (*Eigenschaften → Als Programm ausführen* oder `chmod +x`) und öffnen. Beim ersten Start trägt sie sich selbst ins Anwendungsmenü ein. |
+| Plesk Obsidian 18 (Linux) | `DEV-Backup-Studio-Plesk-x.y.z.zip` | Die Erweiterung, um Ihre Plesk-Server zu sichern (siehe [Sicherungen von Plesk-Servern](#sicherungen-von-plesk-servern)). |
 
 Zum Aktualisieren die neue Version einfach darüber installieren: Ist die App geöffnet (auch im
 Infobereich), bittet der Assistent darum, sie zu schließen. Einstellungen, Indizes und Sicherungen
@@ -157,6 +158,53 @@ Die Verbindung ist in einer Minute eingerichtet, ohne Adressen oder Passwörter 
 Ist die Cloud ausgeschaltet oder nicht erreichbar, meldet die App das in einer Sekunde und bietet die
 Synchronisierung an, sobald sie wieder da ist – wie beim Anschließen eines Laufwerks.
 
+## Sicherungen von Plesk-Servern
+
+Im Tab **Plesk** speichert die App auf Ihrem Sicherungslaufwerk eine **vollständige Sicherung Ihrer
+Plesk-Server**: Servereinstellungen, Abonnements, Websites, Datenbanken, E-Mail und DNS. Die Sicherung
+erstellt Plesk selbst mit seinem offiziellen Werkzeug (`plesk bin pleskbackup --server`), daher lässt
+sie sich wie jede Plesk-Sicherung wiederherstellen.
+
+Zum Verbinden eines Servers braucht es weder Passwörter noch SSH-Zugang:
+
+1. Laden Sie `DEV-Backup-Studio-Plesk-x.y.z.zip` unter
+   [Releases](https://github.com/crazyramirez/dev-backup-studio/releases/latest) herunter und laden Sie
+   es in Plesk hoch: *Erweiterungen → Meine Erweiterungen → Erweiterung hochladen* (oder
+   `plesk bin extension --install datei.zip`).
+2. Öffnen Sie die Erweiterung *DEV Backup Studio* und klicken Sie auf *Computer verbinden*: Es
+   erscheint ein 6-stelliger Code (einmalig gültig, läuft nach 10 Minuten ab).
+3. In der App, Tab *Plesk → Server verbinden…*: Panel-Adresse (Port 8443 wird automatisch ergänzt)
+   und Code eingeben.
+
+Jeder Computer erhält einen eigenen Schlüssel, den Sie in der Erweiterung jederzeit entfernen können.
+Verwendet das Panel das eigene Zertifikat von Plesk (keines von Let's Encrypt oder einer anderen
+Zertifizierungsstelle), zeigt die App dessen SHA-256-Fingerabdruck – denselben, den die Erweiterung
+neben dem Code anzeigt – und fixiert ihn nach der Bestätigung: Mit einem anderen Zertifikat verbindet
+sie sich nicht.
+
+**Sichern.** *Jetzt sichern* oder automatisch täglich bzw. wöchentlich, solange die App geöffnet (oder
+im Infobereich) und das Sicherungslaufwerk verbunden ist. Plesk bereitet die Sicherung auf dem Server
+vor; die App lädt sie herunter (nach einem Abbruch macht sie dort weiter), prüft ihren SHA-256 und
+speichert sie in `PLESK/<Server>/` im **Stammverzeichnis des Sicherungslaufwerks**, einem Ordner mit
+dem Plesk-Symbol. Danach wird sie auf dem Server gelöscht. Aufbewahrt werden die letzten 3, 7, 14 oder
+30. Die Synchronisierung Ihrer Projekte rührt den Ordner `PLESK` nie an, auch wenn das Ziel das
+Stammverzeichnis des Laufwerks ist.
+
+**Wiederherstellen.** Wählen Sie eine Sicherung und klicken Sie auf *Wiederherstellen…*. Sie wird auf
+den gewählten Server hochgeladen und:
+
+- **In den Backup-Manager von Plesk hochladen** ändert nichts: Danach stellen Sie in Plesk wieder her,
+  was Sie möchten (alles, ein Abonnement, eine Datenbank …).
+- **Gesamten Server wiederherstellen** nutzt die offizielle Wiederherstellung,
+  `plesk bin pleskrestore --restore … -level server`. Damit ziehen Sie auch auf einen neuen Server um:
+  Erweiterung dort installieren, verbinden und darauf wiederherstellen.
+
+Plesk verschlüsselt die in der Sicherung gespeicherten Passwörter (Postfächer, Datenbanken, FTP …)
+mit einem Passwort, das die App für jeden Server erzeugt und sich merkt. Notieren Sie es
+(*Passwort…*): Plesk fragt danach, wenn Sie von einem anderen Computer wiederherstellen oder die
+Sicherung von Hand in den Backup-Manager hochladen. Die Sicherungen sind normale `.tar`-Dateien von
+Plesk und lassen sich auch ohne die App hochladen und wiederherstellen.
+
 ## Wie entschieden wird, was kopiert wird
 
 Eine Datei gilt als geändert, wenn sich **Größe oder Änderungsdatum** unterscheiden – wie bei
@@ -181,10 +229,13 @@ Einstellungen wird das gesamte Ziel gelesen.
 
 - **Auf dem Sicherungslaufwerk**: versteckter Ordner `.devbackup/` im Stammverzeichnis mit der Kennung
   des Laufwerks (`disco.json`), dem Sicherungsverlauf, den Versionen und `latido`, der winzigen Datei,
-  die das Laufwerk wach hält.
+  die das Laufwerk wach hält. Die Plesk-Sicherungen liegen in `PLESK/<Server>/` (pro Sicherung eine
+  `.tar`-Datei und eine `.json`-Datei mit ihrem SHA-256).
 - **Auf dem Computer**: Einstellungen (mit den regelmäßigen Sicherungen für die Erinnerungen), Indizes
   und Protokolle in `%APPDATA%\DEV Backup Studio` (Windows),
   `~/Library/Application Support/DEV Backup Studio` (macOS) oder `~/.config/DEV Backup Studio` (Linux).
+  Die Schlüssel der Plesk-Server und die Passwörter ihrer Sicherungen liegen getrennt in `plesk.json`
+  (unter Windows mit DPAPI verschlüsselt, unter macOS und Linux nur für Ihren Benutzer lesbar).
 
 ## Aus dem Quellcode starten
 
@@ -209,7 +260,9 @@ einen Abschnitt in `CHANGELOG.md` haben, aus dem die Versionshinweise stammen) e
 3. packt unter macOS die `.app` in eine `.dmg`;
 4. erstellt unter Linux (Ubuntu 22.04) die `.AppImage` (`installer/linux/build-appimage.sh`) und
    wiederholt den Selbsttest damit;
-5. veröffentlicht die Version mit Installationsprogramm, `.dmg` und `.AppImage`.
+5. prüft die Plesk-Erweiterung (`php -l`, `bash -n`) und packt sie
+   (`python tools/build_plesk_extension.py`, Quellcode in `plesk-extension/`);
+6. veröffentlicht die Version mit Installationsprogramm, `.dmg`, `.AppImage` und Plesk-Erweiterung.
 
 ```bash
 git tag v1.8.0
@@ -227,6 +280,10 @@ der READMEs (`docs/`, `docs/de/`) entstehen aus echten Aufnahmen der App:
   zusätzlich eine Kopie außer Haus.
 - Versionen speichern die vollständige Datei (keine Deduplizierung in Blöcken wie bei restic).
 - Die macOS-Version ist für Apple Silicon kompiliert, die Linux-Version für x86_64.
+- Die Plesk-Erweiterung ist für Plesk Obsidian unter Linux (nicht für Plesk unter Windows). Die
+  Sicherungen sind vollständig, nicht inkrementell, und der Server braucht freien Platz, um sie
+  vorzubereiten. Plesk und sein Logo sind Marken ihrer Inhaber; diese App ist nicht mit Plesk
+  verbunden.
 - Unter Linux benötigt *Mit meiner Cloud verbinden…* GVFS mit SMB-Modul (`gvfs-backends` unter Ubuntu
   und Debian, `gvfs-smb` unter Fedora und Arch), das GNOME, Cinnamon, MATE und XFCE mitbringen. Unter
   KDE muss es installiert werden; fehlt es, sagt die App Bescheid.

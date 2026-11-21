@@ -38,11 +38,11 @@ from PyQt6.QtGui import (QBrush, QColor, QConicalGradient, QDesktopServices, QFo
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox,
-                             QApplication, QButtonGroup, QComboBox,
+                             QApplication, QButtonGroup, QCheckBox, QComboBox,
                              QDialog, QFileDialog, QFrame, QGraphicsBlurEffect, QGraphicsOpacityEffect,
                              QGraphicsPixmapItem, QGraphicsScene, QGridLayout, QHBoxLayout, QHeaderView,
                              QLabel, QLayout, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMenu,
-                             QMessageBox, QStyle, QStyledItemDelegate,
+                             QMessageBox, QRadioButton, QStyle, QStyledItemDelegate,
                              QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
                              QSpinBox, QStackedWidget, QSystemTrayIcon, QTableView, QTableWidget,
                              QTableWidgetItem, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
@@ -52,13 +52,14 @@ import cloudlink
 import engine
 import i18n
 import keepawake
+import plesklink
 import reminders
 import updater
 import versions
-from i18n import _, _n
+from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.3.1"
+APP_VERSION = "2.4.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -504,6 +505,10 @@ QCheckBox:disabled { color: %(faint)s; }
 QCheckBox::indicator { width: 16px; height: 16px; border-radius: 5px; border: 1px solid #3A4258; background: %(bg)s; }
 QCheckBox::indicator:hover { border-color: %(accent)s; }
 QCheckBox::indicator:checked { background: %(accent)s; border-color: %(accent)s; image: url(%(a)s/check.svg); }
+QRadioButton { spacing: 10px; background: transparent; }
+QRadioButton::indicator { width: 16px; height: 16px; border-radius: 9px; border: 1px solid #3A4258; background: %(bg)s; }
+QRadioButton::indicator:hover { border-color: %(accent)s; }
+QRadioButton::indicator:checked { border: 5px solid %(accent)s; background: #FFFFFF; width: 8px; height: 8px; }
 QDialog { background: %(card)s; }
 QTextBrowser {
     background: %(panel)s; border: 1px solid %(line)s; border-radius: 12px; padding: 10px 14px;
@@ -1693,7 +1698,7 @@ PILL = {
     "cancelled": (_("Cancelado"), C["warn"]), "failed": (_("Error"), C["err"]),
 }
 RUNNING = ("scanning", "copying", "paused")
-PAGE_TREE, PAGE_CHANGES, PAGE_PROGRESS, PAGE_ISSUES, PAGE_RECOVER = range(5)
+PAGE_TREE, PAGE_CHANGES, PAGE_PROGRESS, PAGE_ISSUES, PAGE_RECOVER, PAGE_PLESK = range(6)
 
 # Las versiones ocupan sitio en el disco de copia: se guardan un plazo y luego se quitan solas
 # (y antes, si falta espacio para copiar). 30 días por defecto; 60 como mucho.
@@ -3389,6 +3394,1118 @@ class PairDialog(QDialog):
     def _on_done(self, path: str):
         self.result_path = path
         self.accept()
+
+
+# ── servidores Plesk ─────────────────────────────────────────────────────────
+
+PLESK_BLUE = "#52BBE6"
+PLESK_EXT_URL = f"https://github.com/{updater.REPO}/releases/latest"
+PLESK_SCHEDULES = {"manual": N_("Solo a mano"), "daily": N_("Cada día"), "weekly": N_("Cada semana")}
+
+
+def plesk_pixmap(px: int, dpr: float = 2.0) -> QPixmap:
+    """El icono de Plesk (assets/plesk/plesk.png); si faltara, un cuadro azul con su «P»."""
+    pm = QPixmap(int(px * dpr), int(px * dpr))
+    pm.setDevicePixelRatio(dpr)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    src = QPixmap(os.path.join(plesklink.ASSETS, "plesk.png"))
+    if not src.isNull():
+        p.drawPixmap(QRectF(0, 0, px, px), src, QRectF(src.rect()))
+    else:
+        p.setBrush(QColor(PLESK_BLUE))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawRoundedRect(QRectF(0, 0, px, px), px * 0.22, px * 0.22)
+        p.setPen(QColor("#FFFFFF"))
+        p.setFont(_font(int(px * 0.62), QFont.Weight.Bold))
+        p.drawText(QRectF(0, 0, px, px), Qt.AlignmentFlag.AlignCenter, "P")
+    p.end()
+    return pm
+
+
+def plesk_icon(px: int = 16) -> QIcon:
+    icon = QIcon()
+    icon.addPixmap(plesk_pixmap(px), QIcon.Mode.Normal, QIcon.State.Off)
+    icon.addPixmap(plesk_pixmap(px), QIcon.Mode.Normal, QIcon.State.On)
+    return icon
+
+
+def plesk_error_text(exc: plesklink.PleskError | None) -> str:
+    if exc is None:
+        return ""
+    d = exc.detail
+    return {
+        "code": _("El código no es correcto o ha caducado. Pide uno nuevo en Plesk y vuelve a probar."),
+        "unreachable": _("No se puede llegar al servidor ({detail}). Comprueba la dirección y que el puerto del panel "
+                         "(8443) está abierto.").format(detail=d or "—"),
+        "cert": _("El certificado del servidor no es el que se aceptó al conectarlo. Si lo has cambiado tú, vuelve a "
+                  "conectar el servidor para aceptar el nuevo."),
+        "auth": _("El servidor ya no reconoce este ordenador (se desconectó desde Plesk). Vuelve a conectarlo con un "
+                  "código nuevo."),
+        "noext": _("La extensión DEV Backup Studio no está instalada en ese Plesk, o está desactivada."),
+        "old": _("La extensión de Plesk es de una versión antigua: actualízala en Extensiones → Mis extensiones."),
+        "busy": _("Demasiados intentos. Espera unos minutos y vuelve a probar."),
+        "server": _("Plesk no pudo terminar: {detail}").format(detail=d or "—"),
+        "space": _("No cabe en el disco de copia: faltan {size}.").format(size=fmt_bytes(int(d or 0))),
+        "serverspace": _("No hay sitio en el servidor Plesk para recibir la copia: faltan {size}.").format(
+            size=fmt_bytes(int(float(d or 0)))),
+        "running": _("Ya hay una copia o restauración en marcha en ese servidor. Espera a que termine."),
+        "signature": _("El Gestor de copias de Plesk no admite una copia hecha en otro servidor. Elige «Restaurar todo "
+                       "el servidor», o súbela a mano en Plesk marcando «Subir archivos de copia sin firma válida»."),
+        "verify": _("Lo descargado no coincide con el original (SHA-256 distinto). No se ha guardado nada; vuelve a "
+                    "intentarlo."),
+        "missing": _("Esa copia ya no está en el servidor."),
+        "cancelled": _("Detenido."),
+    }.get(exc.kind, d or exc.kind)
+
+
+class PleskPairDialog(QDialog):
+    """«Conectar un servidor Plesk»: dirección del panel + el código de 6 cifras que da la extensión."""
+    cert_checked = pyqtSignal(bool, str)      # ¿de una autoridad conocida?, huella
+    paired = pyqtSignal(object, str)          # plesklink.Server, token
+    failed = pyqtSignal(str, str)             # tipo de error, detalle
+
+    def __init__(self, parent: QWidget, url: str = ""):
+        super().__init__(parent)
+        self.server: plesklink.Server | None = None
+        self.token = ""
+        self._url = ""
+        self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(app_icon())
+        self.setMinimumWidth(560)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(26, 24, 26, 22)
+        lay.setSpacing(14)
+        head = QHBoxLayout()
+        head.setSpacing(12)
+        logo = QLabel()
+        logo.setPixmap(plesk_pixmap(34))
+        head.addWidget(logo)
+        title = QLabel(_("Conectar un servidor Plesk"))
+        title.setObjectName("h1")
+        head.addWidget(title, 1)
+        lay.addLayout(head)
+        steps = QLabel(
+            "<ol style='margin-left:-22px'>"
+            f"<li>{html.escape(_('En Plesk, abre Extensiones → Mis extensiones → Subir extensión y sube la extensión DEV Backup Studio.'))} "
+            f"<a href='{PLESK_EXT_URL}' style='color:{C['accent2']}; text-decoration:none'>"
+            f"{html.escape(_('Descargar la extensión'))}</a></li>"
+            f"<li>{html.escape(_('Ábrela y pulsa «Conectar un ordenador».'))}</li>"
+            f"<li>{html.escape(_('Escribe aquí la dirección del panel y el código que aparece.'))}</li></ol>")
+        steps.setObjectName("muted")
+        steps.setWordWrap(True)
+        steps.setOpenExternalLinks(True)
+        lay.addWidget(steps)
+
+        lab = QLabel(_("Servidor"))
+        lab.setObjectName("faint")
+        lay.addWidget(lab)
+        self.url = QLineEdit(url)
+        self.url.setPlaceholderText(_("plesk.tudominio.com  (el puerto 8443 se pone solo)"))
+        lay.addWidget(self.url)
+        lab = QLabel(_("Código"))
+        lab.setObjectName("faint")
+        lay.addWidget(lab)
+        self.code = QLineEdit()
+        self.code.setInputMask("999 999;_")
+        self.code.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        font = self.code.font()
+        font.setPointSize(26)
+        font.setBold(True)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 4)
+        self.code.setFont(font)
+        self.code.setMinimumHeight(64)
+        lay.addWidget(self.code)
+        self.status = QLabel("")
+        self.status.setObjectName("muted")
+        self.status.setWordWrap(True)
+        self.status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self.status)
+        self.busy = thin_bar(4)
+        self.busy.setRange(0, 0)
+        self.busy.hide()
+        lay.addWidget(self.busy)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        self.b_cancel = QPushButton(_("Cancelar"))
+        self.b_go = QPushButton("  " + _("Conectar"))
+        self.b_go.setObjectName("primary")
+        self.b_go.setIcon(glyph_icon(G.CHECK, "#FFFFFF", 14))
+        self.b_go.setDefault(True)
+        for b in (self.b_cancel, self.b_go):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            buttons.addWidget(b)
+        lay.addLayout(buttons)
+        self.b_cancel.clicked.connect(self.reject)
+        self.b_go.clicked.connect(self._go)
+        self.code.textChanged.connect(self._update)
+        self.url.textChanged.connect(self._update)
+        self.cert_checked.connect(self._on_cert)
+        self.paired.connect(self._on_paired)
+        self.failed.connect(self._on_failed)
+        self._update()
+        (self.code if url else self.url).setFocus()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        set_dark_titlebar(self)
+
+    def _digits(self) -> str:
+        return "".join(c for c in self.code.text() if c.isdigit())
+
+    def _update(self, *_args):
+        ok = len(self._digits()) == 6 and bool(plesklink.normalize_url(self.url.text()))
+        self.b_go.setEnabled(ok and not self.busy.isVisible())
+
+    def _set_busy(self, on: bool, text: str = ""):
+        self.busy.setVisible(on)
+        self.url.setEnabled(not on)
+        self.code.setEnabled(not on)
+        if text:
+            self.status.setText(text)
+        self._update()
+
+    def _go(self):
+        self._url = plesklink.normalize_url(self.url.text())
+        self._set_busy(True, _("Conectando con {host}…").format(host=plesklink.url_host(self._url)))
+        url = self._url
+
+        def work():
+            try:
+                trusted, fp = plesklink.check_certificate(url)
+                self.cert_checked.emit(trusted, fp)
+            except plesklink.PleskError as exc:
+                self.failed.emit(exc.kind, exc.detail)
+
+        threading.Thread(target=work, name="plesk-certificado", daemon=True).start()
+
+    def _on_cert(self, trusted: bool, fp: str):
+        pin = ""
+        if not trusted:
+            if not fp:
+                self._on_failed("unreachable", _("sin certificado"))
+                return
+            box = QMessageBox(QMessageBox.Icon.Question, APP_NAME, "", parent=self)
+            box.setText(_("El certificado de {host} no es de una autoridad reconocida (lo normal con el certificado "
+                          "propio de Plesk).").format(host=plesklink.url_host(self._url)))
+            box.setInformativeText(_("Comprueba que esta huella es la misma que enseña la extensión junto al código:")
+                                   + f"\n\n{plesklink.fmt_fingerprint(fp)}\n\n" + _("¿Confiar en este servidor?"))
+            box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            box.setDefaultButton(QMessageBox.StandardButton.No)
+            if box.exec() != QMessageBox.StandardButton.Yes:
+                self._set_busy(False, _("No se ha conectado: el certificado no se aceptó."))
+                return
+            pin = fp
+        url, code, device = self._url, self._digits(), cloudlink.device_name()
+
+        def work():
+            try:
+                srv, token = plesklink.pair(url, code, device, pin)
+                self.paired.emit(srv, token)
+            except plesklink.PleskError as exc:
+                self.failed.emit(exc.kind, exc.detail)
+            except Exception as exc:  # noqa: BLE001 - se enseña y se puede repetir
+                self.failed.emit("server", str(exc))
+
+        threading.Thread(target=work, name="plesk-emparejar", daemon=True).start()
+
+    def _on_failed(self, kind: str, detail: str):
+        self._set_busy(False, plesk_error_text(plesklink.PleskError(kind, detail)))
+        if kind == "code":
+            self.code.clear()
+            self.code.setFocus()
+
+    def _on_paired(self, srv: plesklink.Server, token: str):
+        self.server, self.token = srv, token
+        self.accept()
+
+
+class PleskRestoreDialog(QDialog):
+    """Elegir adónde y cómo restaurar una copia de Plesk guardada en el disco."""
+
+    def __init__(self, parent: QWidget, backup: plesklink.StoredBackup, servers: list[plesklink.Server],
+                 default: plesklink.Server | None, password: str):
+        super().__init__(parent)
+        self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(app_icon())
+        self.setMinimumWidth(600)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(26, 24, 26, 22)
+        lay.setSpacing(12)
+        head = QHBoxLayout()
+        head.setSpacing(12)
+        logo = QLabel()
+        logo.setPixmap(plesk_pixmap(34))
+        head.addWidget(logo)
+        col = QVBoxLayout()
+        col.setSpacing(2)
+        title = QLabel(_("Restaurar una copia de Plesk"))
+        title.setObjectName("h1")
+        origin = backup.info.get("server") or os.path.basename(os.path.dirname(backup.path))
+        sub = QLabel(_("{server}  ·  {date}  ·  {size}").format(server=origin, date=short_stamp(backup.when),
+                                                                size=fmt_bytes(backup.size)))
+        sub.setObjectName("muted")
+        col.addWidget(title)
+        col.addWidget(sub)
+        head.addLayout(col, 1)
+        lay.addLayout(head)
+
+        lab = QLabel(_("Servidor de destino"))
+        lab.setObjectName("fieldLabel")
+        lay.addWidget(lab)
+        self.target = QComboBox()
+        for s in servers:
+            self.target.addItem(plesk_icon(16), f"{s.label}  ({plesklink.url_host(s.url)})", s.id)
+        if default is not None:
+            self.target.setCurrentIndex(max(0, self.target.findData(default.id)))
+        lay.addWidget(self.target)
+
+        lab = QLabel(_("Qué hacer"))
+        lab.setObjectName("fieldLabel")
+        lay.addWidget(lab)
+        self.mode_import = QRadioButton(_("Subirla al Gestor de copias de seguridad de Plesk"))
+        hint_import = QLabel(_("No cambia nada en el servidor. Después, en Plesk (Herramientas y configuración → Gestor "
+                               "de copias de seguridad) eliges qué restaurar: todo, una suscripción, una base de "
+                               "datos…"))
+        self.mode_server = QRadioButton(_("Restaurar todo el servidor ahora"))
+        hint_server = QLabel(_("Con «pleskrestore», la restauración oficial de Plesk: ajustes del servidor, "
+                               "suscripciones, webs, bases de datos y correo. Lo que ya existe se sustituye por lo de "
+                               "la copia. El panel puede dejar de responder un rato mientras tanto."))
+        for w in (hint_import, hint_server):
+            w.setObjectName("faint")
+            w.setWordWrap(True)
+            w.setContentsMargins(28, 0, 0, 4)
+        lay.addWidget(self.mode_import)
+        lay.addWidget(hint_import)
+        lay.addWidget(self.mode_server)
+        lay.addWidget(hint_server)
+        self.mode_import.setChecked(True)
+        self.confirm = QCheckBox(_("Entiendo que se sustituirá lo que hay ahora en el servidor"))
+        self.confirm.setContentsMargins(28, 0, 0, 0)
+        lay.addWidget(self.confirm)
+
+        lab = QLabel(_("Contraseña de la copia"))
+        lab.setObjectName("fieldLabel")
+        lay.addWidget(lab)
+        self.password = QLineEdit(password)
+        self.password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password.setPlaceholderText(_("La que se usó al hacerla (para recuperar las contraseñas guardadas)"))
+        lay.addWidget(self.password)
+        if backup.info.get("password") is False:
+            self.password.setPlaceholderText(_("Esta copia se hizo sin contraseña"))
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        b_cancel = QPushButton(_("Cancelar"))
+        self.b_go = QPushButton("  " + _("Restaurar"))
+        self.b_go.setObjectName("primary")
+        self.b_go.setIcon(glyph_icon(G.RESTORE, "#FFFFFF", 14))
+        for b in (b_cancel, self.b_go):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            buttons.addWidget(b)
+        lay.addLayout(buttons)
+        b_cancel.clicked.connect(self.reject)
+        self.b_go.clicked.connect(self.accept)
+        for w in (self.mode_import, self.mode_server, self.confirm):
+            w.toggled.connect(self._update)
+        self.target.currentIndexChanged.connect(self._update)
+        self._update()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        set_dark_titlebar(self)
+
+    def _update(self, *_a):
+        server_mode = self.mode_server.isChecked()
+        self.confirm.setVisible(server_mode)
+        self.b_go.setText("  " + (_("Restaurar todo el servidor") if server_mode else _("Subir a Plesk")))
+        self.b_go.setEnabled(self.target.count() > 0 and (not server_mode or self.confirm.isChecked()))
+
+    @property
+    def mode(self) -> str:
+        return "server" if self.mode_server.isChecked() else "import"
+
+    @property
+    def target_id(self) -> str:
+        return self.target.currentData() or ""
+
+
+class PleskPage(QWidget):
+    """«Plesk»: copias completas de servidores Plesk con su herramienta oficial, en PLESK/ del disco de copia.
+
+    Una sola operación a la vez (copia o restauración), en un hilo; la página la lee con un temporizador.
+    Las copias automáticas se miran cada 10 minutos y al conectar el disco de copia.
+    """
+    op_changed = pyqtSignal()      # desde el hilo: hay que guardar los ajustes del servidor
+    unpaired = pyqtSignal(str)
+    ROLE = Qt.ItemDataRole.UserRole
+
+    def __init__(self, win: "MainWindow"):
+        super().__init__()
+        self.win = win
+        self.secrets = plesklink.Secrets(os.path.join(DATA_DIR, "plesk.json"))
+        self.servers: list[plesklink.Server] = []
+        self.op: plesklink.Operation | None = None
+        self.thread: threading.Thread | None = None
+        self.guard = keepawake.Guard()
+        self._finalized = True
+        self._samples: deque = deque(maxlen=40)
+        self._selected = ""       # id del servidor, o «disk:<carpeta>» para copias de servidores ya no conectados
+        self._load()
+        self._build()
+        self.op_changed.connect(self._save)
+        self.timer = QTimer(self)
+        self.timer.setInterval(400)
+        self.timer.timeout.connect(self._tick)
+        self.due_timer = QTimer(self)
+        self.due_timer.setInterval(10 * 60 * 1000)
+        self.due_timer.timeout.connect(self.check_due)
+        self.due_timer.start()
+        QTimer.singleShot(90_000, self.check_due)
+        self.refresh()
+
+    # ── datos ──
+    def _load(self):
+        try:
+            data = json.loads(self.win.settings.value("plesk_servers", "") or "[]")
+        except (TypeError, ValueError):
+            data = []
+        self.servers = [s for s in (plesklink.Server.from_dict(d) for d in data) if s]
+
+    def _save(self):
+        self.win.settings.setValue("plesk_servers", json.dumps([s.to_dict() for s in self.servers], ensure_ascii=False))
+        self.win.settings.sync()
+
+    def server(self, sid: str) -> plesklink.Server | None:
+        return next((s for s in self.servers if s.id == sid), None)
+
+    def _password(self, folder: str, create: bool = False) -> str:
+        """La contraseña de las copias va con la carpeta del servidor: si se quita el servidor, se conserva
+        para poder restaurar sus copias."""
+        key = f"plesk/pw/{folder}"
+        pw = self.secrets.get(key)
+        if not pw and create:
+            pw = plesklink.new_password()
+            self.secrets.set(key, pw)
+        return pw
+
+    def disk_root(self) -> str | None:
+        """Raíz del disco de copia (donde va la carpeta PLESK), si está conectado."""
+        dst = self.win.dst_card.path()
+        if not dst or not engine.volume_present(dst):
+            return None
+        root = engine.volume_root(dst)
+        return root if os.path.isdir(root) else None
+
+    def _folder_of(self, key: str) -> str | None:
+        root = self.disk_root()
+        if not root:
+            return None
+        if key.startswith("disk:"):
+            return os.path.join(plesklink.plesk_root(root), key[5:])
+        srv = self.server(key)
+        return os.path.join(plesklink.plesk_root(root), srv.folder_name) if srv else None
+
+    @property
+    def busy(self) -> bool:
+        return self.op is not None and self.op.running
+
+    # ── construcción ──
+    def _build(self):
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(12)
+        bar = QFrame()
+        bar.setObjectName("hint")
+        h = QHBoxLayout(bar)
+        h.setContentsMargins(16, 10, 10, 10)
+        h.setSpacing(10)
+        logo = QLabel()
+        logo.setPixmap(plesk_pixmap(18))
+        h.addWidget(logo)
+        msg = QLabel(_("Copia completa de tus servidores Plesk con su herramienta oficial: ajustes, suscripciones, "
+                       "webs, bases de datos y correo. Se guarda en la carpeta PLESK del disco de copia y se restaura "
+                       "como Plesk manda."))
+        msg.setObjectName("muted")
+        msg.setWordWrap(True)
+        h.addWidget(msg, 1)
+        self.b_add = QPushButton("  " + _("Conectar servidor…"))
+        self.b_add.setIcon(glyph_icon(G.ADD, C["text"], 14))
+        self.b_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.b_add.clicked.connect(lambda: self.pair())
+        h.addWidget(self.b_add)
+        v.addWidget(bar)
+
+        self.pages = QStackedWidget()
+        self.empty = EmptyState(G.GLOBE)
+        self.empty.icon.setPixmap(plesk_pixmap(54))
+        self.empty.icon.setFixedSize(54, 54)
+        self.empty.set(_("Ningún servidor Plesk conectado"),
+                       _("Instala la extensión DEV Backup Studio en tu Plesk, pulsa «Conectar un ordenador» y escribe "
+                         "aquí el código que te da. Sin contraseñas ni acceso por SSH."))
+        b = QPushButton("  " + _("Conectar un servidor Plesk…"))
+        b.setObjectName("primary")
+        b.setIcon(glyph_icon(G.ADD, "#FFFFFF", 14))
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.clicked.connect(lambda: self.pair())
+        self.empty.layout().insertWidget(self.empty.layout().count() - 1, b, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.pages.addWidget(self.empty)
+
+        main = QWidget()
+        body = QHBoxLayout(main)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(14)
+        left = Card(_("Servidores"), G.GLOBE, margins=(8, 14, 8, 8))
+        left.setFixedWidth(278)
+        self.list = QListWidget()
+        self.list.setObjectName("timeline")
+        self.list.setIconSize(QSize(26, 26))
+        self.list.setSpacing(2)
+        self.list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.list.currentItemChanged.connect(lambda cur, _p: self._select(cur.data(self.ROLE) if cur else ""))
+        left.body.addWidget(self.list, 1)
+        self.disk_note = QLabel("")
+        self.disk_note.setObjectName("faint")
+        self.disk_note.setWordWrap(True)
+        self.disk_note.setContentsMargins(10, 4, 10, 2)
+        left.body.addWidget(self.disk_note)
+        body.addWidget(left)
+
+        right = QVBoxLayout()
+        right.setSpacing(10)
+        head = QVBoxLayout()
+        head.setSpacing(2)
+        head.setContentsMargins(4, 2, 0, 0)
+        self.title = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.title.setObjectName("bannerTitle")
+        self.sub = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.sub.setObjectName("faint")
+        head.addWidget(self.title)
+        head.addWidget(self.sub)
+        right.addLayout(head)
+        self.banner = Banner()
+        right.addWidget(self.banner)
+        self.progress = thin_bar(6)
+        self.progress.hide()
+        right.addWidget(self.progress)
+
+        self.opts = QFrame()
+        self.opts.setObjectName("hint")
+        oh = QHBoxLayout(self.opts)
+        oh.setContentsMargins(16, 8, 10, 8)
+        oh.setSpacing(10)
+        oh.addWidget(QLabel(_("Copia automática"), objectName="fieldLabel"))
+        self.schedule = QComboBox()
+        for key, text in PLESK_SCHEDULES.items():
+            self.schedule.addItem(_(text), key)
+        self.schedule.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.schedule.setMinimumWidth(130)
+        self.schedule.setToolTip(_("Con la app abierta (o en la bandeja) y el disco de copia conectado"))
+        oh.addWidget(self.schedule)
+        oh.addSpacing(10)
+        oh.addWidget(QLabel(_("Conservar"), objectName="fieldLabel"))
+        self.keep = QComboBox()
+        for n in plesklink.KEEP_OPTIONS:
+            self.keep.addItem(_n("{n} copia", "{n} copias", n).format(n=n), n)
+        self.keep.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.keep.setMinimumWidth(110)
+        self.keep.setToolTip(_("Al terminar una copia se quitan las más antiguas"))
+        oh.addWidget(self.keep)
+        oh.addStretch(1)
+        self.b_password = QPushButton()
+        self.b_password.setObjectName("icon")
+        self.b_password.setIcon(glyph_icon(G.SHIELD, C["text"], 14))
+        self.b_password.setFixedSize(38, 36)
+        self.b_password.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.b_password.setAccessibleName(_("Contraseña…"))
+        self.b_password.setToolTip(_("Contraseña…") + "  ·  "
+                                   + _("Plesk cifra con ella los datos sensibles de la copia y la pide al restaurar"))
+        self.b_password.clicked.connect(self._show_password)
+        oh.addWidget(self.b_password)
+        for combo in (self.schedule, self.keep):  # el QSS añade relleno y flecha que sizeHint no cuenta
+            fm = combo.fontMetrics()
+            combo.setMinimumWidth(max(fm.horizontalAdvance(combo.itemText(i)) for i in range(combo.count())) + 64)
+        self.schedule.currentIndexChanged.connect(self._on_options)
+        self.keep.currentIndexChanged.connect(self._on_options)
+        right.addWidget(self.opts)
+
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabels([_("COPIA"), _("TAMAÑO"), _("PLESK"), _("COMPROBACIÓN")])
+        self.tree.setRootIsDecorated(False)
+        self.tree.setUniformRowHeights(True)
+        self.tree.setIconSize(QSize(16, 16))
+        self.tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._tree_menu)
+        self.tree.itemSelectionChanged.connect(self._update_actions)
+        self.tree.itemDoubleClicked.connect(lambda *_a: self._reveal())
+        hdr = self.tree.header()
+        hdr.setStretchLastSection(False)
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for col, width in ((1, 100), (2, 130), (3, 190)):
+            hdr.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
+            self.tree.setColumnWidth(col, width)
+        self.tree_stack = QStackedWidget()
+        self.no_backups = EmptyState(G.DRIVE)
+        self.tree_stack.addWidget(self.tree)
+        self.tree_stack.addWidget(self.no_backups)
+        right.addWidget(self.tree_stack, 1)
+
+        actions = QFrame()
+        actions.setObjectName("hint")
+        ah = QHBoxLayout(actions)
+        ah.setContentsMargins(16, 8, 10, 8)
+        ah.setSpacing(8)
+        self.sel_label = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.sel_label.setObjectName("muted")
+        ah.addWidget(self.sel_label, 1)
+
+        def button(text, glyph, tip, slot, name=None, color=C["text"]):
+            b = QPushButton(f"  {text}" if text else "")
+            b.setIcon(glyph_icon(glyph, color, 14))
+            b.setToolTip(tip)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            if name:
+                b.setObjectName(name)
+            if not text:
+                b.setFixedSize(38, 36)
+                b.setAccessibleName(tip)
+            b.clicked.connect(slot)
+            ah.addWidget(b)
+            return b
+
+        self.b_more = button("", G.MORE, _("Más acciones"), self._more_menu, "icon")
+        self.b_reveal = button("", G.OPEN, _("Mostrar la copia en su carpeta del disco de copia"), self._reveal, "icon")
+        self.b_stop = button(_("Detener"), G.STOP, _("Detiene la operación; lo ya descargado se aprovecha la próxima vez"),
+                             self._stop)
+        self.b_restore = button(_("Restaurar…"), G.RESTORE, _("Sube la copia elegida a un servidor Plesk y la restaura"),
+                                self._restore)
+        self.b_backup = button(_("Copiar ahora"), G.PLAY, _("Copia completa del servidor con pleskbackup"),
+                               lambda: self.start_backup(self._selected), "primary", "#FFFFFF")
+        self.b_backup.setMinimumWidth(160)
+        right.addWidget(actions)
+        body.addLayout(right, 1)
+        self.pages.addWidget(main)
+        v.addWidget(self.pages, 1)
+
+    # ── lista de servidores ──
+    def refresh(self):
+        """Vuelve a pintar la lista (servidores conectados y carpetas del disco sin servidor) y lo elegido."""
+        root = self.disk_root()
+        on_disk = plesklink.list_servers_on_disk(plesklink.plesk_root(root)) if root else []
+        known = {s.folder_name.lower() for s in self.servers}
+        orphans = [f for f in on_disk if f.lower() not in known]
+        self.pages.setCurrentIndex(1 if self.servers or orphans else 0)
+        current = self._selected
+        self.list.blockSignals(True)
+        self.list.clear()
+        for s in self.servers:
+            it = QListWidgetItem(plesk_icon(26), f"{s.label}\n{self._status_line(s)}")
+            it.setData(self.ROLE, s.id)
+            it.setSizeHint(QSize(240, 52))
+            self.list.addItem(it)
+        for f in orphans:
+            it = QListWidgetItem(glyph_icon(G.DRIVE, C["muted"], 22), f"{f}\n{_('Solo en el disco de copia')}")
+            it.setData(self.ROLE, f"disk:{f}")
+            it.setSizeHint(QSize(240, 52))
+            self.list.addItem(it)
+        keys = [self.list.item(i).data(self.ROLE) for i in range(self.list.count())]
+        if current not in keys:
+            current = keys[0] if keys else ""
+        if current:
+            self.list.setCurrentRow(keys.index(current))
+        self.list.blockSignals(False)
+        if root:
+            self.disk_note.setText(_("Copias en {path}").format(path=plesklink.plesk_root(root)))
+        else:
+            self.disk_note.setText(_("Conecta el disco de copia para guardar o ver las copias."))
+        self._select(current)
+
+    def _status_line(self, s: plesklink.Server) -> str:
+        if self.busy and self.op.server is s:
+            return _("Restaurando…") if self.op.kind == "restore" else _("Copiando…")
+        if s.last_error and (not s.last_ok or s.last_try > s.last_ok):
+            return _("⚠ Falló la última copia")
+        if s.last_ok:
+            return _("Última copia {when}").format(when=fmt_ago(s.last_ok))
+        return _("Aún sin copias")
+
+    def _select(self, key: str):
+        self._selected = key or ""
+        srv = self.server(self._selected)
+        if srv:
+            self.title.setText(srv.label)
+            bits = [srv.url]
+            if srv.plesk_version:
+                bits.append(f"Plesk {srv.plesk_version}")
+            if srv.os:
+                bits.append(srv.os)
+            if srv.fingerprint:
+                bits.append(_("certificado fijado"))
+            self.sub.setText("  ·  ".join(bits))
+            for w, val in ((self.schedule, srv.schedule), (self.keep, srv.keep)):
+                w.blockSignals(True)
+                w.setCurrentIndex(max(0, w.findData(val)))
+                w.blockSignals(False)
+            self.opts.setVisible(True)
+        elif self._selected.startswith("disk:"):
+            self.title.setText(self._selected[5:])
+            self.sub.setText(_("Ya no está conectado: sus copias se pueden restaurar en otro servidor Plesk"))
+            self.opts.setVisible(False)
+        else:
+            self.title.setText("")
+            self.sub.setText("")
+            self.opts.setVisible(False)
+        self._load_backups()
+        self._render()
+
+    def _load_backups(self):
+        self.tree.clear()
+        folder = self._folder_of(self._selected) if self._selected else None
+        backups = plesklink.list_backups(folder) if folder else []
+        for b in backups:
+            it = QTreeWidgetItem([f"{day_label(b.when)}  ·  {b.when.strftime('%H:%M')}", fmt_bytes(b.size),
+                                  str(b.info.get("plesk_version") or "—"),
+                                  _("SHA-256 comprobado") if b.sha256 else _("sin comprobar")])
+            it.setIcon(0, plesk_icon(16))
+            it.setIcon(3, glyph_icon(G.SHIELD if b.sha256 else G.WARN, C["ok"] if b.sha256 else C["warn"], 14))
+            it.setData(0, self.ROLE, b)
+            it.setToolTip(0, b.path)
+            self.tree.addTopLevelItem(it)
+        if backups:
+            self.tree.setCurrentItem(self.tree.topLevelItem(0))
+            self.tree_stack.setCurrentWidget(self.tree)
+        else:
+            if folder is None and self._selected:
+                self.no_backups.set(_("Disco de copia no conectado"),
+                                    _("Conéctalo para ver las copias guardadas y para hacer copias nuevas."))
+            else:
+                self.no_backups.set(_("Aún no hay copias de este servidor"),
+                                    _("Pulsa «Copiar ahora»: Plesk prepara la copia completa y se descarga aquí."))
+            self.tree_stack.setCurrentWidget(self.no_backups)
+        self._update_actions()
+
+    def _chosen_backup(self) -> plesklink.StoredBackup | None:
+        it = self.tree.currentItem()
+        return it.data(0, self.ROLE) if it is not None and it.isSelected() else None
+
+    def _update_actions(self):
+        srv = self.server(self._selected)
+        b = self._chosen_backup()
+        busy = self.busy
+        self.b_stop.setVisible(busy)
+        self.b_backup.setVisible(not busy)
+        self.b_backup.setEnabled(srv is not None)
+        self.b_restore.setEnabled(not busy and b is not None and bool(self.servers))
+        self.b_reveal.setEnabled(b is not None)
+        self.b_more.setEnabled(bool(self._selected))
+        self.b_add.setEnabled(not busy)
+        self.schedule.setEnabled(srv is not None)
+        self.keep.setEnabled(srv is not None)
+        n = self.tree.topLevelItemCount()
+        total = sum(self.tree.topLevelItem(i).data(0, self.ROLE).size for i in range(n))
+        self.sel_label.setText(_n("{n} copia guardada · {size}", "{n} copias guardadas · {size}", n).format(
+            n=n, size=fmt_bytes(total)) if n else "")
+
+    def _on_options(self, *_a):
+        srv = self.server(self._selected)
+        if srv is None:
+            return
+        srv.schedule = self.schedule.currentData()
+        srv.keep = int(self.keep.currentData())
+        self._save()
+        self.refresh_summary()
+
+    def refresh_summary(self):
+        self.win._refresh_summaries()
+
+    # ── conectar y quitar ──
+    def pair(self, url: str = "", replace: plesklink.Server | None = None):
+        if self.busy:
+            return
+        dlg = PleskPairDialog(self.win, url)
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.server is None:
+            return
+        srv = dlg.server
+        old = replace or next((s for s in self.servers if s.url == srv.url), None)
+        if old is not None:  # volver a conectar: se conserva lo elegido y lo hecho
+            for name in ("schedule", "keep", "last_ok", "last_size", "pending_job", "pending_stamp"):
+                setattr(srv, name, getattr(old, name))
+            self.secrets.delete_prefix(f"plesk/{old.id}/")
+            self.servers[self.servers.index(old)] = srv
+        else:
+            self.servers.append(srv)
+        self.secrets.set(plesklink.token_key(srv.id), dlg.token)
+        self._password(srv.folder_name, create=True)
+        self._save()
+        self._selected = srv.id
+        self.refresh()
+        self.win._log(_("Servidor Plesk conectado: {name} ({url})").format(name=srv.label, url=srv.url), C["ok"])
+        if old is None and not plesklink.list_backups(self._folder_of(srv.id) or ""):
+            ans = QMessageBox.question(self.win, APP_NAME, _("{name} está conectado. ¿Hacer ya su primera copia "
+                                                              "completa?").format(name=srv.label))
+            if ans == QMessageBox.StandardButton.Yes:
+                self.start_backup(srv.id)
+
+    def remove(self, srv: plesklink.Server):
+        ans = QMessageBox.question(
+            self.win, APP_NAME, _("¿Quitar {name}? Este ordenador deja de estar conectado a ese Plesk. Las copias ya "
+                                  "guardadas en el disco se conservan y se pueden seguir restaurando.").format(name=srv.label))
+        if ans != QMessageBox.StandardButton.Yes:
+            return
+        token = self.secrets.get(plesklink.token_key(srv.id))
+
+        def work():
+            try:
+                plesklink.Client(srv.url, token, srv.fingerprint, timeout=10).unpair()
+            except plesklink.PleskError:
+                pass  # si no responde, la conexión se puede quitar también desde Plesk
+
+        threading.Thread(target=work, name="plesk-desconectar", daemon=True).start()
+        self.servers.remove(srv)
+        self.secrets.delete_prefix(f"plesk/{srv.id}/")
+        self._save()
+        self.refresh()
+        self.refresh_summary()
+
+    def _show_password(self):
+        srv = self.server(self._selected)
+        if srv is None:
+            return
+        pw = self._password(srv.folder_name, create=True)
+        box = QMessageBox(QMessageBox.Icon.Information, APP_NAME, "", parent=self.win)
+        box.setText(_("Contraseña de las copias de {name}").format(name=srv.label))
+        box.setInformativeText(_("Plesk cifra con ella las contraseñas que guarda la copia (de buzones, bases de "
+                                 "datos, FTP…). La app la recuerda, pero anótala en un sitio seguro: si restauras desde "
+                                 "otro ordenador o subes la copia a mano en Plesk, te la pedirá.") + f"\n\n{pw}")
+        box.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        copy_btn = box.addButton(_("Copiar"), QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Close)
+        box.exec()
+        if box.clickedButton() is copy_btn:
+            QApplication.clipboard().setText(pw)
+
+    def _more_menu(self):
+        srv = self.server(self._selected)
+        menu = QMenu(self)
+        if srv is not None:
+            menu.addAction(glyph_icon(G.GLOBE, C["text"], 14), _("Abrir Plesk en el navegador"),
+                           lambda: QDesktopServices.openUrl(QUrl(srv.url)))
+            menu.addAction(glyph_icon(G.REFRESH, C["text"], 14), _("Volver a conectar con un código…"),
+                           lambda: self.pair(srv.url, replace=srv))
+            menu.addAction(glyph_icon(G.SHIELD, C["text"], 14), _("Contraseña…"), self._show_password)
+        folder = self._folder_of(self._selected)
+        if folder and os.path.isdir(folder):
+            menu.addAction(glyph_icon(G.OPEN, C["text"], 14), _("Abrir la carpeta de las copias"),
+                           lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(folder)))
+        b = self._chosen_backup()
+        if b is not None and not self.busy:
+            menu.addSeparator()
+            menu.addAction(glyph_icon(G.TRASH, C["err"], 14), _("Eliminar esta copia del disco…"),
+                           lambda: self._delete_backup(b))
+        if srv is not None and not self.busy:
+            menu.addSeparator()
+            menu.addAction(glyph_icon(G.CLOSE, C["err"], 14), _("Quitar este servidor…"), lambda: self.remove(srv))
+        menu.exec(self.b_more.mapToGlobal(QPoint(0, self.b_more.height() + 4)))
+
+    def _tree_menu(self, pos):
+        it = self.tree.itemAt(pos)
+        if it is None:
+            return
+        it.setSelected(True)
+        self.tree.setCurrentItem(it)
+        b = it.data(0, self.ROLE)
+        menu = QMenu(self)
+        menu.addAction(glyph_icon(G.OPEN, C["text"], 14), _("Mostrar en su carpeta"), self._reveal)
+        if not self.busy:
+            menu.addAction(glyph_icon(G.RESTORE, C["text"], 14), _("Restaurar…"), self._restore)
+            menu.addSeparator()
+            menu.addAction(glyph_icon(G.TRASH, C["err"], 14), _("Eliminar esta copia del disco…"),
+                           lambda: self._delete_backup(b))
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _reveal(self):
+        b = self._chosen_backup()
+        if b is not None:
+            reveal_path(b.path)
+
+    def _delete_backup(self, b: plesklink.StoredBackup):
+        ans = QMessageBox.question(self.win, APP_NAME, _("¿Eliminar la copia del {date} ({size}) del disco de copia? "
+                                                          "No se puede deshacer.").format(date=short_stamp(b.when),
+                                                                                          size=fmt_bytes(b.size)))
+        if ans != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            plesklink.delete_backup(b)
+        except OSError as exc:
+            QMessageBox.warning(self.win, APP_NAME, _("No se pudo eliminar:\n{exc}").format(exc=exc))
+        self._load_backups()
+
+    # ── copiar y restaurar ──
+    def start_backup(self, sid: str, auto: bool = False) -> bool:
+        srv = self.server(sid)
+        if srv is None or self.busy:
+            return False
+        root = self.disk_root()
+        if not root:
+            if not auto:
+                QMessageBox.information(self.win, APP_NAME, _("Conecta el disco de copia: las copias de Plesk se guardan en "
+                                                              "su carpeta PLESK."))
+            return False
+        token = self.secrets.get(plesklink.token_key(srv.id))
+        if not token:
+            if not auto:
+                self.pair(srv.url, replace=srv)
+            return False
+        folder = os.path.join(plesklink.plesk_root(root), srv.folder_name)
+        op = plesklink.BackupRun(srv, token, self._password(srv.folder_name, create=True), folder, srv.keep)
+        srv.last_try = datetime.now().isoformat(timespec="seconds")
+        self._save()
+        self._launch(op)
+        self.win._log(_("Plesk: copia completa de {name}{auto}").format(
+            name=srv.label, auto=(" " + _("(automática)")) if auto else ""), C["accent2"])
+        if auto:
+            self.win._notify(_("Copia de Plesk"), _("Copiando {name}…").format(name=srv.label))
+        return True
+
+    def _restore(self):
+        b = self._chosen_backup()
+        if b is None or self.busy or not self.servers:
+            return
+        folder = os.path.basename(os.path.dirname(b.path))
+        default = self.server(self._selected) or next((s for s in self.servers if s.folder_name == folder), None)
+        dlg = PleskRestoreDialog(self.win, b, self.servers, default, self._password(folder))
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        srv = self.server(dlg.target_id)
+        if srv is None:
+            return
+        if dlg.mode == "server":
+            box = QMessageBox(QMessageBox.Icon.Warning, APP_NAME, "", parent=self.win)
+            box.setText(_("¿Restaurar todo {name} con la copia del {date}?").format(name=srv.label,
+                                                                                    date=short_stamp(b.when)))
+            box.setInformativeText(_("Las suscripciones, webs, bases de datos, correo y ajustes que hay ahora en el "
+                                     "servidor se sustituirán por los de la copia. No se puede deshacer desde aquí."))
+            box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
+            box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+            if box.exec() != QMessageBox.StandardButton.Yes:
+                return
+        token = self.secrets.get(plesklink.token_key(srv.id))
+        if not token:
+            self.pair(srv.url, replace=srv)
+            return
+        password = dlg.password.text()
+        if password and not self._password(folder):
+            self.secrets.set(f"plesk/pw/{folder}", password)
+        op = plesklink.RestoreRun(srv, token, b, password, dlg.mode)
+        self._selected = srv.id
+        self._launch(op)
+        self.win._log(_("Plesk: restaurando en {name} la copia del {date} ({how})").format(
+            name=srv.label, date=short_stamp(b.when),
+            how=_("todo el servidor") if dlg.mode == "server" else _("al Gestor de copias")), C["accent2"])
+
+    def _launch(self, op: plesklink.Operation):
+        self.op = op
+        self._finalized = False
+        self._samples.clear()
+        op.on_change = lambda _op: self.op_changed.emit()
+        self.thread = threading.Thread(target=op.run, name=f"plesk-{op.kind}", daemon=True)
+        self.thread.start()
+        if self.win.awake_box.isChecked():
+            self.guard.start(_("{app_name}: copia de Plesk en curso ({name})").format(app_name=APP_NAME,
+                                                                                    name=op.server.label))
+        self.timer.start()
+        self.refresh()
+
+    def _stop(self):
+        if self.busy:
+            self.op.cancel()
+            self.b_stop.setEnabled(False)
+
+    def stop_and_wait(self, timeout: float = 10.0):
+        if self.busy:
+            self.op.cancel()
+            if self.thread:
+                self.thread.join(timeout=timeout)
+        self.guard.stop()
+
+    def _tick(self):
+        op = self.op
+        if op is None:
+            self.timer.stop()
+            return
+        now = time.monotonic()
+        if op.phase in ("download", "upload"):
+            self._samples.append((now, op.bytes_done))
+        self._render()
+        if not op.running and not self._finalized:
+            self._finish(op)
+
+    def _speed(self) -> float:
+        if len(self._samples) < 2:
+            return 0.0
+        (t0, b0), (t1, b1) = self._samples[0], self._samples[-1]
+        return (b1 - b0) / (t1 - t0) if t1 > t0 else 0.0
+
+    def _render(self):
+        op = self.op
+        srv = self.server(self._selected)
+        mine = op is not None and srv is not None and op.server is srv
+        self.b_stop.setEnabled(bool(op and op.running and not op.stop.is_set()))
+        if mine and op.running:
+            elapsed = fmt_clock(time.monotonic() - op.started)
+            frac = op.bytes_done / op.bytes_total if op.bytes_total else 0.0
+            if op.phase == "connect":
+                title, text, bar = _("Conectando con {name}…").format(name=srv.label), "", None
+            elif op.phase == "server":
+                title = _("Plesk está haciendo la copia completa del servidor")
+                text, bar = (op.message or _("Preparando…")), None
+            elif op.phase == "restore":
+                title = (_("Plesk está restaurando el servidor") if getattr(op, "mode", "") == "server"
+                         else _("Plesk está añadiendo la copia a su Gestor de copias"))
+                text, bar = (op.message or _("Preparando…")), None
+            elif op.phase == "verify":
+                title = _("Comprobando el SHA-256")
+                text, bar = f"{fmt_bytes(op.bytes_done)} / {fmt_bytes(op.bytes_total)}", frac
+            else:
+                speed = self._speed()
+                left = (op.bytes_total - op.bytes_done) / speed if speed > 0 else None
+                title = _("Descargando la copia") if op.phase == "download" else _("Subiendo la copia al servidor")
+                text = "  ·  ".join(x for x in (
+                    f"{fmt_bytes(op.bytes_done)} / {fmt_bytes(op.bytes_total)}  ({pct(frac)})",
+                    fmt_speed(speed) if speed > 0 else "",
+                    _("quedan {t}").format(t=fmt_clock(left)) if left is not None else "",
+                    _("seguido desde {size}").format(size=fmt_bytes(op.resumed_from)) if op.resumed_from else "") if x)
+                bar = frac
+            self.banner.set("run", title, f"{text}\n" + _("Transcurrido {t}").format(t=elapsed), G.SYNC)
+            self.progress.setVisible(True)
+            if bar is None:
+                self.progress.setRange(0, 0)
+            else:
+                self.progress.setRange(0, 10000)
+                self.progress.setValue(int(bar * 10000))
+        else:
+            self.progress.hide()
+            if op is not None and mine and not op.running:
+                self._result_banner(op)
+            elif srv is not None:
+                if srv.last_error and (not srv.last_ok or srv.last_try > srv.last_ok):
+                    self.banner.set("err", _("Falló la última copia ({when})").format(when=fmt_ago(srv.last_try)),
+                                    srv.last_error, G.ERROR)
+                elif srv.last_ok:
+                    nxt = self._next_text(srv)
+                    self.banner.set("ok", _("Última copia completa {when}").format(when=fmt_ago(srv.last_ok)),
+                                    _("{size} · comprobada con SHA-256").format(size=fmt_bytes(srv.last_size)) + nxt,
+                                    G.DONE)
+                else:
+                    self.banner.set("info", _("Listo para la primera copia"),
+                                    _("La copia completa la hace Plesk con «pleskbackup server»; después se descarga y "
+                                      "se comprueba aquí.") + self._next_text(srv), G.INFO)
+            elif self._selected.startswith("disk:"):
+                self.banner.set("info", _("Copias de un servidor que ya no está conectado"),
+                                _("Elige una y pulsa «Restaurar…» para subirla a uno de tus servidores Plesk."), G.INFO)
+            self.banner.setVisible(srv is not None or self._selected.startswith("disk:"))
+        self._update_actions()
+
+    def _next_text(self, srv: plesklink.Server) -> str:
+        days = plesklink.SCHEDULE_DAYS.get(srv.schedule, 0)
+        if not days:
+            return ""
+        return "  ·  " + (_("copia automática cada día") if days == 1 else _("copia automática cada semana"))
+
+    def _result_banner(self, op: plesklink.Operation):
+        if op.phase == "done" and op.kind == "backup":
+            r = op.result
+            extra = _("  ·  quitadas {n} antiguas").format(n=len(op.pruned)) if getattr(op, "pruned", None) else ""
+            self.banner.set("ok", _("Copia completa guardada"),
+                            _("{size} · SHA-256 comprobado · {path}").format(size=fmt_bytes(r.size), path=r.path) + extra,
+                            G.DONE, (_("Mostrar"), lambda: reveal_path(r.path)))
+        elif op.phase == "done":
+            if op.warning == "auth":
+                self.banner.set("warn", _("Restauración en marcha en Plesk"),
+                                _("La copia restaurada trae otras conexiones de la extensión, así que este ordenador ya no "
+                                  "puede seguirla. Mira el resultado en Plesk y, si hace falta, vuelve a conectarlo."),
+                                G.WARN, (_("Abrir Plesk"), lambda: QDesktopServices.openUrl(QUrl(op.server.url))))
+            elif getattr(op, "mode", "") == "server":
+                self.banner.set("ok", _("Servidor restaurado"),
+                                _("Plesk terminó la restauración. Revisa en el panel que todo está como esperabas."),
+                                G.DONE, (_("Abrir Plesk"), lambda: QDesktopServices.openUrl(QUrl(op.server.url))))
+            else:
+                self.banner.set("ok", _("Copia subida a Plesk"),
+                                _("Está en Herramientas y configuración → Gestor de copias de seguridad. Elige allí qué "
+                                  "restaurar."),
+                                G.DONE, (_("Abrir Plesk"), lambda: QDesktopServices.openUrl(QUrl(op.server.url))))
+        elif op.phase == "cancelled":
+            self.banner.set("warn", _("Detenido"), _("No se ha cambiado nada en el disco de copia. Lo ya descargado se "
+                                                     "aprovecha la próxima vez.") if op.kind == "backup"
+                            else _("La copia no se ha restaurado."), G.WARN)
+        else:
+            err = op.error
+            self.banner.set("err", _("No se pudo copiar el servidor") if op.kind == "backup"
+                            else _("No se pudo restaurar"), plesk_error_text(err), G.ERROR,
+                            (_("Volver a conectar…"), lambda: self.pair(op.server.url, replace=op.server))
+                            if err and err.kind in ("auth", "cert") else None)
+
+    def _finish(self, op: plesklink.Operation):
+        self._finalized = True
+        self.timer.stop()
+        self.guard.stop()
+        srv = op.server
+        name = srv.label
+        if op.phase == "done":
+            if op.kind == "backup":
+                self.win._log(_("Plesk: copia de {name} guardada ({size}, SHA-256 comprobado) en {path}").format(
+                    name=name, size=fmt_bytes(op.result.size), path=op.result.path), C["ok"])
+                for b in getattr(op, "pruned", []):
+                    self.win._log(_("Plesk: quitada la copia antigua {path}").format(path=b.path), C["muted"])
+                self.win._notify(_("Copia de Plesk terminada"), _("{name}: {size} guardados en el disco de copia.").format(
+                    name=name, size=fmt_bytes(op.result.size)))
+            else:
+                self.win._log(_("Plesk: restauración en {name} terminada").format(name=name), C["ok"])
+                self.win._notify(_("Restauración de Plesk terminada"), name)
+        elif op.phase == "failed":
+            text = plesk_error_text(op.error)
+            if op.kind == "backup":
+                srv.last_error = text
+            self.win._log(_("Plesk: {name}: {text}").format(name=name, text=text), C["err"])
+            for line in op.log[-15:]:
+                self.win._log("    " + line, C["muted"])
+            self.win._notify(_("Copia de Plesk") if op.kind == "backup" else _("Restauración de Plesk"),
+                             f"{name}: {text}")
+        else:
+            self.win._log(_("Plesk: {name}: detenido").format(name=name), C["warn"])
+        self._save()
+        self.refresh()
+        self.refresh_summary()
+        QTimer.singleShot(5000, self.check_due)
+
+    # ── copias automáticas ──
+    def due(self, srv: plesklink.Server, now: datetime | None = None) -> bool:
+        days = plesklink.SCHEDULE_DAYS.get(srv.schedule, 0)
+        if not days:
+            return False
+        now = now or datetime.now()
+        last = reminders.parse_time(srv.last_ok)
+        tried = reminders.parse_time(srv.last_try)
+        if tried and (now - tried) < timedelta(hours=2):
+            return False  # tras un fallo, no se reintenta enseguida
+        return last is None or (now - last) >= timedelta(days=days) - timedelta(hours=2)
+
+    def check_due(self):
+        if self.busy or not self.disk_root():
+            return
+        for srv in self.servers:
+            if self.due(srv) and self.start_backup(srv.id, auto=True):
+                return
+
+    def summary(self) -> str:
+        if not self.servers:
+            return _("Ningún servidor conectado")
+        if self.busy:
+            return _("Copiando {name}…").format(name=self.op.server.label)
+        return _n("{n} servidor conectado", "{n} servidores conectados", len(self.servers)).format(n=len(self.servers))
 
 
 CURRENT_VERSION = os.environ.get("DEVBACKUP_PRETEND_VERSION") or APP_VERSION  # para probar el actualizador
@@ -5110,6 +6227,15 @@ class MainWindow(QMainWindow):
             self.seg_group.addButton(b, i)
             self.seg_buttons.append(b)
             sl.addWidget(b)
+        b = QPushButton("  Plesk")
+        b.setObjectName("seg")
+        b.setCheckable(True)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setIcon(plesk_icon(14))
+        b.setToolTip(_("Copias completas de tus servidores Plesk"))
+        self.seg_group.addButton(b, PAGE_PLESK)
+        self.seg_buttons.append(b)
+        sl.addWidget(b)
         top.addWidget(seg)
         top.addStretch(1)
         col.addLayout(top)
@@ -5126,8 +6252,11 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self._build_issues_page())
         self.recover = RecoverPage(self)
         self.stack.addWidget(self.recover)
+        self.plesk = PleskPage(self)
+        self.stack.addWidget(self.plesk)
         self.seg_group.idClicked.connect(self.stack.setCurrentIndex)
         self.stack.currentChanged.connect(lambda i: self.recover.show_page() if i == PAGE_RECOVER else None)
+        self.stack.currentChanged.connect(lambda i: self.plesk.refresh() if i == PAGE_PLESK else None)
         self.keep_combo.currentIndexChanged.connect(lambda *_a: self.recover.mark_stale())
         self.seg_buttons[PAGE_TREE].setChecked(True)
         col.addWidget(self.stack, 1)
@@ -5716,6 +6845,8 @@ class MainWindow(QMainWindow):
             self._invalidate_plan()
             self._save_settings()
         self._refresh_disk_status()
+        self.plesk.refresh()
+        QTimer.singleShot(30_000, self.plesk.check_due)  # copias de Plesk pendientes, sin pisar el aviso del disco
         if self._state in RUNNING or (self.dialog and self.dialog.isVisible()):
             return
         action = self.connect_combo.currentData()
@@ -5810,6 +6941,8 @@ class MainWindow(QMainWindow):
         self._invalidate_plan()
         if hasattr(self, "recover"):
             self.recover.mark_stale()
+        if hasattr(self, "plesk"):
+            self.plesk.refresh()
         if hasattr(self, "cloud_state"):
             self._check_cloud()
 
@@ -7157,6 +8290,14 @@ class MainWindow(QMainWindow):
             self.job.cancel()
             if self.job_thread:
                 self.job_thread.join(timeout=15)
+        if self.plesk.busy:
+            ans = QMessageBox.question(self, APP_NAME, _("Hay una copia o restauración de Plesk en curso. ¿Detenerla y "
+                                                         "salir?\n\nLo ya descargado se aprovecha la próxima vez."))
+            if ans != QMessageBox.StandardButton.Yes:
+                self._quitting = False
+                event.ignore()
+                return
+        self.plesk.stop_and_wait()
         self._guard_stop()
         if self.tray:
             self.tray.hide()
@@ -7290,6 +8431,7 @@ class MainWindow(QMainWindow):
             self.job.cancel()
             if self.job_thread:
                 self.job_thread.join(timeout=4)
+        self.plesk.stop_and_wait(timeout=4)
         self._guard_stop()
 
     def _allow_quit(self) -> bool:
@@ -7305,6 +8447,13 @@ class MainWindow(QMainWindow):
                 self.job.cancel()
                 if self.job_thread:
                     self.job_thread.join(timeout=15)
+            if IS_MAC and self.plesk.busy:
+                self._show_window()
+                ans = QMessageBox.question(self, APP_NAME, _("Hay una copia o restauración de Plesk en curso. ¿Detenerla "
+                                                             "y salir?\n\nLo ya descargado se aprovecha la próxima vez."))
+                if ans != QMessageBox.StandardButton.Yes:
+                    return False
+                self.plesk.stop_and_wait()
             self._quitting = True
         return True
 
@@ -7372,6 +8521,156 @@ def install_crash_log() -> None:
 
     sys.excepthook = hook
     threading.excepthook = lambda a: hook(a.exc_type, a.exc_value, a.exc_traceback)
+
+
+def selftest_plesk(win: "MainWindow", say) -> None:
+    """Copias de Plesk contra una imitación de la API de la extensión (en CI no hay Plesk ni PHP):
+    emparejar, copiar con un corte a mitad de descarga, conservar N, restaurar, la carpeta PLESK con su
+    icono y que la sincronización espejo no la toque."""
+    import http.server
+
+    state = {"jobs": {}, "uploads": {}, "devices": set(), "calls": []}
+    payload = os.urandom(3_000_000)
+
+    class Fake(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def _json(self, data, status=200):
+            raw = json.dumps({**data, "protocol": plesklink.PROTOCOL}).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def _route(self):
+            from urllib.parse import parse_qs, urlsplit
+            u = urlsplit(self.path)
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            a = q.get("a")
+            state["calls"].append(a)
+            if u.path != plesklink.API_PATH:
+                return self._json({}, 404)
+            if a == "pair":
+                if json.loads(body)["code"] != "123456":
+                    return self._json({"error": "code"}, 403)
+                state["devices"].add("t" * 64)
+                return self._json({"token": "t" * 64, "device": "d1", "server": {"hostname": "plesk.test",
+                                                                                  "plesk_version": "18.0.70"}})
+            if self.headers.get("X-DBS-Token") not in state["devices"]:
+                return self._json({"error": "auth"}, 401)
+            if a == "info":
+                return self._json({"server": {"hostname": "plesk.test", "plesk_version": "18.0.70"}})
+            if a == "backup":
+                jid = uuid_hex()
+                state["jobs"][jid] = {"id": jid, "kind": "backup", "state": "done", "size": len(payload),
+                                      "sha256": hashlib.sha256(payload).hexdigest(), "log": ["Backup finished"]}
+                return self._json({"job": state["jobs"][jid]})
+            if a == "job":
+                return self._json({"job": state["jobs"][q["id"]]})
+            if a == "download":
+                start = int((self.headers.get("Range") or "bytes=0-")[6:].rstrip("-"))
+                cut = state.pop("cut", None)  # la primera descarga se corta a mitad
+                data = payload[start:]
+                self.send_response(206 if start else 200)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data[:cut] if cut else data)
+                if cut:
+                    self.close_connection = True
+                return None
+            if a in ("release", "cancel"):
+                state["jobs"].pop(q["id"], None)
+                return self._json({})
+            if a == "upload_start":
+                meta = json.loads(body)
+                state["uploads"]["u1"] = {"meta": meta, "data": b""}
+                return self._json({"upload": {"id": "u1", "received": 0}})
+            if a == "upload_chunk":
+                up = state["uploads"][q["id"]]
+                if int(q["offset"]) == len(up["data"]):
+                    up["data"] += body
+                return self._json({"upload": {"id": "u1", "received": len(up["data"])}})
+            if a == "restore":
+                req = json.loads(body)
+                up = state["uploads"][req["upload"]]
+                ok = hashlib.sha256(up["data"]).hexdigest() == up["meta"]["sha256"]
+                state["restored"] = (req["mode"], ok)
+                state["jobs"]["r1"] = {"id": "r1", "kind": "restore", "state": "done" if ok else "failed"}
+                return self._json({"job": state["jobs"]["r1"]})
+            return self._json({"error": "server"}, 400)
+
+        do_GET = do_POST = _route
+
+    def uuid_hex() -> str:
+        return os.urandom(16).hex()
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fake)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = plesklink.normalize_url(f"http://127.0.0.1:{server.server_address[1]}")
+    saved_poll, plesklink.POLL_S = plesklink.POLL_S, 0.05
+    try:
+        with tempfile.TemporaryDirectory() as vol:
+            try:
+                plesklink.pair(url, "000000", "PC")
+                raise AssertionError("Plesk: aceptó un código erróneo")
+            except plesklink.PleskError as exc:
+                assert exc.kind == "code", exc.kind
+            srv, token = plesklink.pair(url, "123 456", "PC")
+            assert srv.label == "plesk.test" and token == "t" * 64, "Plesk: emparejar"
+            folder = os.path.join(plesklink.plesk_root(vol), srv.folder_name)
+            state["cut"] = 1_000_000
+            op = plesklink.BackupRun(srv, token, "clave", folder, keep=2)
+            op.run()
+            assert op.phase == "done", f"Plesk: copia {op.phase} {op.error}"
+            with open(op.result.path, "rb") as fh:
+                assert fh.read() == payload, "Plesk: la copia descargada no es igual"
+            assert "release" in state["calls"] and not state["jobs"], "Plesk: no se borró del servidor"
+            for i in range(2):
+                time.sleep(1.05)
+                again = plesklink.BackupRun(srv, token, "clave", folder, keep=2)
+                again.run()
+                assert again.phase == "done", again.error
+            kept = plesklink.list_backups(folder)
+            assert len(kept) == 2 and kept[0].sha256 == hashlib.sha256(payload).hexdigest(), "Plesk: conservar 2"
+            if IS_WIN:
+                root = plesklink.plesk_root(vol)
+                assert os.path.exists(os.path.join(root, "desktop.ini")), "Plesk: carpeta sin icono"
+                assert ctypes.windll.kernel32.GetFileAttributesW(root) & 0x1, "Plesk: desktop.ini no se aplicará"
+            rest = plesklink.RestoreRun(srv, token, kept[0], "clave", "server")
+            rest.run()
+            assert rest.phase == "done" and state.get("restored") == ("server", True), f"Plesk: restaurar {rest.error}"
+            # la sincronización espejo con el destino en la raíz del disco no toca la carpeta PLESK
+            with tempfile.TemporaryDirectory() as side:
+                src, meta = os.path.join(side, "src"), os.path.join(side, "meta")
+                os.makedirs(os.path.join(src, "PLESK"))
+                os.makedirs(meta)
+                with open(os.path.join(src, "a.txt"), "w") as fh:
+                    fh.write("a")
+                with open(os.path.join(src, "PLESK", "otro.txt"), "w") as fh:
+                    fh.write("no se copia encima")
+                job = engine.BackupJob(src, vol, [], [], meta_root=meta, scrub_seconds=0)
+                job.dst_is_root = True
+                job.allow_mass_delete = True
+                job.run()
+                assert job.phase == "done" and len(plesklink.list_backups(folder)) == 2, "Plesk: la sincronización tocó PLESK"
+                assert not os.path.exists(os.path.join(folder, "..", "otro.txt")), "Plesk: se copió encima de PLESK"
+                assert os.path.exists(os.path.join(vol, "a.txt")), "Plesk: la sincronización no copió"
+            # la página: conectar y quitar
+            page = win.plesk
+            before = list(page.servers)
+            page.servers.append(srv)
+            page.refresh()
+            assert page.list.count() >= 1 and page.summary()
+            page.servers[:] = before
+            page.refresh()
+        say("  Plesk: emparejar con código, copia con corte a mitad y SHA-256, conservar 2, restaurar, "
+            "carpeta PLESK con icono y a salvo de la sincronización")
+    finally:
+        plesklink.POLL_S = saved_poll
+        server.shutdown()
 
 
 def selftest() -> int:
@@ -7672,6 +8971,7 @@ def selftest() -> int:
         pair.accept()  # pasa por QDialog.done(): si algo lo tapa, el resultado no cambia
         assert pair.result() == QDialog.DialogCode.Accepted, "el diálogo «Conectar con mi nube» no se cierra"
         say("  conectar con la nube: el diálogo abre y se cierra")
+        selftest_plesk(win, say)
         if IS_LINUX:
             # montaje con GVFS: un «gio» de mentira con las mismas preguntas que el de verdad
             with tempfile.TemporaryDirectory() as fake:

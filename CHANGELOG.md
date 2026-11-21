@@ -1,5 +1,28 @@
 # Novedades
 
+## 2.4.0
+
+- **Copias completas de servidores Plesk.** Nueva pestaña *Plesk*: conecta tus servidores Plesk y
+  guarda en el disco de copia una copia completa de cada uno (ajustes del servidor, suscripciones,
+  webs, bases de datos, correo y DNS) hecha con la herramienta oficial de Plesk, `pleskbackup --server`.
+  - **Se conecta con un código, sin contraseñas ni SSH.** Instala en Plesk la extensión
+    *DEV Backup Studio* (`DEV-Backup-Studio-Plesk-x.y.z.zip`, en cada versión), pulsa *Conectar un
+    ordenador* y escribe en la app la dirección del panel y el código de 6 cifras. Sirve una vez,
+    caduca a los 10 minutos y cada ordenador recibe su propia llave, que se quita desde Plesk. Si el
+    certificado del panel es el propio de Plesk, la app enseña su huella para compararla con la de la
+    extensión y luego la fija.
+  - Las copias van a la carpeta **`PLESK`** de la raíz del disco de copia, con el icono de Plesk en el
+    Explorador, el Finder, Nautilus y Dolphin. La descarga sigue donde iba si se corta, se comprueba con
+    SHA-256 y se conservan las 3, 7, 14 o 30 últimas. La sincronización espejo nunca toca esa carpeta.
+  - **Copia automática** cada día o cada semana con la app abierta (o en la bandeja) y el disco
+    conectado, o solo a mano.
+  - **Restaurar como Plesk manda:** sube la copia a cualquier servidor conectado y elige entre dejarla
+    en su *Gestor de copias de seguridad* (y restaurar allí lo que quieras: una suscripción, una base de
+    datos…) o restaurar todo el servidor con `pleskrestore`. Sirve también para pasar a un servidor
+    nuevo.
+  - Las contraseñas que guarda la copia van cifradas con una contraseña propia de cada servidor; la app
+    la recuerda y la enseña para que la anotes.
+
 ## 2.3.1
 
 - **README en alemán** (`README.de.md`) con sus propias capturas de la app en alemán.

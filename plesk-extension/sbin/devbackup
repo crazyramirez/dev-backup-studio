@@ -1,0 +1,221 @@
+#!/bin/bash
+# DEV Backup Studio para Plesk: lanza las herramientas oficiales de copia y restauración.
+#
+# Plesk lo ejecuta con privilegios (pm_ApiCli::callSbin). PHP solo pasa una orden y el id de un trabajo
+# que ya ha creado en var/jobs/<id>/; todo lo demás (contraseña, modo, opciones) está en esa carpeta.
+#
+#   devbackup start-backup  <id>   → en segundo plano: plesk bin pleskbackup --server -output-file …
+#   devbackup start-restore <id>   → en segundo plano: plesk bin pleskrestore --restore … -level server
+#                                     o plesk sbin pmm-ras --import-file-as-dump (Gestor de copias)
+#   devbackup cancel <id>
+#   devbackup check                → versión de Plesk y herramientas disponibles
+#
+# Cada trabajo escribe su estado en archivos sueltos: state (queued|running|done|failed|canceled),
+# pid, started, finished, size, sha256, error, log y alive (se toca cada 20 s mientras sigue vivo).
+
+set -u
+umask 077
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+EXT=dev-backup-studio
+product_root() {
+    local root=""
+    [ -r /etc/psa/psa.conf ] && root=$(awk '$1=="PRODUCT_ROOT_D"{print $2; exit}' /etc/psa/psa.conf)
+    echo "${root:-/usr/local/psa}"
+}
+ROOT="${DBS_PRODUCT_ROOT:-$(product_root)}"   # DBS_PRODUCT_ROOT: solo para las pruebas
+VAR="$ROOT/var/modules/$EXT"
+JOBS="$VAR/jobs"
+PLESK="${DBS_PLESK:-plesk}"
+
+die() { echo "$*" >&2; exit 1; }
+
+job_dir() {
+    [[ "${1:-}" =~ ^[a-f0-9]{32}$ ]] || die "bad job id"
+    local d="$JOBS/$1"
+    [ -d "$d" ] && [ ! -L "$d" ] || die "no such job"
+    echo "$d"
+}
+
+# El panel (no root) tiene que poder leer lo que se escribe: mismo dueño que la carpeta var.
+owner() { stat -c '%u:%g' "$VAR"; }
+
+put() {  # put <dir> <archivo> <valor>
+    local f="$1/$2"
+    rm -f -- "$f"
+    printf '%s' "$3" > "$f"
+    chown "$(owner)" "$f" 2>/dev/null
+    chmod 0640 "$f"
+}
+
+log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$1/log"; }
+
+heartbeat() {  # mientras viva el proceso $2, «alive» se renueva cada 20 s
+    local d="$1" pid="$2"
+    while kill -0 "$pid" 2>/dev/null; do
+        touch "$d/alive" 2>/dev/null
+        chown "$(owner)" "$d/alive" 2>/dev/null
+        sleep 20
+    done
+}
+
+start() {  # start <run-backup|run-restore> <id>: se separa del panel y vuelve enseguida
+    local d
+    d=$(job_dir "$2")
+    [ "$(cat "$d/state" 2>/dev/null)" = "queued" ] || die "job not queued"
+    touch "$d/log" "$d/alive"
+    chown "$(owner)" "$d/log" "$d/alive" 2>/dev/null
+    chmod 0640 "$d/log"
+    close_fds
+    setsid "$(readlink -f -- "$0")" "$1" "$2" < /dev/null > /dev/null 2>&1 &
+    echo "started $2"
+}
+
+close_fds() {  # lo heredado del panel (sockets, tuberías): un trabajo de horas no debe retenerlo
+    local fd
+    for fd in /proc/$$/fd/*; do
+        fd=${fd##*/}
+        [ "$fd" -gt 2 ] 2>/dev/null && eval "exec $fd>&-" 2>/dev/null
+    done
+}
+
+begin() {
+    local d="$1"
+    close_fds
+    put "$d" pid "$$"
+    put "$d" state running
+    heartbeat "$d" "$$" &
+    trap 'finish "$d" canceled "canceled"; exit 130' TERM INT
+}
+
+finish() {  # finish <dir> <estado> [error]
+    local d="$1"
+    put "$d" finished "$(date +%s)"
+    [ -n "${3:-}" ] && put "$d" error "$3"
+    put "$d" state "$2"
+    rm -f -- "$d/password"
+}
+
+last_error() {  # la última línea del registro que parece un error (para enseñarla en la app)
+    grep -iE 'error|fail|unable|cannot|denied|not enough|no space' "$1/log" | tail -n 1 | cut -c1-400
+}
+
+run_backup() {
+    local d
+    d=$(job_dir "$1")
+    begin "$d"
+    local out="$d/backup.tar"
+    local args=(bin pleskbackup --server -output-file "$out" -v -split 1024G)
+    [ -e "$d/opt_exclude_logs" ] && args+=(-exclude-logs)
+    log "$d" "DEV Backup Studio: plesk ${args[*]}"
+    local pw=""
+    [ -s "$d/password" ] && pw=$(cat "$d/password")
+    rm -f -- "$d/password"
+    local code=0
+    if [ -n "$pw" ]; then
+        PLESK_BACKUP_PASSWORD="$pw" "$PLESK" "${args[@]}" >> "$d/log" 2>&1 || code=$?
+    else
+        "$PLESK" "${args[@]}" >> "$d/log" 2>&1 || code=$?
+    fi
+    pw=""
+    log "$d" "pleskbackup exit $code"
+    # con -split un archivo grande podría salir en partes (.tar1, .tar2…): la app espera uno solo
+    if compgen -G "$out[0-9]*" > /dev/null; then
+        rm -f -- "$out" "$out"[0-9]*
+        finish "$d" failed "pleskbackup split the backup into several files"
+        return
+    fi
+    if [ "$code" -ne 0 ] || [ ! -s "$out" ]; then
+        rm -f -- "$out"   # una copia a medias no sirve y puede ocupar mucho
+        finish "$d" failed "$(last_error "$d") (exit $code)"
+        return
+    fi
+    log "$d" "SHA-256…"
+    put "$d" size "$(stat -c %s "$out")"
+    put "$d" sha256 "$(sha256sum "$out" | cut -d' ' -f1)"
+    chown "$(owner)" "$out"
+    chmod 0640 "$out"
+    log "$d" "done: $(stat -c %s "$out") bytes"
+    finish "$d" done
+}
+
+run_restore() {
+    local d
+    d=$(job_dir "$1")
+    begin "$d"
+    local file="$d/backup.tar" mode
+    mode=$(cat "$d/mode" 2>/dev/null)
+    log "$d" "DEV Backup Studio: SHA-256…"
+    local want got
+    want=$(cat "$d/expected_sha256" 2>/dev/null)
+    got=$(sha256sum "$file" | cut -d' ' -f1)
+    if [ -z "$want" ] || [ "$got" != "$want" ]; then
+        finish "$d" failed "SHA-256 mismatch: the uploaded file is damaged"
+        rm -f -- "$file"
+        return
+    fi
+    local pw=""
+    [ -s "$d/password" ] && pw=$(cat "$d/password")
+    rm -f -- "$d/password"
+    local args
+    if [ "$mode" = "server" ]; then
+        # restauración oficial de todo el servidor; -ignore-sign: la copia puede venir de otro servidor
+        args=(bin pleskrestore --restore "$file" -level server -ignore-sign -suspend -verbose)
+    else
+        # la deja en el Gestor de copias de seguridad, para restaurar desde Plesk lo que se quiera
+        args=(sbin pmm-ras --import-file-as-dump --dump-file-specification "$file")
+    fi
+    log "$d" "DEV Backup Studio: plesk ${args[*]}"
+    local code=0
+    if [ -n "$pw" ]; then
+        PLESK_BACKUP_PASSWORD="$pw" "$PLESK" "${args[@]}" >> "$d/log" 2>&1 || code=$?
+    else
+        "$PLESK" "${args[@]}" >> "$d/log" 2>&1 || code=$?
+    fi
+    pw=""
+    log "$d" "exit $code"
+    rm -f -- "$file"
+    if [ "$code" -eq 116 ]; then
+        finish "$d" failed "signature: Plesk does not accept a backup made on another server in the Backup Manager"
+    elif [ "$code" -ne 0 ]; then
+        finish "$d" failed "$(last_error "$d") (exit $code)"
+    else
+        finish "$d" done
+    fi
+}
+
+cancel() {
+    local d pid
+    d=$(job_dir "$1")
+    pid=$(cat "$d/pid" 2>/dev/null)
+    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+        # setsid: el trabajo encabeza su propio grupo, con pleskbackup y lo que haya lanzado
+        kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid"
+    fi
+    case "$(cat "$d/state" 2>/dev/null)" in
+        queued|running)
+            finish "$d" canceled "canceled"
+            [ "$(cat "$d/kind" 2>/dev/null)" = backup ] && rm -f -- "$d/backup.tar" "$d/backup.tar"[0-9]*
+            ;;
+    esac
+    echo "canceled"
+}
+
+check() {
+    echo "root=$ROOT"
+    "$PLESK" version 2>/dev/null | head -n 3
+    for t in bin/pleskbackup bin/pleskrestore; do
+        [ -x "$ROOT/$t" ] && echo "ok $t" || echo "missing $t"
+    done
+}
+
+case "${1:-}" in
+    start-backup) start run-backup "${2:-}" ;;
+    start-restore) start run-restore "${2:-}" ;;
+    run-backup) run_backup "${2:-}" ;;
+    run-restore) run_restore "${2:-}" ;;
+    cancel) cancel "${2:-}" ;;
+    check) check ;;
+    *) die "usage: devbackup start-backup|start-restore|cancel <id> | check" ;;
+esac
