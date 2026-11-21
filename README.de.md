@@ -170,7 +170,9 @@ Zum Verbinden eines Servers braucht es weder Passwörter noch SSH-Zugang:
 1. Laden Sie `DEV-Backup-Studio-Plesk-x.y.z.zip` unter
    [Releases](https://github.com/crazyramirez/dev-backup-studio/releases/latest) herunter und laden Sie
    es in Plesk hoch: *Erweiterungen → Meine Erweiterungen → Erweiterung hochladen* (oder
-   `plesk bin extension --install datei.zip`).
+   `plesk bin extension --install datei.zip`). Plesk blendet diese Schaltfläche standardmäßig aus:
+   Fügen Sie in `/usr/local/psa/admin/conf/panel.ini` (oder mit der Erweiterung *Panel.ini Editor*)
+   die Zeilen `[ext-catalog]` und `extensionUpload = true` hinzu.
 2. Öffnen Sie die Erweiterung *DEV Backup Studio* und klicken Sie auf *Computer verbinden*: Es
    erscheint ein 6-stelliger Code (einmalig gültig, läuft nach 10 Minuten ab).
 3. In der App, Tab *Plesk → Server verbinden…*: Panel-Adresse (Port 8443 wird automatisch ergänzt)
