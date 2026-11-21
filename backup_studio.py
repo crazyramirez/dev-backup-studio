@@ -59,7 +59,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.4.2"
+APP_VERSION = "2.4.3"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -3476,7 +3476,11 @@ def plesk_error_text(exc: plesklink.PleskError | None) -> str:
         "busy": _("Demasiados intentos. Espera unos minutos y vuelve a probar."),
         "server": _("Plesk no pudo terminar: {detail}").format(detail=d or "—"),
         "space": _("No cabe en el disco de copia: faltan {size}.").format(size=size),
-        "serverspace": _("No hay sitio en el servidor Plesk para recibir la copia: faltan {size}.").format(size=size),
+        "serverspace": _("No hay sitio suficiente en el servidor Plesk: faltan {size}. Plesk necesita espacio para "
+                         "preparar la copia y para su archivo, más o menos el doble de lo que ocupa.").format(size=size),
+        "serverfull": _("El servidor Plesk se quedó sin espacio en disco mientras preparaba la copia. Plesk necesita "
+                        "espacio para la copia y para su archivo, más o menos el doble de lo que ocupa: libera sitio "
+                        "en el servidor y vuelve a intentarlo."),
         "running": _("Ya hay una copia o restauración en marcha en ese servidor. Espera a que termine."),
         "signature": _("El Gestor de copias de Plesk no admite una copia hecha en otro servidor. Elige «Restaurar todo "
                        "el servidor», o súbela a mano en Plesk marcando «Subir archivos de copia sin firma válida»."),
@@ -8784,7 +8788,7 @@ def selftest_plesk(win: "MainWindow", say) -> None:
             except plesklink.PleskError as exc:
                 assert exc.kind == "code", exc.kind
             for kind in ("code", "unreachable", "cert", "auth", "noext", "old", "busy", "running", "server", "space",
-                         "serverspace", "signature", "verify", "missing", "cancelled", "otro"):
+                         "serverspace", "serverfull", "signature", "verify", "missing", "cancelled", "otro"):
                 for detail in ("", "[WinError 10061] rechazada", "1234567"):
                     assert plesk_error_text(plesklink.PleskError(kind, detail)), f"Plesk: sin texto para {kind}"
             srv, token = plesklink.pair(url, "123 456", "PC")

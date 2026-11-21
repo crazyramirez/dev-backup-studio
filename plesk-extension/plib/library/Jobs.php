@@ -10,9 +10,28 @@ class Modules_DevBackupStudio_Jobs
     const UPLOAD_KEEP_DAYS = 2;
     const SBIN = 'devbackup';
 
+    // Los trabajos (la copia en curso, las subidas y sus registros) viven fuera de la carpeta de la
+    // extensión: Plesk mete esa carpeta en sus copias de servidor, y la copia se incluiría a sí misma
+    // (decenas de GB que no paran de crecer, hasta llenar el disco). Si el panel no pudiera usar la
+    // carpeta propia, se vuelve a la de la extensión.
+    const DATA_DIR = '/var/lib/dev-backup-studio';
+
     public static function base()
     {
-        return rtrim(pm_Context::getVarDir(), '/') . '/';
+        static $base = null;
+        if ($base !== null) {
+            return $base;
+        }
+        $data = rtrim(getenv('DBS_DATA_DIR') ?: self::DATA_DIR, '/');
+        if (!is_dir($data) || !is_writable($data)) {
+            try {
+                pm_ApiCli::callSbin(self::SBIN, ['init'], pm_ApiCli::RESULT_FULL);   // la crea root
+            } catch (Exception $e) {
+            }
+            clearstatcache();
+        }
+        $base = (is_dir($data) && is_writable($data)) ? $data . '/' : rtrim(pm_Context::getVarDir(), '/') . '/';
+        return $base;
     }
 
     public static function jobsDir()

@@ -824,7 +824,6 @@
   "La extensión de Plesk es de una versión antigua: actualízala en Extensiones → Mis extensiones.": "L'extension Plesk est obsolète : mettez-la à jour dans Extensions → Mes extensions.",
   "Plesk no pudo terminar: {detail}": "Plesk n'a pas pu terminer : {detail}",
   "No cabe en el disco de copia: faltan {size}.": "Ça ne tient pas sur le disque de sauvegarde : il manque {size}.",
-  "No hay sitio en el servidor Plesk para recibir la copia: faltan {size}.": "Pas assez de place sur le serveur Plesk pour recevoir la sauvegarde : il manque {size}.",
   "Ya hay una copia o restauración en marcha en ese servidor. Espera a que termine.": "Une sauvegarde ou une restauration est déjà en cours sur ce serveur. Attendez qu'elle se termine.",
   "El Gestor de copias de Plesk no admite una copia hecha en otro servidor. Elige «Restaurar todo el servidor», o súbela a mano en Plesk marcando «Subir archivos de copia sin firma válida».": "Le Gestionnaire de sauvegardes de Plesk n'accepte pas une sauvegarde faite sur un autre serveur. Choisissez « Restaurer tout le serveur », ou envoyez-la à la main dans Plesk en cochant « Envoyer des fichiers de sauvegarde sans signature valide ».",
   "Lo descargado no coincide con el original (SHA-256 distinto). No se ha guardado nada; vuelve a intentarlo.": "Le téléchargement ne correspond pas à l'original (SHA-256 différent). Rien n'a été enregistré ; réessayez.",
@@ -996,6 +995,8 @@
   "Lo que contó Plesk": "Ce qu'a indiqué Plesk",
   "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "Son journal complet se trouve sur le serveur, dans /var/log/plesk/PMM/ (le dossier backup-… ou restore-… de cette date), et sur la page de l'extension.",
   "Registro de Plesk (PMM)": "Journal de Plesk (PMM)",
-  "Salida de la herramienta de Plesk": "Sortie de l'outil de Plesk"
+  "Salida de la herramienta de Plesk": "Sortie de l'outil de Plesk",
+  "No hay sitio suficiente en el servidor Plesk: faltan {size}. Plesk necesita espacio para preparar la copia y para su archivo, más o menos el doble de lo que ocupa.": "Pas assez de place sur le serveur Plesk : il manque {size}. Plesk a besoin d'espace pour préparer la sauvegarde et pour son fichier, environ le double de sa taille.",
+  "El servidor Plesk se quedó sin espacio en disco mientras preparaba la copia. Plesk necesita espacio para la copia y para su archivo, más o menos el doble de lo que ocupa: libera sitio en el servidor y vuelve a intentarlo.": "Le serveur Plesk a manqué d'espace disque pendant la préparation de la sauvegarde. Plesk a besoin d'espace pour la sauvegarde et pour son fichier, environ le double de sa taille : libérez de la place sur le serveur et réessayez."
  }
 }

@@ -824,7 +824,6 @@
   "La extensión de Plesk es de una versión antigua: actualízala en Extensiones → Mis extensiones.": "Die Plesk-Erweiterung ist veraltet: Aktualisieren Sie sie unter Erweiterungen → Meine Erweiterungen.",
   "Plesk no pudo terminar: {detail}": "Plesk konnte nicht abschließen: {detail}",
   "No cabe en el disco de copia: faltan {size}.": "Passt nicht auf das Sicherungslaufwerk: Es fehlen {size}.",
-  "No hay sitio en el servidor Plesk para recibir la copia: faltan {size}.": "Auf dem Plesk-Server ist kein Platz, um die Sicherung zu empfangen: Es fehlen {size}.",
   "Ya hay una copia o restauración en marcha en ese servidor. Espera a que termine.": "Auf diesem Server läuft bereits eine Sicherung oder Wiederherstellung. Warten Sie, bis sie abgeschlossen ist.",
   "El Gestor de copias de Plesk no admite una copia hecha en otro servidor. Elige «Restaurar todo el servidor», o súbela a mano en Plesk marcando «Subir archivos de copia sin firma válida».": "Der Backup-Manager von Plesk akzeptiert keine Sicherung, die auf einem anderen Server erstellt wurde. Wählen Sie „Gesamten Server wiederherstellen“ oder laden Sie sie in Plesk von Hand hoch und aktivieren Sie „Backup-Dateien ohne gültige Signatur hochladen“.",
   "Lo descargado no coincide con el original (SHA-256 distinto). No se ha guardado nada; vuelve a intentarlo.": "Der Download stimmt nicht mit dem Original überein (anderer SHA-256). Es wurde nichts gespeichert; versuchen Sie es erneut.",
@@ -996,6 +995,8 @@
   "Lo que contó Plesk": "Was Plesk gemeldet hat",
   "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "Das vollständige Protokoll liegt auf dem Server unter /var/log/plesk/PMM/ (im Ordner backup-… oder restore-… dieses Datums) und auf der Seite der Erweiterung.",
   "Registro de Plesk (PMM)": "Plesk-Protokoll (PMM)",
-  "Salida de la herramienta de Plesk": "Ausgabe des Plesk-Werkzeugs"
+  "Salida de la herramienta de Plesk": "Ausgabe des Plesk-Werkzeugs",
+  "No hay sitio suficiente en el servidor Plesk: faltan {size}. Plesk necesita espacio para preparar la copia y para su archivo, más o menos el doble de lo que ocupa.": "Auf dem Plesk-Server ist nicht genug Platz: Es fehlen {size}. Plesk braucht Platz, um die Sicherung vorzubereiten, und für ihre Datei, etwa das Doppelte ihrer Größe.",
+  "El servidor Plesk se quedó sin espacio en disco mientras preparaba la copia. Plesk necesita espacio para la copia y para su archivo, más o menos el doble de lo que ocupa: libera sitio en el servidor y vuelve a intentarlo.": "Dem Plesk-Server ist beim Vorbereiten der Sicherung der Speicherplatz ausgegangen. Plesk braucht Platz für die Sicherung und für ihre Datei, etwa das Doppelte ihrer Größe: Geben Sie auf dem Server Platz frei und versuchen Sie es erneut."
  }
 }

@@ -29,7 +29,7 @@ class Modules_DevBackupStudio_ApiError extends Exception
 class Modules_DevBackupStudio_Api
 {
     const PROTOCOL = 1;
-    const VERSION = '1.0.2';            // la de meta.xml (tools/build_plesk_extension.py lo comprueba)
+    const VERSION = '1.0.3';            // la de meta.xml (tools/build_plesk_extension.py lo comprueba)
     const CHUNK_MAX = 16777216;          // 16 MB por parte (la app manda 8)
     const SPACE_RESERVE = 1073741824;    // 1 GB libre de más para que Plesk pueda trabajar
 

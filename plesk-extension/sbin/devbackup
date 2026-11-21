@@ -9,6 +9,8 @@
 #                                     o plesk sbin pmm-ras --import-file-as-dump (Gestor de copias)
 #   devbackup cancel <id>
 #   devbackup check                → versión de Plesk y herramientas disponibles
+#   devbackup init                 → crea /var/lib/dev-backup-studio (los trabajos) con el dueño del panel
+#   devbackup purge                → la borra (al desinstalar)
 #
 # Cada trabajo escribe su estado en archivos sueltos: state (queued|running|done|failed|canceled),
 # pid, started, finished, size, sha256, error, log y alive (se toca cada 10 s mientras sigue vivo).
@@ -29,7 +31,9 @@ product_root() {
 }
 ROOT="${DBS_PRODUCT_ROOT:-$(product_root)}"   # DBS_PRODUCT_ROOT: solo para las pruebas
 VAR="$ROOT/var/modules/$EXT"
-JOBS="$VAR/jobs"
+# los trabajos van fuera de $VAR: Plesk mete la carpeta de cada extensión en sus copias de servidor y
+# la copia en curso se incluiría a sí misma (ver Jobs::base() en PHP)
+DATA="${DBS_DATA_DIR:-/var/lib/dev-backup-studio}"
 PLESK="${DBS_PLESK:-plesk}"
 
 conf() {  # conf <CLAVE>: valor de /etc/psa/psa.conf
@@ -43,9 +47,30 @@ die() { echo "$*" >&2; exit 1; }
 
 job_dir() {
     [[ "${1:-}" =~ ^[a-f0-9]{32}$ ]] || die "bad job id"
-    local d="$JOBS/$1"
-    [ -d "$d" ] && [ ! -L "$d" ] || die "no such job"
-    echo "$d"
+    local d
+    for d in "$DATA/jobs/$1" "$VAR/jobs/$1"; do   # la segunda, si el panel no pudo usar $DATA
+        if [ -d "$d" ] && [ ! -L "$d" ]; then
+            echo "$d"
+            return
+        fi
+    done
+    die "no such job"
+}
+
+init() {  # crea $DATA con el dueño del panel y quita lo que dejaron versiones anteriores en $VAR
+    mkdir -p "$DATA"
+    chown "$(owner)" "$DATA"
+    chmod 0700 "$DATA"
+    local d
+    for d in "$VAR"/jobs/*/; do
+        [ -d "$d" ] || continue
+        case "$(cat "$d/state" 2>/dev/null)" in
+            queued|running) ;;
+            *) rm -rf -- "$d" ;;
+        esac
+    done
+    rm -rf -- "$VAR/uploads"
+    echo "data $DATA"
 }
 
 # El panel (no root) tiene que poder leer lo que se escribe: mismo dueño que la carpeta var.
@@ -71,6 +96,18 @@ heartbeat() {  # mientras viva el proceso $2: «alive» y el progreso, cada 10 s
     done
 }
 
+pmm_dir() {  # la carpeta de registro de Plesk de este trabajo (backup-<fecha> o restore-<fecha>)
+    local d="$1" kind p log newest=""
+    kind=$(cat "$d/kind" 2>/dev/null)
+    for p in $PMM_LOGS; do
+        for log in "$p/$kind"-*; do
+            [ -d "$log" ] && [ "$log" -nt "$d/started" ] || continue
+            [ -z "$newest" ] || [ "$log" -nt "$newest" ] && newest="$log"
+        done
+    done
+    echo "$newest"
+}
+
 progress() {
     local d="$1" kind dirs=() p total newest log
     kind=$(cat "$d/kind" 2>/dev/null)
@@ -81,17 +118,17 @@ progress() {
     total=$(find ${dirs[@]+"${dirs[@]}"} "$d" -xdev -type f -newer "$d/started" -printf '%s\n' 2>/dev/null \
             | awk '{s += $1} END {printf "%.0f", s}')
     put "$d" progress "${total:-0}"
-    newest=""
-    for p in $PMM_LOGS; do
-        for log in "$p/$kind"-*; do
-            [ -d "$log" ] && [ "$log" -nt "$d/started" ] || continue
-            [ -z "$newest" ] || [ "$log" -nt "$newest" ] && newest="$log"
-        done
-    done
+    newest=$(pmm_dir "$d")
     [ -n "$newest" ] || return 0
-    log=$(ls -t "$newest"/*.log 2>/dev/null | head -n 1)
-    [ -n "$log" ] || return 0
-    tail -n 40 "$log" | tr -d '\r' | grep -v '^[[:space:]]*$' | cut -c1-300 > "$d/activity.tmp"
+    # el registro con texto más reciente; las líneas JSON son trazas internas de PMM (cada orden que
+    # lanza, como «sw-tar --ignore-failed-read»), no lo que está haciendo ni errores
+    local lines=""
+    for log in $(ls -t "$newest"/*.log 2>/dev/null); do
+        lines=$(tr -d '\r' < "$log" | text_lines | tail -n 40 | cut -c1-300)
+        [ -n "$lines" ] && break
+    done
+    [ -n "$lines" ] || return 0
+    printf '%s\n' "$lines" > "$d/activity.tmp"
     chown "$(owner)" "$d/activity.tmp" 2>/dev/null
     chmod 0640 "$d/activity.tmp"
     mv -f "$d/activity.tmp" "$d/activity"
@@ -135,18 +172,36 @@ finish() {  # finish <dir> <estado> [error]
 }
 
 ERRORS='error|fail|unable|cannot|can.t|denied|not enough|no space|timed? ?out|refused|abort'
-GENERIC='failed with errors|completed with (errors|warnings)|exit [0-9]'
+GENERIC='failed with errors|completed with (errors|warnings)|exit [0-9]|ignore-failed-read'
+
+text_lines() {  # sin líneas en blanco ni trazas JSON de PMM
+    grep -v '^[[:space:]]*$' | grep -v '^[[:space:]]*{'
+}
 
 last_error() {  # los últimos errores con sentido: del registro de Plesk y de la salida de su herramienta
-    { cat "$1/activity" 2>/dev/null; cat "$1/log" 2>/dev/null; } | tr -d '\r' \
+    { cat "$1/activity" 2>/dev/null; cat "$1/log" 2>/dev/null; } | tr -d '\r' | text_lines \
         | grep -iE "$ERRORS" | grep -viE "$GENERIC" | grep -v 'DEV Backup Studio' \
         | tail -n 3 | cut -c1-300 | paste -sd '|' - | sed 's/|/ · /g'
 }
 
-summary_error() {  # last_error, o la línea genérica de Plesk si no hay nada mejor
+# errores que dejan la copia inservible aunque exista el archivo (cortado al quedarse sin espacio, etc.)
+FATAL='No space left on device|ExportError|does not match the expected|Repository error|Failed to write volume'
+
+fatal() {  # la última línea con uno de esos errores, en todo el registro de Plesk y en el nuestro
+    local p
+    p=$(pmm_dir "$1")
+    local all
+    all=$({ cat "$1/log"; [ -n "$p" ] && cat "$p"/*.log; } 2>/dev/null | tr -d '\r' | text_lines | grep -iE "$FATAL")
+    # quedarse sin espacio es la causa; lo que viene después (ExportError…) es la consecuencia
+    { printf '%s\n' "$all" | grep -i 'No space left on device' || printf '%s\n' "$all"; } | grep -v '^$' \
+        | tail -n 1 | cut -c1-300
+}
+
+summary_error() {  # el error fatal, o los últimos errores con sentido, o la línea genérica de Plesk
     local e
-    e=$(last_error "$1")
-    [ -n "$e" ] || e=$(tr -d '\r' < "$1/log" | grep -iE "$ERRORS" | tail -n 1 | cut -c1-300)
+    e=$(fatal "$1")
+    [ -n "$e" ] || e=$(last_error "$1")
+    [ -n "$e" ] || e=$(tr -d '\r' < "$1/log" | text_lines | grep -iE "$ERRORS" | tail -n 1 | cut -c1-300)
     echo "$e"
 }
 
@@ -181,8 +236,21 @@ run_backup() {
         return
     fi
     if [ "$code" -ne 0 ]; then
-        # Plesk terminó «con errores» pero hizo la copia (p. ej. un buzón o una base de datos que no pudo
-        # leer): como en su Gestor de copias, se guarda, avisando de lo que falló
+        # Plesk terminó «con errores» pero hizo la copia. Si fue por algo concreto (un buzón o una base de
+        # datos que no pudo leer), se guarda con avisos, como en su Gestor de copias. Pero si se quedó sin
+        # espacio o falló al exportar, el archivo está cortado: eso es un fallo. Y solo se da por buena
+        # si tar puede leerla entera.
+        local why
+        why=$(fatal "$d")
+        if [ -z "$why" ]; then
+            log "$d" "pleskbackup reported errors but wrote the backup: checking it with tar…"
+            tar -tf "$out" > /dev/null 2>&1 || why="the backup file is incomplete or damaged (tar cannot read it)"
+        fi
+        if [ -n "$why" ]; then
+            rm -f -- "$out"
+            finish "$d" failed "$why (exit $code)"
+            return
+        fi
         put "$d" warning "$(summary_error "$d") (exit $code)"
         log "$d" "pleskbackup reported errors but wrote the backup: kept with warnings"
     fi
@@ -274,5 +342,7 @@ case "${1:-}" in
     run-restore) run_restore "${2:-}" ;;
     cancel) cancel "${2:-}" ;;
     check) check ;;
+    init) init ;;
+    purge) rm -rf -- "$DATA"; echo "purged" ;;
     *) die "usage: devbackup start-backup|start-restore|cancel <id> | check" ;;
 esac

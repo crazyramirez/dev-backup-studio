@@ -793,7 +793,6 @@
   "La extensión de Plesk es de una versión antigua: actualízala en Extensiones → Mis extensiones.": "Plesk 拡張機能が古いバージョンです。拡張機能 → マイ拡張機能で更新してください。",
   "Plesk no pudo terminar: {detail}": "Plesk が完了できませんでした：{detail}",
   "No cabe en el disco de copia: faltan {size}.": "バックアップディスクに入りません：あと {size} 必要です。",
-  "No hay sitio en el servidor Plesk para recibir la copia: faltan {size}.": "Plesk サーバーにバックアップを受け取る空き容量がありません：あと {size} 必要です。",
   "Ya hay una copia o restauración en marcha en ese servidor. Espera a que termine.": "そのサーバーではすでにバックアップか復元が実行中です。終わるまでお待ちください。",
   "El Gestor de copias de Plesk no admite una copia hecha en otro servidor. Elige «Restaurar todo el servidor», o súbela a mano en Plesk marcando «Subir archivos de copia sin firma válida».": "Plesk のバックアップマネージャーは、別のサーバーで作成したバックアップを受け付けません。「サーバー全体を復元」を選ぶか、Plesk で「有効な署名のないバックアップファイルをアップロード」にチェックを入れて手動でアップロードしてください。",
   "Lo descargado no coincide con el original (SHA-256 distinto). No se ha guardado nada; vuelve a intentarlo.": "ダウンロードしたファイルが元のファイルと一致しません（SHA-256 が異なります）。何も保存されていません。もう一度お試しください。",
@@ -956,6 +955,8 @@
   "Lo que contó Plesk": "Plesk からの報告",
   "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "完全なログはサーバーの /var/log/plesk/PMM/（この日付の backup-… または restore-… フォルダー）と、拡張機能のページにあります。",
   "Registro de Plesk (PMM)": "Plesk のログ（PMM）",
-  "Salida de la herramienta de Plesk": "Plesk ツールの出力"
+  "Salida de la herramienta de Plesk": "Plesk ツールの出力",
+  "No hay sitio suficiente en el servidor Plesk: faltan {size}. Plesk necesita espacio para preparar la copia y para su archivo, más o menos el doble de lo que ocupa.": "Plesk サーバーの空き容量が足りません：あと {size} 必要です。Plesk はバックアップの準備とそのファイルのために、バックアップのおよそ 2 倍の容量を使います。",
+  "El servidor Plesk se quedó sin espacio en disco mientras preparaba la copia. Plesk necesita espacio para la copia y para su archivo, más o menos el doble de lo que ocupa: libera sitio en el servidor y vuelve a intentarlo.": "バックアップの準備中に Plesk サーバーのディスク容量がなくなりました。Plesk はバックアップとそのファイルのために、バックアップのおよそ 2 倍の容量を使います。サーバーの空きを増やしてから、もう一度お試しください。"
  }
 }

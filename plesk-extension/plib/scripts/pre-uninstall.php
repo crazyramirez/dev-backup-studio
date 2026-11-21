@@ -6,3 +6,7 @@ foreach (Modules_DevBackupStudio_Jobs::all() as $id) {
     Modules_DevBackupStudio_Jobs::remove($id);
 }
 Modules_DevBackupStudio_Jobs::rmtree(Modules_DevBackupStudio_Jobs::uploadsDir());
+try {
+    pm_ApiCli::callSbin('devbackup', ['purge'], pm_ApiCli::RESULT_FULL);
+} catch (Exception $e) {
+}

@@ -793,7 +793,6 @@
   "La extensión de Plesk es de una versión antigua: actualízala en Extensiones → Mis extensiones.": "Plesk 扩展版本过旧：请在“扩展 → 我的扩展”中更新。",
   "Plesk no pudo terminar: {detail}": "Plesk 未能完成：{detail}",
   "No cabe en el disco de copia: faltan {size}.": "备份磁盘空间不足：还差 {size}。",
-  "No hay sitio en el servidor Plesk para recibir la copia: faltan {size}.": "Plesk 服务器上没有足够空间接收备份：还差 {size}。",
   "Ya hay una copia o restauración en marcha en ese servidor. Espera a que termine.": "该服务器上已有备份或恢复正在进行。请等待其完成。",
   "El Gestor de copias de Plesk no admite una copia hecha en otro servidor. Elige «Restaurar todo el servidor», o súbela a mano en Plesk marcando «Subir archivos de copia sin firma válida».": "Plesk 的备份管理器不接受在其他服务器上制作的备份。请选择“恢复整台服务器”，或在 Plesk 中手动上传并勾选“上传没有有效签名的备份文件”。",
   "Lo descargado no coincide con el original (SHA-256 distinto). No se ha guardado nada; vuelve a intentarlo.": "下载的文件与原件不一致（SHA-256 不同）。未保存任何内容，请重试。",
@@ -956,6 +955,8 @@
   "Lo que contó Plesk": "Plesk 的报告",
   "Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o restore-… de esta fecha), y en la página de la extensión.": "完整日志在服务器上的 /var/log/plesk/PMM/（此日期的 backup-… 或 restore-… 文件夹）中，也可在扩展页面查看。",
   "Registro de Plesk (PMM)": "Plesk 日志（PMM）",
-  "Salida de la herramienta de Plesk": "Plesk 工具的输出"
+  "Salida de la herramienta de Plesk": "Plesk 工具的输出",
+  "No hay sitio suficiente en el servidor Plesk: faltan {size}. Plesk necesita espacio para preparar la copia y para su archivo, más o menos el doble de lo que ocupa.": "Plesk 服务器空间不足：还差 {size}。Plesk 需要空间来准备备份并生成备份文件，大约是备份大小的两倍。",
+  "El servidor Plesk se quedó sin espacio en disco mientras preparaba la copia. Plesk necesita espacio para la copia y para su archivo, más o menos el doble de lo que ocupa: libera sitio en el servidor y vuelve a intentarlo.": "Plesk 服务器在准备备份时磁盘空间用完了。Plesk 需要空间存放备份及其文件，大约是备份大小的两倍：请在服务器上释放空间后重试。"
  }
 }

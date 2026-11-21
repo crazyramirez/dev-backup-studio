@@ -1,5 +1,20 @@
 # Novedades
 
+## 2.4.3
+
+- **Arreglado: la copia de Plesk se incluía a sí misma** (extensión 1.0.3). Plesk mete en sus copias
+  de servidor la carpeta de cada extensión, y la copia en curso se guardaba justo ahí: Plesk intentaba
+  empaquetarla dentro de sí misma hasta llenar el disco («No space left on device»). Ahora los
+  trabajos van a `/var/lib/dev-backup-studio`, fuera de lo que copia Plesk, y lo que dejaron las
+  versiones anteriores en la carpeta de la extensión se borra al actualizarla.
+- Una copia que Plesk deja cortada (sin espacio, exportación fallida) ya nunca se guarda como válida;
+  solo se guarda «con avisos de Plesk» si `tar` puede leerla entera.
+- **Servidor sin espacio**: el aviso lo dice claramente, y desde la segunda copia la app comprueba
+  antes de empezar que el servidor tiene libre el doble de la copia anterior (Plesk la prepara en su
+  repositorio y luego la exporta).
+- Las trazas internas de Plesk 18.0.8x (líneas JSON de su registro) ya no se enseñan como actividad ni
+  se confunden con errores.
+
 ## 2.4.2
 
 - **Se ve cómo avanza la copia de Plesk** (extensión 1.0.2). Mientras Plesk prepara la copia o

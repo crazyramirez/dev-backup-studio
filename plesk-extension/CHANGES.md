@@ -1,3 +1,11 @@
+# 1.0.3-1
+
+* Backups in progress, uploads and their logs now live in /var/lib/dev-backup-studio. Plesk includes
+  each extension's data folder in its server backups, so the backup being written was packed into
+  itself and could fill the disk ("No space left on device").
+* Plesk 18.0.8x writes JSON trace lines in its backup logs (every command it runs, such as
+  "sw-tar --ignore-failed-read"): they are no longer shown as activity or mistaken for errors.
+
 # 1.0.2-1
 
 * Live progress while Plesk backs up or restores: how much it has written so far and the last lines

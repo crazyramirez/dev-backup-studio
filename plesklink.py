@@ -57,6 +57,7 @@ STAMP_FMT = "%Y-%m-%d %H%M%S"
 UPLOAD_CHUNK = 8 * 1024 * 1024     # muy por debajo de los límites de PHP y nginx del panel
 READ_CHUNK = 1024 * 1024
 SPACE_RESERVE = 256 * 1024 * 1024  # lo que se deja libre de más en el disco de copia
+SERVER_RESERVE = 2 * 1024 ** 3     # y en el servidor, además del doble de la copia anterior
 POLL_S = 2.0
 RETRIES = 6                        # cortes de red seguidos antes de dar la descarga por fallida
 RESTORE_DOWN_S = 45 * 60           # mientras se restaura, el panel puede no responder un buen rato
@@ -72,6 +73,7 @@ class PleskError(Exception):
     """Error para enseñar a la persona; quien lo muestra traduce «kind».
 
     kind: code | unreachable | cert | auth | noext | old | busy | running | server | space | serverspace |
+          serverfull |
           signature | verify | missing | cancelled
     """
 
@@ -784,7 +786,10 @@ class Operation:
             if state in ("failed", "canceled", "cancelled"):
                 error = str(job.get("error") or self.message or state)
                 # pmm-ras rechaza en el Gestor de copias las copias hechas en otro servidor
-                raise PleskError("signature" if error.startswith("signature") else "server", error)
+                kind = "signature" if error.startswith("signature") else "server"
+                if "No space left on device" in error or "Failed to write volume" in error:
+                    kind = "serverfull"
+                raise PleskError(kind, error)
             self.stop.wait(POLL_S)
 
 
@@ -806,6 +811,12 @@ class BackupRun(Operation):
         info = self.client.info()
         apply_info(srv, info.get("server") or {})
         self._check_stop()
+        # Plesk prepara la copia en su repositorio y luego la exporta a un archivo: durante un rato
+        # necesita más o menos el doble de lo que ocupa. Con la copia anterior como medida, se avisa antes
+        free = int(info.get("free_bytes") or 0)
+        need = 2 * srv.last_size + SERVER_RESERVE
+        if srv.last_size and free and free < need and not srv.pending_job:
+            raise PleskError("serverspace", str(need - free))
         job = None
         if srv.pending_job:  # una copia anterior quedó en el servidor sin bajar entera
             try:
@@ -826,7 +837,7 @@ class BackupRun(Operation):
         try:
             job = self._wait_job(self.job_id)
         except PleskError as exc:
-            if exc.kind in ("server", "cancelled", "missing"):
+            if exc.kind not in ("unreachable", "auth", "cert"):   # sin red o sin llave: se retoma después
                 # sin copia que bajar: la próxima vez se empieza de cero. Si Plesk falló, el trabajo se
                 # queda en el servidor con su registro (la extensión lo enseña y lo borra a los 3 días)
                 if exc.kind == "cancelled":
