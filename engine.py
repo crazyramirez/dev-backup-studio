@@ -75,9 +75,10 @@ FAT_FAMILY = {"FAT", "FAT32", "EXFAT", "MSDOS", "VFAT"}
 STAMP_FMT = "%Y-%m-%d %H%M%S"
 ROOT_SKIP = {META_DIR, "system volume information", "$recycle.bin", ".spotlight-v100", ".fseventsd",
              ".trashes", ".temporaryitems", ".documentrevisions-v100"}
-# Copias de servidores Plesk (plesklink.PLESK_DIR): viven en la raíz del disco de copia. Si el destino
-# es la propia raíz, la sincronización no las toca nunca (ni las aparta a versiones ni copia encima).
-PLESK_DIR = "plesk"
+# Copias de Google Drive (gdrive.ROOT_DIR) y las de Plesk que hicieron las versiones 2.4: viven en la
+# raíz del disco de copia. Si el destino es la propia raíz, la sincronización no las toca nunca (ni
+# las aparta a versiones ni copia encima).
+RESERVED_ROOT = {"plesk", "google drive"}
 INDEX_SCHEMA = "2"
 SCRUB_THREADS = 4
 # Protección contra borrados masivos (modo espejo): antes de apartar a versiones mucho de golpe,
@@ -1297,8 +1298,8 @@ class BackupJob:
                         if not rel and name.lower() in ROOT_SKIP:
                             # papelera, puntos de restauración, índices de Spotlight…: no son datos tuyos
                             self.pruned.append((child, _("carpeta del sistema")))
-                        elif not rel and self.dst_is_root and name.lower() == PLESK_DIR:
-                            self.pruned.append((child, _("reservada para las copias de Plesk")))
+                        elif not rel and self.dst_is_root and name.lower() in RESERVED_ROOT:
+                            self.pruned.append((child, _("reservada para las copias de Plesk y Google Drive")))
                         elif rule:
                             s.excluded_rule += 1
                             self.pruned.append((child, _("regla «{rule}»").format(rule=rule)))
@@ -1406,7 +1407,7 @@ class BackupJob:
             return
         for dname in ddirs.values():
             child = os.path.join(rel, dname) if rel else dname
-            if not rel and (dname.lower() in ROOT_SKIP or (self.dst_is_root and dname.lower() == PLESK_DIR)):
+            if not rel and (dname.lower() in ROOT_SKIP or (self.dst_is_root and dname.lower() in RESERVED_ROOT)):
                 continue
             if match_rule(dname, self.patterns) or norm_rel(child) in self.excluded:
                 continue  # lo excluido no se toca en ningún lado

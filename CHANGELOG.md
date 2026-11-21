@@ -1,5 +1,25 @@
 # Novedades
 
+## 2.5.0
+
+- **Copia de Google Drive, sin la app de Google.** Nueva pestaña *Google Drive*: conecta tu cuenta de
+  Google (de Gmail o de empresa, una o varias) con el navegador y un permiso de solo lectura, y la app
+  copia tu Drive en el disco de copia.
+  - Eliges qué copiar en un árbol con casillas: *Mi unidad*, cada *unidad compartida* y *Compartido
+    conmigo*, hasta la última carpeta o archivo, y lo puedes cambiar cuando quieras.
+  - Solo se descarga lo nuevo o cambiado, comprobado con el MD5 de Google; si se corta, sigue donde
+    iba. Los Documentos, Hojas y Presentaciones de Google se guardan como `.docx`, `.xlsx` y `.pptx`.
+  - Va a `GOOGLE DRIVE/<cuenta>/` en la raíz del disco, con el icono de Drive. Lo borrado o cambiado
+    en Drive se aparta a versiones, como en la sincronización, y un borrado masivo pide confirmación.
+  - Copia a mano o automática cada día o cada semana.
+  - La app no trae ID de cliente de Google: cada persona crea el suyo en Google Cloud (gratis, una
+    vez, guía en el README) y lo pone en *Ajustes → Google Drive*.
+- **Se quita la copia de servidores Plesk** (2.4.0–2.4.3). Para copiar un servidor Plesk, lo más
+  práctico es que Plesk haga sus copias en Google Drive y copiarlas desde aquí. Las copias que ya
+  hiciste siguen en la carpeta `PLESK` del disco y la sincronización no la toca. Desinstala la
+  extensión *DEV Backup Studio* de tu Plesk (*Extensiones → Mis extensiones*): al quitarla borra su
+  carpeta de trabajo, `/var/lib/dev-backup-studio`.
+
 ## 2.4.3
 
 - **Arreglado: la copia de Plesk se incluía a sí misma** (extensión 1.0.3). Plesk mete en sus copias

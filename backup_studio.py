@@ -38,11 +38,11 @@ from PyQt6.QtGui import (QBrush, QColor, QConicalGradient, QDesktopServices, QFo
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox,
-                             QApplication, QButtonGroup, QCheckBox, QComboBox,
+                             QApplication, QButtonGroup, QComboBox,
                              QDialog, QFileDialog, QFrame, QGraphicsBlurEffect, QGraphicsOpacityEffect,
                              QGraphicsPixmapItem, QGraphicsScene, QGridLayout, QHBoxLayout, QHeaderView,
                              QLabel, QLayout, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMenu,
-                             QMessageBox, QRadioButton, QStyle, QStyledItemDelegate,
+                             QMessageBox, QStyle, QStyledItemDelegate,
                              QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
                              QSpinBox, QStackedWidget, QSystemTrayIcon, QTableView, QTableWidget,
                              QTableWidgetItem, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
@@ -50,16 +50,17 @@ from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QAbstractScroll
 
 import cloudlink
 import engine
+import gdrive
 import i18n
 import keepawake
-import plesklink
 import reminders
 import updater
+import vault
 import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.4.3"
+APP_VERSION = "2.5.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -106,7 +107,7 @@ DEFAULT_RULES = {"node_modules"}
 FILE_COST = 1024 * 1024
 SIDEBAR_W = 428
 TILE_MIN = 146  # ancho mínimo de una casilla de datos (Progreso, resumen)
-DEFAULT_FOLDED = ["modo", "integridad", "energia", "idioma", "actualizaciones"]  # tarjetas plegadas al empezar
+DEFAULT_FOLDED = ["modo", "integridad", "energia", "idioma", "actualizaciones", "gdrive"]  # tarjetas plegadas al empezar
 DEFAULT_THREADS = 16
 
 C = {
@@ -1698,7 +1699,7 @@ PILL = {
     "cancelled": (_("Cancelado"), C["warn"]), "failed": (_("Error"), C["err"]),
 }
 RUNNING = ("scanning", "copying", "paused")
-PAGE_TREE, PAGE_CHANGES, PAGE_PROGRESS, PAGE_ISSUES, PAGE_RECOVER, PAGE_PLESK = range(6)
+PAGE_TREE, PAGE_CHANGES, PAGE_PROGRESS, PAGE_ISSUES, PAGE_RECOVER, PAGE_GDRIVE = range(6)
 
 # Las versiones ocupan sitio en el disco de copia: se guardan un plazo y luego se quitan solas
 # (y antes, si falta espacio para copiar). 30 días por defecto; 60 como mucho.
@@ -3419,89 +3420,307 @@ class PairDialog(QDialog):
         self.accept()
 
 
-# ── servidores Plesk ─────────────────────────────────────────────────────────
+# ── Google Drive ─────────────────────────────────────────────────────────────
 
-PLESK_BLUE = "#52BBE6"
-PLESK_EXT_URL = f"https://github.com/{updater.REPO}/releases/latest"
-PLESK_SCHEDULES = {"manual": N_("Solo a mano"), "daily": N_("Cada día"), "weekly": N_("Cada semana")}
+GDRIVE_SCHEDULES = {"manual": N_("Solo a mano"), "daily": N_("Cada día"), "weekly": N_("Cada semana")}
+GDRIVE_GUIDE_URL = f"https://github.com/{updater.REPO}#el-id-de-cliente-de-google"
+# las tres partes de Drive (gdrive.MY_DRIVE…): en el disco van en español; aquí, para traducirlas
+GDRIVE_PARTS = (N_("Mi unidad"), N_("Unidades compartidas"), N_("Compartido conmigo"))
 
 
-def plesk_pixmap(px: int, dpr: float = 2.0) -> QPixmap:
-    """El icono de Plesk (assets/plesk/plesk.png); si faltara, un cuadro azul con su «P»."""
+def gdrive_pixmap(px: int, dpr: float = 2.0) -> QPixmap:
+    """El icono de Google Drive (assets/gdrive/gdrive.png)."""
     pm = QPixmap(int(px * dpr), int(px * dpr))
     pm.setDevicePixelRatio(dpr)
     pm.fill(Qt.GlobalColor.transparent)
+    src = QPixmap(os.path.join(gdrive.ASSETS, "gdrive.png"))
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-    src = QPixmap(os.path.join(plesklink.ASSETS, "plesk.png"))
     if not src.isNull():
         p.drawPixmap(QRectF(0, 0, px, px), src, QRectF(src.rect()))
     else:
-        p.setBrush(QColor(PLESK_BLUE))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawRoundedRect(QRectF(0, 0, px, px), px * 0.22, px * 0.22)
-        p.setPen(QColor("#FFFFFF"))
-        p.setFont(_font(int(px * 0.62), QFont.Weight.Bold))
-        p.drawText(QRectF(0, 0, px, px), Qt.AlignmentFlag.AlignCenter, "P")
+        _render_svg(icon_svg(G.GLOBE, C["accent2"]), p, QRectF(0, 0, px, px))
     p.end()
     return pm
 
 
-def plesk_icon(px: int = 16) -> QIcon:
+def gdrive_icon(px: int = 16) -> QIcon:
     icon = QIcon()
-    icon.addPixmap(plesk_pixmap(px), QIcon.Mode.Normal, QIcon.State.Off)
-    icon.addPixmap(plesk_pixmap(px), QIcon.Mode.Normal, QIcon.State.On)
+    for state in (QIcon.State.Off, QIcon.State.On):
+        icon.addPixmap(gdrive_pixmap(px), QIcon.Mode.Normal, state)
     return icon
 
 
-def plesk_error_text(exc: plesklink.PleskError | None) -> str:
+def drive_error_text(exc: gdrive.DriveError | None) -> str:
     if exc is None:
         return ""
     d = exc.detail
-    try:  # solo «space» y «serverspace» traen un número; los demás, texto
+    try:
         size = fmt_bytes(int(float(d)))
     except (TypeError, ValueError):
         size = "—"
     return {
-        "code": _("El código no es correcto o ha caducado. Pide uno nuevo en Plesk y vuelve a probar."),
-        "unreachable": _("No se puede llegar al servidor ({detail}). Comprueba la dirección y que el puerto del panel "
-                         "(8443) está abierto.").format(detail=d or "—"),
-        "cert": _("El certificado del servidor no es el que se aceptó al conectarlo. Si lo has cambiado tú, vuelve a "
-                  "conectar el servidor para aceptar el nuevo."),
-        "auth": _("El servidor ya no reconoce este ordenador (se desconectó desde Plesk). Vuelve a conectarlo con un "
-                  "código nuevo."),
-        "noext": _("La extensión DEV Backup Studio no está instalada en ese Plesk, o está desactivada."),
-        "old": _("La extensión de Plesk es de una versión antigua: actualízala en Extensiones → Mis extensiones."),
-        "busy": _("Demasiados intentos. Espera unos minutos y vuelve a probar."),
-        "server": _("Plesk no pudo terminar: {detail}").format(detail=d or "—"),
+        "noclient": _("Falta tu ID de cliente de Google. Escríbelo en Ajustes → Google Drive o al conectar la "
+                      "cuenta (cómo conseguirlo: enlace de la guía)."),
+        "auth": _("Google ya no acepta la conexión de esta cuenta (se retiró el permiso o caducó). Vuelve a "
+                  "conectarla."),
+        "denied": _("Google no dejó leerlo: {detail}").format(detail=d or "—"),
+        "unreachable": _("No se puede llegar a Google ({detail}). Comprueba la conexión a internet.").format(
+            detail=d or "—"),
+        "quota": _("Google está limitando las peticiones ({detail}). Vuelve a intentarlo dentro de un rato.").format(
+            detail=d or "—"),
+        "server": _("Google no pudo terminar: {detail}").format(detail=d or "—"),
         "space": _("No cabe en el disco de copia: faltan {size}.").format(size=size),
-        "serverspace": _("No hay sitio suficiente en el servidor Plesk: faltan {size}. Plesk necesita espacio para "
-                         "preparar la copia y para su archivo, más o menos el doble de lo que ocupa.").format(size=size),
-        "serverfull": _("El servidor Plesk se quedó sin espacio en disco mientras preparaba la copia. Plesk necesita "
-                        "espacio para la copia y para su archivo, más o menos el doble de lo que ocupa: libera sitio "
-                        "en el servidor y vuelve a intentarlo."),
-        "running": _("Ya hay una copia o restauración en marcha en ese servidor. Espera a que termine."),
-        "signature": _("El Gestor de copias de Plesk no admite una copia hecha en otro servidor. Elige «Restaurar todo "
-                       "el servidor», o súbela a mano en Plesk marcando «Subir archivos de copia sin firma válida»."),
-        "verify": _("Lo descargado no coincide con el original (SHA-256 distinto). No se ha guardado nada; vuelve a "
-                    "intentarlo."),
-        "missing": _("Esa copia ya no está en el servidor."),
         "cancelled": _("Detenido."),
     }.get(exc.kind, d or exc.kind)
 
 
-class PleskPairDialog(QDialog):
-    """«Conectar un servidor Plesk»: dirección del panel + el código de 6 cifras que da la extensión."""
-    cert_checked = pyqtSignal(bool, str)      # ¿de una autoridad conocida?, huella
-    paired = pyqtSignal(object, str)          # plesklink.Server, token
-    failed = pyqtSignal(str, str)             # tipo de error, detalle
+GCLOUD = "https://console.cloud.google.com"
+GDRIVE_SCOPE_URL = "https://www.googleapis.com/auth/drive.readonly"
+# pasos para crear el ID de cliente propio, con la página de Google Cloud de cada uno
+GDRIVE_STEPS = [
+    (N_("Crea un proyecto en Google Cloud"),
+     N_("Gratis. Ponle el nombre que quieras (por ejemplo, «DEV Backup Studio»). Si tienes varios, comprueba "
+        "arriba en Google Cloud que es el elegido en los pasos siguientes."),
+     N_("Crear proyecto"), f"{GCLOUD}/projectcreate"),
+    (N_("Activa la API de Google Drive"),
+     N_("En la página que se abre, elige tu proyecto si lo pide y pulsa «Habilitar»."),
+     N_("Activar la API"), f"{GCLOUD}/flows/enableapi?apiid=drive.googleapis.com"),
+    (N_("Configura la pantalla de permiso"),
+     N_("Pulsa «Comenzar»: nombre de la app (por ejemplo, «DEV Backup Studio») y tu correo, público «Externo» y "
+        "acepta. Si solo vas a usar cuentas de tu Google Workspace, elige «Interno»."),
+     N_("Pantalla de permiso"), f"{GCLOUD}/auth/branding"),
+    (N_("Da permiso de lectura de Drive"),
+     N_("En «Acceso a los datos» → «Añadir o quitar permisos», pega este permiso y guarda:"),
+     N_("Acceso a los datos"), f"{GCLOUD}/auth/scopes"),
+    (N_("Publica la app"),
+     N_("En «Público», pulsa «Publicar la app» y confirma. Si se queda «En prueba», Google retira el permiso a los "
+        "7 días. No hace falta verificarla: es solo para ti."),
+     N_("Público"), f"{GCLOUD}/auth/audience"),
+    (N_("Crea el ID de cliente"),
+     N_("Pulsa «Crear cliente»: tipo de aplicación «App de escritorio», cualquier nombre, y «Crear». Copia el ID de "
+        "cliente y el secreto que aparecen (el secreto solo se enseña entero esa vez)."),
+     N_("Clientes"), f"{GCLOUD}/auth/clients"),
+]
 
-    def __init__(self, parent: QWidget, url: str = ""):
-        super().__init__(parent)
-        self.server: plesklink.Server | None = None
+
+class GDriveSetup(QWidget):
+    """Sin cuentas conectadas: la guía para crear el ID de cliente propio (con enlaces directos a cada
+    página de Google Cloud) y los campos para pegarlo; con el ID ya puesto, el botón de conectar."""
+
+    def __init__(self, page: "GDrivePage"):
+        super().__init__()
+        self.page = page
+        self._show_steps = False
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        outer.addWidget(scroll)
+        inner = QWidget()
+        scroll.setWidget(inner)
+        v = QVBoxLayout(inner)
+        v.setContentsMargins(8, 8, 8, 8)
+        v.setSpacing(14)
+
+        head = QHBoxLayout()
+        head.setSpacing(16)
+        logo = QLabel()
+        logo.setPixmap(gdrive_pixmap(48))
+        head.addWidget(logo, 0, Qt.AlignmentFlag.AlignTop)
+        col = QVBoxLayout()
+        col.setSpacing(4)
+        self.title = QLabel()
+        self.title.setObjectName("h1")
+        self.title.setWordWrap(True)
+        self.text = QLabel()
+        self.text.setObjectName("muted")
+        self.text.setWordWrap(True)
+        col.addWidget(self.title)
+        col.addWidget(self.text)
+        head.addLayout(col, 1)
+        v.addLayout(head)
+
+        # con el ID ya puesto: conectar
+        self.ready = QFrame()
+        rl = QHBoxLayout(self.ready)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(12)
+        b = QPushButton("  " + _("Conectar cuenta de Google…"))
+        b.setObjectName("primary")
+        b.setIcon(glyph_icon(G.ADD, "#FFFFFF", 14))
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.clicked.connect(page.connect_account)
+        rl.addWidget(b)
+        self.b_steps = QPushButton(_("Ver la guía o cambiar el ID de cliente"))
+        self.b_steps.setObjectName("link")
+        self.b_steps.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.b_steps.clicked.connect(self._toggle_steps)
+        rl.addWidget(self.b_steps)
+        rl.addStretch(1)
+        v.addWidget(self.ready)
+
+        # la guía
+        self.steps = QFrame()
+        self.steps.setObjectName("card")
+        sl = QVBoxLayout(self.steps)
+        sl.setContentsMargins(20, 18, 20, 18)
+        sl.setSpacing(16)
+        for i, (title, text, button, url) in enumerate(GDRIVE_STEPS, 1):
+            sl.addWidget(self._step(i, _(title), _(text), _(button), url, copy=GDRIVE_SCOPE_URL if i == 4 else ""))
+        # el último: pegar el ID aquí
+        last = QHBoxLayout()
+        last.setSpacing(14)
+        last.addWidget(self._badge(len(GDRIVE_STEPS) + 1), 0, Qt.AlignmentFlag.AlignTop)
+        lc = QVBoxLayout()
+        lc.setSpacing(6)
+        t = QLabel(_("Pega aquí tu ID de cliente y su secreto"))
+        t.setObjectName("rowTitle")
+        lc.addWidget(t)
+        self.client_id = QLineEdit()
+        self.client_id.setPlaceholderText(_("ID de cliente (…apps.googleusercontent.com)"))
+        self.client_secret = QLineEdit()
+        self.client_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self.client_secret.setPlaceholderText(_("Secreto del cliente"))
+        lc.addWidget(self.client_id)
+        lc.addWidget(self.client_secret)
+        row = QHBoxLayout()
+        self.saved = QLabel("")
+        self.saved.setObjectName("faint")
+        self.saved.setWordWrap(True)
+        row.addWidget(self.saved, 1)
+        self.b_save = QPushButton("  " + _("Guardar"))
+        self.b_save.setObjectName("primary")
+        self.b_save.setIcon(glyph_icon(G.CHECK, "#FFFFFF", 14))
+        self.b_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.b_save.clicked.connect(self._save)
+        row.addWidget(self.b_save)
+        lc.addLayout(row)
+        last.addLayout(lc, 1)
+        sl.addLayout(last)
+        guide = QLabel(html.escape(_("Se guarda solo en este ordenador; el secreto, cifrado. Lo mismo está en Ajustes → "
+                                     "Google Drive."))
+                       + f"  <a href='{GDRIVE_GUIDE_URL}' style='color:{C['accent2']}; text-decoration:none'>"
+                       + html.escape(_("Guía completa")) + "</a>")
+        guide.setObjectName("faint")
+        guide.setWordWrap(True)
+        guide.setOpenExternalLinks(True)
+        sl.addWidget(guide)
+        v.addWidget(self.steps)
+        v.addStretch(1)
+        for w in (self.client_id, self.client_secret):
+            w.textChanged.connect(self._update)
+        self.refresh()
+
+    @staticmethod
+    def _badge(n: int) -> QLabel:
+        b = QLabel(str(n))
+        b.setFixedSize(26, 26)
+        b.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        b.setStyleSheet(f"background:{rgba(C['accent'], 60)}; color:{C['text']}; border-radius:13px; font-weight:700;")
+        return b
+
+    def _step(self, n: int, title: str, text: str, button: str, url: str, copy: str = "") -> QWidget:
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(14)
+        h.addWidget(self._badge(n), 0, Qt.AlignmentFlag.AlignTop)
+        col = QVBoxLayout()
+        col.setSpacing(3)
+        t = QLabel(title)
+        t.setObjectName("rowTitle")
+        d = QLabel(text)
+        d.setObjectName("rowSub")
+        d.setWordWrap(True)
+        col.addWidget(t)
+        col.addWidget(d)
+        if copy:
+            cr = QHBoxLayout()
+            cr.setSpacing(8)
+            field = QLineEdit(copy)
+            field.setReadOnly(True)
+            field.setObjectName("path")
+            cr.addWidget(field, 1)
+            b = QPushButton()
+            b.setObjectName("icon")
+            b.setIcon(glyph_icon(G.COPY, C["text"], 14))
+            b.setFixedSize(38, 36)
+            b.setToolTip(_("Copiar"))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda: QApplication.clipboard().setText(copy))
+            cr.addWidget(b)
+            col.addLayout(cr)
+        h.addLayout(col, 1)
+        go = QPushButton("  " + button)
+        go.setIcon(glyph_icon(G.ARROW, C["text"], 13))
+        go.setToolTip(url)
+        go.setCursor(Qt.CursorShape.PointingHandCursor)
+        go.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
+        h.addWidget(go, 0, Qt.AlignmentFlag.AlignTop)
+        return w
+
+    def _toggle_steps(self):
+        self._show_steps = not self._show_steps
+        self.refresh()
+
+    def refresh(self):
+        win = self.page.win
+        own = str(win.settings.value("gdrive_client_id", "") or "")
+        for w in (self.client_id, self.client_secret):
+            w.blockSignals(True)
+        self.client_id.setText(own)
+        self.client_secret.setText(win.vault.get("gdrive/client_secret") if own else "")
+        for w in (self.client_id, self.client_secret):
+            w.blockSignals(False)
+        has_id = bool(self.page.client()[0])
+        if has_id:
+            self.title.setText(_("Conecta tu cuenta de Google"))
+            self.text.setText(_("Tu ID de cliente ya está puesto. Se abrirá el navegador: entra con tu cuenta de Google "
+                                "(de Gmail o de empresa) y da permiso de solo lectura. Luego eliges qué copiar."))
+        else:
+            self.title.setText(_("Prepara tu acceso a Google Drive"))
+            self.text.setText(_("Para leer tu Drive sin la app de Google, Google pide que cada persona cree su propio "
+                                "ID de cliente. Es gratis, se hace una sola vez y lleva unos minutos: sigue estos "
+                                "pasos (cada botón abre la página exacta de Google Cloud)."))
+        self.ready.setVisible(has_id)
+        self.steps.setVisible(not has_id or self._show_steps)
+        self.b_steps.setText(_("Ocultar la guía") if self._show_steps else _("Ver la guía o cambiar el ID de cliente"))
+        self._update()
+
+    def _update(self, *_a):
+        self.b_save.setEnabled(bool(self.client_id.text().strip() and self.client_secret.text().strip()))
+        self.saved.setText("")
+
+    def _save(self):
+        win = self.page.win
+        cid, secret = self.client_id.text().strip(), self.client_secret.text().strip()
+        if not cid.endswith(".apps.googleusercontent.com"):
+            self.saved.setText(_("Eso no parece un ID de cliente de Google: termina en «.apps.googleusercontent.com»."))
+            return
+        win.settings.setValue("gdrive_client_id", cid)
+        win.vault.set("gdrive/client_secret", secret)
+        win.settings.sync()
+        self.page.client_changed()
+        win._load_gdrive_client()
+        self._show_steps = False
+        self.refresh()
+        win._log(_("Google Drive: ID de cliente guardado"), C["ok"])
+
+
+class GDriveConnectDialog(QDialog):
+    """Conectar una cuenta de Google: se abre el navegador, se da permiso y Google vuelve a la app."""
+    connected = pyqtSignal(object, str)   # gdrive.Account, refresh token
+    failed = pyqtSignal(str, str)
+
+    def __init__(self, page: "GDrivePage"):
+        super().__init__(page.win)
+        self.page = page
+        self.account: gdrive.Account | None = None
         self.token = ""
-        self._url = ""
+        self._stop = threading.Event()
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(app_icon())
         self.setMinimumWidth(560)
@@ -3511,51 +3730,51 @@ class PleskPairDialog(QDialog):
         head = QHBoxLayout()
         head.setSpacing(12)
         logo = QLabel()
-        logo.setPixmap(plesk_pixmap(34))
+        logo.setPixmap(gdrive_pixmap(34))
         head.addWidget(logo)
-        title = QLabel(_("Conectar un servidor Plesk"))
+        title = QLabel(_("Conectar Google Drive"))
         title.setObjectName("h1")
         head.addWidget(title, 1)
         lay.addLayout(head)
-        steps = QLabel(
-            "<ol style='margin-left:-22px'>"
-            f"<li>{html.escape(_('En Plesk, abre Extensiones → Mis extensiones → Subir extensión y sube la extensión DEV Backup Studio.'))} "
-            f"<a href='{PLESK_EXT_URL}' style='color:{C['accent2']}; text-decoration:none'>"
-            f"{html.escape(_('Descargar la extensión'))}</a><br>"
-            f"<span style='color:{C['faint']}'>"
-            + html.escape(_("¿No ves «Subir extensión»? Plesk lo esconde: añade a su panel.ini (o con la extensión "
-                            "Panel.ini Editor) [ext-catalog] y extensionUpload = true."))
-            + "</span></li>"
-            f"<li>{html.escape(_('Ábrela y pulsa «Conectar un ordenador».'))}</li>"
-            f"<li>{html.escape(_('Escribe aquí la dirección del panel y el código que aparece.'))}</li></ol>")
-        steps.setObjectName("muted")
-        steps.setWordWrap(True)
-        steps.setOpenExternalLinks(True)
-        lay.addWidget(steps)
+        intro = QLabel(_("Se abrirá el navegador: entra con tu cuenta de Google (de Gmail o de empresa) y da permiso "
+                         "de solo lectura. La app no ve tu contraseña y nunca cambia nada en tu Drive."))
+        intro.setObjectName("muted")
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+        warn = QLabel(_("Si Google avisa de que la app no está verificada, pulsa «Configuración avanzada» → «Ir a DEV "
+                        "Backup Studio»: es tu propio ID de cliente, registrado por ti."))
+        warn.setObjectName("faint")
+        warn.setWordWrap(True)
+        lay.addWidget(warn)
 
-        lab = QLabel(_("Servidor"))
+        self.own = QFrame()
+        own = QVBoxLayout(self.own)
+        own.setContentsMargins(0, 0, 0, 0)
+        own.setSpacing(6)
+        link = html.escape(_("Cómo conseguirlo"))
+        lab = QLabel(html.escape(_("ID de cliente de Google (OAuth, tipo «App de escritorio»)")) +
+                     f"  <a href='{GDRIVE_GUIDE_URL}' style='color:{C['accent2']}; text-decoration:none'>{link}</a>")
         lab.setObjectName("faint")
-        lay.addWidget(lab)
-        self.url = QLineEdit(url)
-        self.url.setPlaceholderText(_("plesk.tudominio.com  (el puerto 8443 se pone solo)"))
-        lay.addWidget(self.url)
-        lab = QLabel(_("Código"))
-        lab.setObjectName("faint")
-        lay.addWidget(lab)
-        self.code = QLineEdit()
-        self.code.setInputMask("999 999;_")
-        self.code.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        font = self.code.font()
-        font.setPointSize(26)
-        font.setBold(True)
-        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 4)
-        self.code.setFont(font)
-        self.code.setMinimumHeight(64)
-        lay.addWidget(self.code)
+        lab.setOpenExternalLinks(True)
+        own.addWidget(lab)
+        self.client_id = QLineEdit(page.win.settings.value("gdrive_client_id", "") or "")
+        self.client_id.setPlaceholderText("123456789-abc….apps.googleusercontent.com")
+        own.addWidget(self.client_id)
+        self.client_secret = QLineEdit(page.secrets.get("gdrive/client_secret"))
+        self.client_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self.client_secret.setPlaceholderText(_("Secreto del cliente"))
+        own.addWidget(self.client_secret)
+        lay.addWidget(self.own)
+        if not self.client_id.text():
+            first = QLabel(_("Antes de conectar la primera cuenta, crea tu ID de cliente en Google Cloud (gratis, una "
+                             "sola vez) y escríbelo aquí. Se guarda en Ajustes → Google Drive."))
+            first.setObjectName("muted")
+            first.setWordWrap(True)
+            own.insertWidget(0, first)
+
         self.status = QLabel("")
         self.status.setObjectName("muted")
         self.status.setWordWrap(True)
-        self.status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.status)
         self.busy = thin_bar(4)
         self.busy.setRange(0, 0)
@@ -3564,9 +3783,9 @@ class PleskPairDialog(QDialog):
         buttons = QHBoxLayout()
         buttons.addStretch(1)
         self.b_cancel = QPushButton(_("Cancelar"))
-        self.b_go = QPushButton("  " + _("Conectar"))
+        self.b_go = QPushButton("  " + _("Conectar con Google"))
         self.b_go.setObjectName("primary")
-        self.b_go.setIcon(glyph_icon(G.CHECK, "#FFFFFF", 14))
+        self.b_go.setIcon(glyph_icon(G.GLOBE, "#FFFFFF", 14))
         self.b_go.setDefault(True)
         for b in (self.b_cancel, self.b_go):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -3574,223 +3793,104 @@ class PleskPairDialog(QDialog):
         lay.addLayout(buttons)
         self.b_cancel.clicked.connect(self.reject)
         self.b_go.clicked.connect(self._go)
-        self.code.textChanged.connect(self._update)
-        self.url.textChanged.connect(self._update)
-        self.cert_checked.connect(self._on_cert)
-        self.paired.connect(self._on_paired)
+        self.connected.connect(self._on_connected)
         self.failed.connect(self._on_failed)
-        self._update()
-        (self.code if url else self.url).setFocus()
 
     def showEvent(self, event):  # noqa: N802
         super().showEvent(event)
         set_dark_titlebar(self)
 
-    def _digits(self) -> str:
-        return "".join(c for c in self.code.text() if c.isdigit())
-
-    def _update(self, *_args):
-        ok = len(self._digits()) == 6 and bool(plesklink.normalize_url(self.url.text()))
-        self.b_go.setEnabled(ok and not self.busy.isVisible())
-
-    def _set_busy(self, on: bool, text: str = ""):
-        self.busy.setVisible(on)
-        self.url.setEnabled(not on)
-        self.code.setEnabled(not on)
-        if text:
-            self.status.setText(text)
-        self._update()
+    def reject(self):
+        self._stop.set()
+        super().reject()
 
     def _go(self):
-        self._url = plesklink.normalize_url(self.url.text())
-        self._set_busy(True, _("Conectando con {host}…").format(host=plesklink.url_host(self._url)))
-        url = self._url
+        self.page.win.settings.setValue("gdrive_client_id", self.client_id.text().strip())
+        self.page.secrets.set("gdrive/client_secret", self.client_secret.text().strip()
+                              if self.client_id.text().strip() else "")
+        self.page.client_changed()
+        self.page.win._load_gdrive_client()
+        cid, csecret = self.page.client()
+        if not cid:
+            self._on_failed("noclient", "")
+            return
+        page_ok = ("<html><body style='font-family:sans-serif;text-align:center;margin-top:80px'><h2>"
+                   + html.escape(_("Listo")) + "</h2><p>" + html.escape(_("Ya puedes volver a DEV Backup Studio."))
+                   + "</p></body></html>")
+        page_fail = ("<html><body style='font-family:sans-serif;text-align:center;margin-top:80px'><h2>"
+                     + html.escape(_("No se ha conectado")) + "</h2></body></html>")
+        try:
+            auth = gdrive.Authorizer(cid, csecret, page_ok, page_fail)
+            url = auth.start()
+        except (gdrive.DriveError, OSError) as exc:
+            self._on_failed(getattr(exc, "kind", "server"), str(exc))
+            return
+        self._stop.clear()
+        QDesktopServices.openUrl(QUrl(url))
+        self.busy.show()
+        self.b_go.setEnabled(False)
+        self.status.setText(_("Esperando a que des permiso en el navegador…"))
 
         def work():
             try:
-                trusted, fp = plesklink.check_certificate(url)
-                self.cert_checked.emit(trusted, fp)
-            except plesklink.PleskError as exc:
+                tokens = auth.wait(stop=self._stop)
+                drive = gdrive.Drive(tokens["refresh_token"], cid, csecret)
+                user = drive.about().get("user") or {}
+                acc = gdrive.Account(id=str(user.get("permissionId") or user.get("emailAddress")),
+                                     email=str(user.get("emailAddress") or ""), name=str(user.get("displayName") or ""))
+                self.connected.emit(acc, tokens["refresh_token"])
+            except gdrive.DriveError as exc:
                 self.failed.emit(exc.kind, exc.detail)
-
-        threading.Thread(target=work, name="plesk-certificado", daemon=True).start()
-
-    def _on_cert(self, trusted: bool, fp: str):
-        pin = ""
-        if not trusted:
-            if not fp:
-                self._on_failed("unreachable", _("sin certificado"))
-                return
-            box = QMessageBox(QMessageBox.Icon.Question, APP_NAME, "", parent=self)
-            box.setText(_("El certificado de {host} no es de una autoridad reconocida (lo normal con el certificado "
-                          "propio de Plesk).").format(host=plesklink.url_host(self._url)))
-            box.setInformativeText(_("Comprueba que esta huella es la misma que enseña la extensión junto al código:")
-                                   + f"\n\n{plesklink.fmt_fingerprint(fp)}\n\n" + _("¿Confiar en este servidor?"))
-            box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            box.setDefaultButton(QMessageBox.StandardButton.No)
-            if box.exec() != QMessageBox.StandardButton.Yes:
-                self._set_busy(False, _("No se ha conectado: el certificado no se aceptó."))
-                return
-            pin = fp
-        url, code, device = self._url, self._digits(), cloudlink.device_name()
-
-        def work():
-            try:
-                srv, token = plesklink.pair(url, code, device, pin)
-                self.paired.emit(srv, token)
-            except plesklink.PleskError as exc:
-                self.failed.emit(exc.kind, exc.detail)
-            except Exception as exc:  # noqa: BLE001 - se enseña y se puede repetir
+            except Exception as exc:  # noqa: BLE001
                 self.failed.emit("server", str(exc))
 
-        threading.Thread(target=work, name="plesk-emparejar", daemon=True).start()
+        threading.Thread(target=work, name="google-conectar", daemon=True).start()
 
     def _on_failed(self, kind: str, detail: str):
-        self._set_busy(False, plesk_error_text(plesklink.PleskError(kind, detail)))
-        if kind == "code":
-            self.code.clear()
-            self.code.setFocus()
+        self.busy.hide()
+        self.b_go.setEnabled(True)
+        if kind == "cancelled" and self._stop.is_set():
+            return
+        text = drive_error_text(gdrive.DriveError(kind, detail))
+        if kind == "denied":
+            text = _("No se dio permiso en Google. Vuelve a intentarlo cuando quieras.")
+        self.status.setText(text)
 
-    def _on_paired(self, srv: plesklink.Server, token: str):
-        self.server, self.token = srv, token
+    def _on_connected(self, acc: gdrive.Account, token: str):
+        self.account, self.token = acc, token
         self.accept()
 
 
-class PleskRestoreDialog(QDialog):
-    """Elegir adónde y cómo restaurar una copia de Plesk guardada en el disco."""
+class GDrivePage(QWidget):
+    """«Google Drive»: copia de cuentas de Google Drive al disco de copia, sin la app de Google.
 
-    def __init__(self, parent: QWidget, backup: plesklink.StoredBackup, servers: list[plesklink.Server],
-                 default: plesklink.Server | None, password: str):
-        super().__init__(parent)
-        self.setWindowTitle(APP_NAME)
-        self.setWindowIcon(app_icon())
-        self.setMinimumWidth(600)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(26, 24, 26, 22)
-        lay.setSpacing(12)
-        head = QHBoxLayout()
-        head.setSpacing(12)
-        logo = QLabel()
-        logo.setPixmap(plesk_pixmap(34))
-        head.addWidget(logo)
-        col = QVBoxLayout()
-        col.setSpacing(2)
-        title = QLabel(_("Restaurar una copia de Plesk"))
-        title.setObjectName("h1")
-        origin = backup.info.get("server") or os.path.basename(os.path.dirname(backup.path))
-        sub = QLabel(_("{server}  ·  {date}  ·  {size}").format(server=origin, date=short_stamp(backup.when),
-                                                                size=fmt_bytes(backup.size)))
-        sub.setObjectName("muted")
-        col.addWidget(title)
-        col.addWidget(sub)
-        head.addLayout(col, 1)
-        lay.addLayout(head)
-
-        lab = QLabel(_("Servidor de destino"))
-        lab.setObjectName("fieldLabel")
-        lay.addWidget(lab)
-        self.target = QComboBox()
-        for s in servers:
-            self.target.addItem(plesk_icon(16), f"{s.label}  ({plesklink.url_host(s.url)})", s.id)
-        if default is not None:
-            self.target.setCurrentIndex(max(0, self.target.findData(default.id)))
-        lay.addWidget(self.target)
-
-        lab = QLabel(_("Qué hacer"))
-        lab.setObjectName("fieldLabel")
-        lay.addWidget(lab)
-        self.mode_import = QRadioButton(_("Subirla al Gestor de copias de seguridad de Plesk"))
-        hint_import = QLabel(_("No cambia nada en el servidor. Después, en Plesk (Herramientas y configuración → Gestor "
-                               "de copias de seguridad) eliges qué restaurar: todo, una suscripción, una base de "
-                               "datos…"))
-        self.mode_server = QRadioButton(_("Restaurar todo el servidor ahora"))
-        hint_server = QLabel(_("Con «pleskrestore», la restauración oficial de Plesk: ajustes del servidor, "
-                               "suscripciones, webs, bases de datos y correo. Lo que ya existe se sustituye por lo de "
-                               "la copia. El panel puede dejar de responder un rato mientras tanto."))
-        for w in (hint_import, hint_server):
-            w.setObjectName("faint")
-            w.setWordWrap(True)
-            w.setContentsMargins(28, 0, 0, 4)
-        lay.addWidget(self.mode_import)
-        lay.addWidget(hint_import)
-        lay.addWidget(self.mode_server)
-        lay.addWidget(hint_server)
-        self.mode_import.setChecked(True)
-        self.confirm = QCheckBox(_("Entiendo que se sustituirá lo que hay ahora en el servidor"))
-        self.confirm.setContentsMargins(28, 0, 0, 0)
-        lay.addWidget(self.confirm)
-
-        lab = QLabel(_("Contraseña de la copia"))
-        lab.setObjectName("fieldLabel")
-        lay.addWidget(lab)
-        self.password = QLineEdit(password)
-        self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password.setPlaceholderText(_("La que se usó al hacerla (para recuperar las contraseñas guardadas)"))
-        lay.addWidget(self.password)
-        if backup.info.get("password") is False:
-            self.password.setPlaceholderText(_("Esta copia se hizo sin contraseña"))
-
-        buttons = QHBoxLayout()
-        buttons.addStretch(1)
-        b_cancel = QPushButton(_("Cancelar"))
-        self.b_go = QPushButton("  " + _("Restaurar"))
-        self.b_go.setObjectName("primary")
-        self.b_go.setIcon(glyph_icon(G.RESTORE, "#FFFFFF", 14))
-        for b in (b_cancel, self.b_go):
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            buttons.addWidget(b)
-        lay.addLayout(buttons)
-        b_cancel.clicked.connect(self.reject)
-        self.b_go.clicked.connect(self.accept)
-        for w in (self.mode_import, self.mode_server, self.confirm):
-            w.toggled.connect(self._update)
-        self.target.currentIndexChanged.connect(self._update)
-        self._update()
-
-    def showEvent(self, event):  # noqa: N802
-        super().showEvent(event)
-        set_dark_titlebar(self)
-
-    def _update(self, *_a):
-        server_mode = self.mode_server.isChecked()
-        self.confirm.setVisible(server_mode)
-        self.b_go.setText("  " + (_("Restaurar todo el servidor") if server_mode else _("Subir a Plesk")))
-        self.b_go.setEnabled(self.target.count() > 0 and (not server_mode or self.confirm.isChecked()))
-
-    @property
-    def mode(self) -> str:
-        return "server" if self.mode_server.isChecked() else "import"
-
-    @property
-    def target_id(self) -> str:
-        return self.target.currentData() or ""
-
-
-class PleskPage(QWidget):
-    """«Plesk»: copias completas de servidores Plesk con su herramienta oficial, en PLESK/ del disco de copia.
-
-    Una sola operación a la vez (copia o restauración), en un hilo; la página la lee con un temporizador.
-    Las copias automáticas se miran cada 10 minutos y al conectar el disco de copia.
+    Una copia a la vez, en un hilo; la página la lee con un temporizador. El árbol «Qué copiar» se carga
+    al desplegarlo (cada carpeta es una consulta a Google) y lo que se marca o desmarca se guarda al
+    momento. Las copias automáticas se miran cada 10 minutos y al conectar el disco de copia.
     """
-    op_changed = pyqtSignal()      # desde el hilo: hay que guardar los ajustes del servidor
-    unpaired = pyqtSignal(str, str)   # servidor, error al avisar a Plesk ("" si fue bien)
+    listed = pyqtSignal(int, object, object)   # generación, nodo, hijos (o un DriveError)
+    revoked = pyqtSignal(str, str)
     ROLE = Qt.ItemDataRole.UserRole
+    NODE = Qt.ItemDataRole.UserRole + 1
 
     def __init__(self, win: "MainWindow"):
         super().__init__()
         self.win = win
-        self.secrets = plesklink.Secrets(os.path.join(DATA_DIR, "plesk.json"))
-        self.servers: list[plesklink.Server] = []
-        self.op: plesklink.Operation | None = None
+        self.secrets = win.vault
+        self.accounts: list[gdrive.Account] = []
+        self.job: gdrive.DriveSync | None = None
+        self.job_account: gdrive.Account | None = None
         self.thread: threading.Thread | None = None
         self.guard = keepawake.Guard()
         self._finalized = True
         self._samples: deque = deque(maxlen=40)
-        self._selected = ""       # id del servidor, o «disk:<carpeta>» para copias de servidores ya no conectados
+        self._selected = ""
+        self._gen = 0
+        self._drives: dict[str, gdrive.Drive] = {}
         self._load()
         self._build()
-        self.op_changed.connect(self._save)
-        self.unpaired.connect(self._on_unpaired)
+        self.listed.connect(self._on_listed)
+        self.revoked.connect(self._on_revoked)
         self.timer = QTimer(self)
         self.timer.setInterval(400)
         self.timer.timeout.connect(self._tick)
@@ -3798,54 +3898,60 @@ class PleskPage(QWidget):
         self.due_timer.setInterval(10 * 60 * 1000)
         self.due_timer.timeout.connect(self.check_due)
         self.due_timer.start()
-        QTimer.singleShot(90_000, self.check_due)
+        QTimer.singleShot(120_000, self.check_due)
         self.refresh()
 
     # ── datos ──
     def _load(self):
         try:
-            data = json.loads(self.win.settings.value("plesk_servers", "") or "[]")
+            data = json.loads(self.win.settings.value("gdrive_accounts", "") or "[]")
         except (TypeError, ValueError):
             data = []
-        self.servers = [s for s in (plesklink.Server.from_dict(d) for d in data) if s]
+        self.accounts = [a for a in (gdrive.Account.from_dict(d) for d in data) if a]
 
     def _save(self):
-        self.win.settings.setValue("plesk_servers", json.dumps([s.to_dict() for s in self.servers], ensure_ascii=False))
+        self.win.settings.setValue("gdrive_accounts", json.dumps([a.to_dict() for a in self.accounts],
+                                                                 ensure_ascii=False))
         self.win.settings.sync()
 
-    def server(self, sid: str) -> plesklink.Server | None:
-        return next((s for s in self.servers if s.id == sid), None)
+    def account(self, aid: str) -> gdrive.Account | None:
+        return next((a for a in self.accounts if a.id == aid), None)
 
-    def _password(self, folder: str, create: bool = False) -> str:
-        """La contraseña de las copias va con la carpeta del servidor: si se quita el servidor, se conserva
-        para poder restaurar sus copias."""
-        key = f"plesk/pw/{folder}"
-        pw = self.secrets.get(key)
-        if not pw and create:
-            pw = plesklink.new_password()
-            self.secrets.set(key, pw)
-        return pw
+    def client(self) -> tuple[str, str]:
+        own = str(self.win.settings.value("gdrive_client_id", "") or "")
+        return gdrive.client_credentials(own, self.secrets.get("gdrive/client_secret") if own else "")
+
+    def client_changed(self):
+        self._drives.clear()
+
+    def drive_for(self, acc: gdrive.Account) -> gdrive.Drive:
+        if acc.id not in self._drives:
+            cid, csecret = self.client()
+            if not cid:
+                raise gdrive.DriveError("noclient")
+            token = self.secrets.get(gdrive.token_key(acc.id))
+            if not token:
+                raise gdrive.DriveError("auth")
+            self._drives[acc.id] = gdrive.Drive(token, cid, csecret)
+        return self._drives[acc.id]
 
     def disk_root(self) -> str | None:
-        """Raíz del disco de copia (donde va la carpeta PLESK), si está conectado."""
         dst = self.win.dst_card.path()
         if not dst or not engine.volume_present(dst):
             return None
         root = engine.volume_root(dst)
         return root if os.path.isdir(root) else None
 
-    def _folder_of(self, key: str) -> str | None:
+    def folder_of(self, acc: gdrive.Account) -> str | None:
         root = self.disk_root()
-        if not root:
-            return None
-        if key.startswith("disk:"):
-            return os.path.join(plesklink.plesk_root(root), key[5:])
-        srv = self.server(key)
-        return os.path.join(plesklink.plesk_root(root), srv.folder_name) if srv else None
+        return os.path.join(gdrive.gdrive_root(root), acc.folder_name) if root else None
+
+    def index_path(self, acc: gdrive.Account) -> str:
+        return os.path.join(DATA_DIR, "estado", f"gdrive-{vault.safe_name(acc.id)}.json")
 
     @property
     def busy(self) -> bool:
-        return self.op is not None and self.op.running
+        return self.job is not None and self.job.running
 
     # ── construcción ──
     def _build(self):
@@ -3858,47 +3964,35 @@ class PleskPage(QWidget):
         h.setContentsMargins(16, 10, 10, 10)
         h.setSpacing(10)
         logo = QLabel()
-        logo.setPixmap(plesk_pixmap(18))
+        logo.setPixmap(gdrive_pixmap(18))
         h.addWidget(logo)
-        msg = QLabel(_("Copia completa de tus servidores Plesk con su herramienta oficial: ajustes, suscripciones, "
-                       "webs, bases de datos y correo. Se guarda en la carpeta PLESK del disco de copia y se restaura "
-                       "como Plesk manda."))
+        msg = QLabel(_("Copia de tu Google Drive en el disco de copia, sin instalar la app de Google: solo lo nuevo o "
+                       "cambiado, con versiones de lo que borras o cambias. Los Documentos de Google se guardan en "
+                       "formato Office."))
         msg.setObjectName("muted")
         msg.setWordWrap(True)
         h.addWidget(msg, 1)
-        self.b_add = QPushButton("  " + _("Conectar servidor…"))
+        self.b_add = QPushButton("  " + _("Conectar cuenta…"))
         self.b_add.setIcon(glyph_icon(G.ADD, C["text"], 14))
         self.b_add.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.b_add.clicked.connect(lambda: self.pair())
+        self.b_add.clicked.connect(self.connect_account)
         h.addWidget(self.b_add)
         v.addWidget(bar)
 
         self.pages = QStackedWidget()
-        self.empty = EmptyState(G.GLOBE)
-        self.empty.icon.setPixmap(plesk_pixmap(54))
-        self.empty.icon.setFixedSize(54, 54)
-        self.empty.set(_("Ningún servidor Plesk conectado"),
-                       _("Instala la extensión DEV Backup Studio en tu Plesk, pulsa «Conectar un ordenador» y escribe "
-                         "aquí el código que te da. Sin contraseñas ni acceso por SSH."))
-        b = QPushButton("  " + _("Conectar un servidor Plesk…"))
-        b.setObjectName("primary")
-        b.setIcon(glyph_icon(G.ADD, "#FFFFFF", 14))
-        b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.clicked.connect(lambda: self.pair())
-        self.empty.layout().insertWidget(self.empty.layout().count() - 1, b, 0, Qt.AlignmentFlag.AlignHCenter)
-        self.pages.addWidget(self.empty)
+        self.setup = GDriveSetup(self)
+        self.pages.addWidget(self.setup)
 
         main = QWidget()
         body = QHBoxLayout(main)
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(14)
-        left = Card(_("Servidores"), G.GLOBE, margins=(8, 14, 8, 8))
+        left = Card(_("Cuentas"), G.GLOBE, margins=(8, 14, 8, 8))
         left.setFixedWidth(278)
         self.list = QListWidget()
         self.list.setObjectName("timeline")
-        self.list.setIconSize(QSize(26, 26))
+        self.list.setIconSize(QSize(24, 24))
         self.list.setSpacing(2)
-        self.list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.list.currentItemChanged.connect(lambda cur, _p: self._select(cur.data(self.ROLE) if cur else ""))
         self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._list_menu)
@@ -3928,9 +4022,8 @@ class PleskPage(QWidget):
         self.b_disconnect.setObjectName("danger")
         self.b_disconnect.setIcon(glyph_icon(G.CLOSE, C["muted"], 13))
         self.b_disconnect.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.b_disconnect.setToolTip(_("Este ordenador deja de estar conectado a ese servidor Plesk. Las copias ya "
-                                       "guardadas se conservan."))
-        self.b_disconnect.clicked.connect(self._disconnect_selected)
+        self.b_disconnect.setToolTip(_("La app deja de tener acceso a esa cuenta. Lo ya copiado en el disco se conserva."))
+        self.b_disconnect.clicked.connect(lambda: self.remove(self.account(self._selected)))
         head.addWidget(self.b_disconnect, 0, Qt.AlignmentFlag.AlignVCenter)
         right.addLayout(head)
         self.banner = Banner()
@@ -3946,510 +4039,423 @@ class PleskPage(QWidget):
         oh.setSpacing(10)
         oh.addWidget(QLabel(_("Copia automática"), objectName="fieldLabel"))
         self.schedule = QComboBox()
-        for key, text in PLESK_SCHEDULES.items():
+        for key, text in GDRIVE_SCHEDULES.items():
             self.schedule.addItem(_(text), key)
-        self.schedule.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self.schedule.setMinimumWidth(130)
+        fm = self.schedule.fontMetrics()
+        self.schedule.setMinimumWidth(max(fm.horizontalAdvance(self.schedule.itemText(i))
+                                          for i in range(self.schedule.count())) + 64)
         self.schedule.setToolTip(_("Con la app abierta (o en la bandeja) y el disco de copia conectado"))
+        self.schedule.currentIndexChanged.connect(self._on_schedule)
         oh.addWidget(self.schedule)
         oh.addSpacing(10)
-        oh.addWidget(QLabel(_("Conservar"), objectName="fieldLabel"))
-        self.keep = QComboBox()
-        for n in plesklink.KEEP_OPTIONS:
-            self.keep.addItem(_n("{n} copia", "{n} copias", n).format(n=n), n)
-        self.keep.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self.keep.setMinimumWidth(110)
-        self.keep.setToolTip(_("Al terminar una copia se quitan las más antiguas"))
-        oh.addWidget(self.keep)
-        oh.addStretch(1)
-        self.b_password = QPushButton()
-        self.b_password.setObjectName("icon")
-        self.b_password.setIcon(glyph_icon(G.SHIELD, C["text"], 14))
-        self.b_password.setFixedSize(38, 36)
-        self.b_password.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.b_password.setAccessibleName(_("Contraseña…"))
-        self.b_password.setToolTip(_("Contraseña…") + "  ·  "
-                                   + _("Plesk cifra con ella los datos sensibles de la copia y la pide al restaurar"))
-        self.b_password.clicked.connect(self._show_password)
-        oh.addWidget(self.b_password)
-        for combo in (self.schedule, self.keep):  # el QSS añade relleno y flecha que sizeHint no cuenta
-            fm = combo.fontMetrics()
-            combo.setMinimumWidth(max(fm.horizontalAdvance(combo.itemText(i)) for i in range(combo.count())) + 64)
-        self.schedule.currentIndexChanged.connect(self._on_options)
-        self.keep.currentIndexChanged.connect(self._on_options)
+        self.sel_hint = ElideLabel(_("Marca lo que quieras copiar; se guarda al momento"), Qt.TextElideMode.ElideRight)
+        self.sel_hint.setObjectName("faint")
+        self.sel_hint.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        oh.addWidget(self.sel_hint, 1)
         right.addWidget(self.opts)
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels([_("COPIA"), _("TAMAÑO"), _("PLESK"), _("COMPROBACIÓN")])
-        self.tree.setRootIsDecorated(False)
+        self.tree.setHeaderLabels([_("QUÉ COPIAR"), _("TAMAÑO"), _("MODIFICADO")])
         self.tree.setUniformRowHeights(True)
         self.tree.setIconSize(QSize(16, 16))
-        self.tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self._tree_menu)
-        self.tree.itemSelectionChanged.connect(self._update_actions)
-        self.tree.itemDoubleClicked.connect(lambda *_a: self._reveal())
+        self.tree.itemExpanded.connect(self._on_expand)
+        self.tree.itemChanged.connect(self._on_check)
         hdr = self.tree.header()
         hdr.setStretchLastSection(False)
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((1, 100), (2, 130), (3, 190)):
+        for col, width in ((1, 100), (2, 150)):
             hdr.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
             self.tree.setColumnWidth(col, width)
-        self.tree_stack = QStackedWidget()
-        self.no_backups = EmptyState(G.DRIVE)
-        self.tree_stack.addWidget(self.tree)
-        self.tree_stack.addWidget(self.no_backups)
-        right.addWidget(self.tree_stack, 1)
+        right.addWidget(self.tree, 1)
 
         actions = QFrame()
         actions.setObjectName("hint")
         ah = QHBoxLayout(actions)
         ah.setContentsMargins(16, 8, 10, 8)
         ah.setSpacing(8)
-        self.sel_label = ElideLabel("", Qt.TextElideMode.ElideRight)
-        self.sel_label.setObjectName("muted")
-        ah.addWidget(self.sel_label, 1)
-
-        def button(text, glyph, tip, slot, name=None, color=C["text"]):
-            b = QPushButton(f"  {text}" if text else "")
-            b.setIcon(glyph_icon(glyph, color, 14))
-            b.setToolTip(tip)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            if name:
-                b.setObjectName(name)
-            if not text:
-                b.setFixedSize(38, 36)
-                b.setAccessibleName(tip)
-            b.clicked.connect(slot)
-            ah.addWidget(b)
-            return b
-
-        self.b_more = button("", G.MORE, _("Más acciones"), self._more_menu, "icon")
-        self.b_reveal = button("", G.OPEN, _("Mostrar la copia en su carpeta del disco de copia"), self._reveal, "icon")
-        self.b_stop = button(_("Detener"), G.STOP, _("Detiene la operación; lo ya descargado se aprovecha la próxima vez"),
-                             self._stop)
-        self.b_restore = button(_("Restaurar…"), G.RESTORE, _("Sube la copia elegida a un servidor Plesk y la restaura"),
-                                self._restore)
-        self.b_backup = button(_("Copiar ahora"), G.PLAY, _("Copia completa del servidor con pleskbackup"),
-                               lambda: self.start_backup(self._selected), "primary", "#FFFFFF")
-        self.b_backup.setMinimumWidth(160)
+        self.foot = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.foot.setObjectName("muted")
+        ah.addWidget(self.foot, 1)
+        self.b_open = QPushButton()
+        self.b_open.setObjectName("icon")
+        self.b_open.setIcon(glyph_icon(G.OPEN, C["text"], 14))
+        self.b_open.setFixedSize(38, 36)
+        self.b_open.setToolTip(_("Abrir la carpeta de la copia en el disco"))
+        self.b_open.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.b_open.clicked.connect(self._open_folder)
+        ah.addWidget(self.b_open)
+        self.b_stop = QPushButton("  " + _("Detener"))
+        self.b_stop.setIcon(glyph_icon(G.STOP, C["text"], 14))
+        self.b_stop.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.b_stop.clicked.connect(self._stop)
+        ah.addWidget(self.b_stop)
+        self.b_copy = QPushButton("  " + _("Copiar ahora"))
+        self.b_copy.setObjectName("primary")
+        self.b_copy.setIcon(glyph_icon(G.PLAY, "#FFFFFF", 14))
+        self.b_copy.setMinimumWidth(160)
+        self.b_copy.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.b_copy.clicked.connect(lambda: self.start(self._selected))
+        ah.addWidget(self.b_copy)
         right.addWidget(actions)
         body.addLayout(right, 1)
         self.pages.addWidget(main)
         v.addWidget(self.pages, 1)
 
-    # ── lista de servidores ──
+    # ── lista de cuentas ──
     def refresh(self):
-        """Vuelve a pintar la lista (servidores conectados y carpetas del disco sin servidor) y lo elegido."""
-        root = self.disk_root()
-        on_disk = plesklink.list_servers_on_disk(plesklink.plesk_root(root)) if root else []
-        known = {s.folder_name.lower() for s in self.servers}
-        orphans = [f for f in on_disk if f.lower() not in known]
-        self.pages.setCurrentIndex(1 if self.servers or orphans else 0)
+        self.pages.setCurrentIndex(1 if self.accounts else 0)
+        if not self.accounts:
+            self.setup.refresh()
         current = self._selected
         self.list.blockSignals(True)
         self.list.clear()
-        for s in self.servers:
-            it = QListWidgetItem(plesk_icon(26), f"{s.label}\n{self._status_line(s)}")
-            it.setData(self.ROLE, s.id)
+        for a in self.accounts:
+            it = QListWidgetItem(gdrive_icon(24), f"{a.email or a.name}\n{self._status_line(a)}")
+            it.setData(self.ROLE, a.id)
             it.setSizeHint(QSize(240, 52))
             self.list.addItem(it)
-        for f in orphans:
-            it = QListWidgetItem(glyph_icon(G.DRIVE, C["muted"], 22), f"{f}\n{_('Solo en el disco de copia')}")
-            it.setData(self.ROLE, f"disk:{f}")
-            it.setSizeHint(QSize(240, 52))
-            self.list.addItem(it)
-        keys = [self.list.item(i).data(self.ROLE) for i in range(self.list.count())]
+        keys = [a.id for a in self.accounts]
         if current not in keys:
             current = keys[0] if keys else ""
         if current:
             self.list.setCurrentRow(keys.index(current))
         self.list.blockSignals(False)
-        if root:
-            self.disk_note.setText(_("Copias en {path}").format(path=plesklink.plesk_root(root)))
+        root = self.disk_root()
+        self.disk_note.setText(_("Copias en {path}").format(path=gdrive.gdrive_root(root)) if root
+                               else _("Conecta el disco de copia para guardar o ver las copias."))
+        if current != self._selected or not self.tree.topLevelItemCount():
+            self._select(current)
         else:
-            self.disk_note.setText(_("Conecta el disco de copia para guardar o ver las copias."))
-        self._select(current)
+            self._render()
 
-    def _status_line(self, s: plesklink.Server) -> str:
-        if self.busy and self.op.server is s:
-            return _("Restaurando…") if self.op.kind == "restore" else _("Copiando…")
-        if s.last_error and (not s.last_ok or s.last_try > s.last_ok):
+    def _status_line(self, a: gdrive.Account) -> str:
+        if self.busy and self.job_account is a:
+            return _("Copiando…")
+        if a.last_error and (not a.last_ok or a.last_try > a.last_ok):
             return _("⚠ Falló la última copia")
-        if s.last_ok:
-            return _("Última copia {when}").format(when=fmt_ago(s.last_ok))
+        if a.last_ok:
+            return _("Última copia {when}").format(when=fmt_ago(a.last_ok))
         return _("Aún sin copias")
 
-    def _select(self, key: str):
-        self._selected = key or ""
-        srv = self.server(self._selected)
-        if srv:
-            self.title.setText(srv.label)
-            bits = [srv.url]
-            if srv.plesk_version:
-                bits.append(f"Plesk {srv.plesk_version}")
-            if srv.os:
-                bits.append(srv.os)
-            if srv.fingerprint:
-                bits.append(_("certificado fijado"))
-            self.sub.setText("  ·  ".join(bits))
-            for w, val in ((self.schedule, srv.schedule), (self.keep, srv.keep)):
-                w.blockSignals(True)
-                w.setCurrentIndex(max(0, w.findData(val)))
-                w.blockSignals(False)
-            self.opts.setVisible(True)
-        elif self._selected.startswith("disk:"):
-            self.title.setText(self._selected[5:])
-            self.sub.setText(_("Ya no está conectado: sus copias se pueden restaurar en otro servidor Plesk"))
-            self.opts.setVisible(False)
-        else:
-            self.title.setText("")
-            self.sub.setText("")
-            self.opts.setVisible(False)
-        self._load_backups()
+    def _select(self, aid: str):
+        self._selected = aid or ""
+        acc = self.account(self._selected)
+        self.title.setText(acc.email if acc else "")
+        self.sub.setText(acc.name if acc else "")
+        if acc:
+            self.schedule.blockSignals(True)
+            self.schedule.setCurrentIndex(max(0, self.schedule.findData(acc.schedule)))
+            self.schedule.blockSignals(False)
+        self._build_tree(acc)
         self._render()
 
-    def _load_backups(self):
-        self.tree.clear()
-        folder = self._folder_of(self._selected) if self._selected else None
-        backups = plesklink.list_backups(folder) if folder else []
-        for b in backups:
-            warned = bool(b.info.get("warning"))
-            it = QTreeWidgetItem([f"{day_label(b.when)}  ·  {b.when.strftime('%H:%M')}", fmt_bytes(b.size),
-                                  str(b.info.get("plesk_version") or "—"),
-                                  _("con avisos de Plesk") if warned else
-                                  _("SHA-256 comprobado") if b.sha256 else _("sin comprobar")])
-            it.setIcon(0, plesk_icon(16))
-            ok = b.sha256 and not warned
-            it.setIcon(3, glyph_icon(G.SHIELD if ok else G.WARN, C["ok"] if ok else C["warn"], 14))
-            if warned:
-                it.setToolTip(3, str(b.info["warning"]))
-            it.setData(0, self.ROLE, b)
-            it.setToolTip(0, b.path)
+    # ── árbol «Qué copiar» ──
+    def _node_item(self, parent, name: str, node: dict, checked: bool, enabled: bool = True) -> QTreeWidgetItem:
+        it = QTreeWidgetItem([name, "", ""])
+        it.setData(0, self.NODE, node)
+        folder = node["kind"] in ("my", "group", "drive", "shared", "folder")
+        glyph = G.FOLDER if folder else G.DOC
+        it.setIcon(0, gdrive_icon(16) if node["kind"] in ("my", "drive", "shared")
+                   else glyph_icon(glyph, C["folder"] if folder else C["muted"], 16))
+        flags = it.flags() | Qt.ItemFlag.ItemIsUserCheckable
+        if node["kind"] == "group":
+            flags &= ~Qt.ItemFlag.ItemIsUserCheckable
+        it.setFlags(flags)
+        if node["kind"] != "group":
+            it.setCheckState(0, Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        it.setDisabled(not enabled)
+        if folder:
+            it.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
+        if parent is None:
             self.tree.addTopLevelItem(it)
-        if backups:
-            self.tree.setCurrentItem(self.tree.topLevelItem(0))
-            self.tree_stack.setCurrentWidget(self.tree)
         else:
-            if folder is None and self._selected:
-                self.no_backups.set(_("Disco de copia no conectado"),
-                                    _("Conéctalo para ver las copias guardadas y para hacer copias nuevas."))
-            else:
-                self.no_backups.set(_("Aún no hay copias de este servidor"),
-                                    _("Pulsa «Copiar ahora»: Plesk prepara la copia completa y se descarga aquí."))
-            self.tree_stack.setCurrentWidget(self.no_backups)
-        self._update_actions()
+            parent.addChild(it)
+        return it
 
-    def _chosen_backup(self) -> plesklink.StoredBackup | None:
-        it = self.tree.currentItem()
-        return it.data(0, self.ROLE) if it is not None and it.isSelected() else None
+    def _build_tree(self, acc: gdrive.Account | None):
+        self._gen += 1
+        self.tree.blockSignals(True)
+        self.tree.clear()
+        if acc is not None:
+            self._node_item(None, _(gdrive.MY_DRIVE), {"kind": "my", "id": "root", "drive": ""}, acc.my_drive)
+            self._node_item(None, _(gdrive.SHARED_DRIVES), {"kind": "group", "id": "", "drive": ""}, True)
+            self._node_item(None, _(gdrive.SHARED_WITH_ME), {"kind": "shared", "id": "", "drive": ""},
+                            acc.shared_with_me)
+        self.tree.blockSignals(False)
 
-    def _update_actions(self):
-        srv = self.server(self._selected)
-        b = self._chosen_backup()
-        busy = self.busy
-        self.b_stop.setVisible(busy)
-        self.b_backup.setVisible(not busy)
-        self.b_backup.setEnabled(srv is not None)
-        self.b_restore.setEnabled(not busy and b is not None and bool(self.servers))
-        self.b_reveal.setEnabled(b is not None)
-        self.b_more.setEnabled(bool(self._selected))
-        self.b_add.setEnabled(not busy)
-        self.b_disconnect.setVisible(srv is not None)
-        self.b_disconnect.setEnabled(srv is not None and not (busy and self.op.server is srv))
-        self.schedule.setEnabled(srv is not None)
-        self.keep.setEnabled(srv is not None)
-        n = self.tree.topLevelItemCount()
-        total = sum(self.tree.topLevelItem(i).data(0, self.ROLE).size for i in range(n))
-        self.sel_label.setText(_n("{n} copia guardada · {size}", "{n} copias guardadas · {size}", n).format(
-            n=n, size=fmt_bytes(total)) if n else "")
+    def _effective(self, it: QTreeWidgetItem) -> bool:
+        """¿Se copia? Marcado él y todos los de encima."""
+        while it is not None:
+            node = it.data(0, self.NODE) or {}
+            if node.get("kind") != "group" and it.checkState(0) != Qt.CheckState.Checked:
+                return False
+            it = it.parent()
+        return True
 
-    def _on_options(self, *_a):
-        srv = self.server(self._selected)
-        if srv is None:
+    def _on_expand(self, it: QTreeWidgetItem):
+        node = it.data(0, self.NODE) or {}
+        if node.get("loaded") or node.get("loading"):
             return
-        srv.schedule = self.schedule.currentData()
-        srv.keep = int(self.keep.currentData())
-        self._save()
-        self.refresh_summary()
-
-    def refresh_summary(self):
-        self.win._refresh_summaries()
-
-    # ── conectar y quitar ──
-    def pair(self, url: str = "", replace: plesklink.Server | None = None):
-        if self.busy:
+        acc = self.account(self._selected)
+        if acc is None:
             return
-        dlg = PleskPairDialog(self.win, url)
-        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.server is None:
-            return
-        srv = dlg.server
-        old = replace or next((s for s in self.servers if s.url == srv.url), None)
-        if old is not None:  # volver a conectar: se conserva lo elegido y lo hecho
-            for name in ("schedule", "keep", "last_ok", "last_size", "pending_job", "pending_stamp"):
-                setattr(srv, name, getattr(old, name))
-            self.secrets.delete_prefix(f"plesk/{old.id}/")
-            self.servers[self.servers.index(old)] = srv
-        else:
-            self.servers.append(srv)
-        self.secrets.set(plesklink.token_key(srv.id), dlg.token)
-        self._password(srv.folder_name, create=True)
-        self._save()
-        self._selected = srv.id
-        self.refresh()
-        self.win._log(_("Servidor Plesk conectado: {name} ({url})").format(name=srv.label, url=srv.url), C["ok"])
-        if old is None and not plesklink.list_backups(self._folder_of(srv.id) or ""):
-            ans = QMessageBox.question(self.win, APP_NAME, _("{name} está conectado. ¿Hacer ya su primera copia "
-                                                              "completa?").format(name=srv.label))
-            if ans == QMessageBox.StandardButton.Yes:
-                self.start_backup(srv.id)
-
-    def remove(self, srv: plesklink.Server, ask: bool = True):
-        """Desconectar: Plesk borra la llave de este ordenador y la app olvida el servidor. Las copias
-        del disco (y la contraseña para restaurarlas) se quedan."""
-        if self.busy and self.op.server is srv:
-            QMessageBox.information(self.win, APP_NAME, _("Espera a que termine la operación en curso con {name}, o "
-                                                          "detenla.").format(name=srv.label))
-            return
-        if ask:
-            box = QMessageBox(QMessageBox.Icon.Question, APP_NAME, "", parent=self.win)
-            box.setText(_("¿Desconectar {name}?").format(name=srv.label))
-            box.setInformativeText(_("Este ordenador deja de estar conectado a ese Plesk: no hará más copias de él y "
-                                     "desaparece de la extensión. Las copias ya guardadas en el disco se conservan y se "
-                                     "pueden seguir restaurando. Para volver a conectarlo hará falta un código nuevo."))
-            box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
-            box.button(QMessageBox.StandardButton.Yes).setText(_("Desconectar"))
-            box.setDefaultButton(QMessageBox.StandardButton.Cancel)
-            if box.exec() != QMessageBox.StandardButton.Yes:
-                return
-        token = self.secrets.get(plesklink.token_key(srv.id))
-        name = srv.label
+        node["loading"] = True
+        it.setData(0, self.NODE, node)
+        wait = QTreeWidgetItem([_("Cargando…")])
+        wait.setFlags(Qt.ItemFlag.NoItemFlags)
+        it.addChild(wait)
+        gen = self._gen
 
         def work():
-            error = ""
             try:
-                if token:
-                    plesklink.Client(srv.url, token, srv.fingerprint, timeout=10).unpair()
-            except plesklink.PleskError as exc:
-                # si Plesk ya no lo reconocía, allí ya estaba desconectado
-                error = "" if exc.kind == "auth" else plesk_error_text(exc)
+                drive = self.drive_for(acc)
+                kind = node["kind"]
+                if kind == "group":
+                    items = [{"id": d["id"], "name": d.get("name", ""), "mimeType": gdrive.FOLDER, "_drive": d["id"]}
+                             for d in drive.shared_drives()]
+                elif kind == "shared":
+                    items = drive.shared_with_me()
+                else:
+                    items = drive.children(node["id"], node.get("drive", ""))
+                result = items
+            except gdrive.DriveError as exc:
+                result = exc
             try:
-                self.unpaired.emit(name, error)
-            except RuntimeError:  # la ventana ya se cerró
+                self.listed.emit(gen, it, result)
+            except RuntimeError:
                 pass
 
-        threading.Thread(target=work, name="plesk-desconectar", daemon=True).start()
-        self.servers.remove(srv)
-        self.secrets.delete_prefix(f"plesk/{srv.id}/")
+        threading.Thread(target=work, name="drive-arbol", daemon=True).start()
+
+    def _on_listed(self, gen: int, it: QTreeWidgetItem, result):
+        if gen != self._gen:
+            return
+        acc = self.account(self._selected)
+        try:
+            node = it.data(0, self.NODE) or {}
+        except RuntimeError:  # el árbol se rehízo mientras tanto
+            return
+        self.tree.blockSignals(True)
+        it.takeChildren()
+        node["loading"] = False
+        if isinstance(result, gdrive.DriveError):
+            err = QTreeWidgetItem([drive_error_text(result)])
+            err.setFlags(Qt.ItemFlag.NoItemFlags)
+            it.addChild(err)
+            it.setData(0, self.NODE, node)
+            self.tree.blockSignals(False)
+            return
+        node["loaded"] = True
+        it.setData(0, self.NODE, node)
+        excluded = set(acc.excluded) if acc else set()
+        enabled = self._effective(it)
+        names = gdrive.disk_names(result)
+        for f in sorted(result, key=lambda f: (f.get("mimeType") != gdrive.FOLDER, names[f["id"]].lower())):
+            mime = f.get("mimeType", "")
+            if "_drive" in f:
+                child_node = {"kind": "drive", "id": f["id"], "drive": f["id"]}
+                checked = acc.drive_selected(f["id"]) and f["id"] not in excluded if acc else True
+            else:
+                child_node = {"kind": "folder" if mime == gdrive.FOLDER else "file", "id": f["id"],
+                              "drive": node.get("drive", "")}
+                checked = f["id"] not in excluded
+            name = names[f["id"]]
+            if mime == gdrive.SHORTCUT or (mime.startswith("application/vnd.google-apps.") and mime != gdrive.FOLDER
+                                          and mime not in gdrive.EXPORTS):
+                continue   # sin archivo: no se copian
+            c = self._node_item(it, name, child_node, checked, enabled)
+            if f.get("size"):
+                c.setText(1, fmt_bytes(int(f["size"])))
+            when = gdrive._mtime(f)
+            if when:
+                c.setText(2, short_stamp(datetime.fromtimestamp(when)))
+        if not it.childCount():
+            empty = QTreeWidgetItem([_("(vacía)")])
+            empty.setFlags(Qt.ItemFlag.NoItemFlags)
+            it.addChild(empty)
+        self.tree.blockSignals(False)
+
+    def _on_check(self, it: QTreeWidgetItem, col: int):
+        if col != 0:
+            return
+        acc = self.account(self._selected)
+        node = it.data(0, self.NODE) or {}
+        if acc is None or not node or node.get("kind") == "group" or (
+                node.get("kind") in ("drive", "folder", "file") and not node.get("id")):
+            return   # el grupo «Unidades compartidas» no tiene casilla (Qt avisa también de otros cambios)
+        on = it.checkState(0) == Qt.CheckState.Checked
+        kind = node["kind"]
+        if kind == "my":
+            acc.my_drive = on
+        elif kind == "shared":
+            acc.shared_with_me = on
+        elif kind == "drive":
+            acc.drives[node["id"]] = on
+            if on and node["id"] in acc.excluded:
+                acc.excluded.remove(node["id"])
+        else:
+            if on and node["id"] in acc.excluded:
+                acc.excluded.remove(node["id"])
+            elif not on and node["id"] not in acc.excluded:
+                acc.excluded.append(node["id"])
+        self._save()
+        # lo de debajo se ve activo o apagado según el padre
+        self.tree.blockSignals(True)
+        stack = [it.child(i) for i in range(it.childCount())]
+        while stack:
+            c = stack.pop()
+            if c.data(0, self.NODE):
+                c.setDisabled(not self._effective(c.parent()))
+                stack += [c.child(i) for i in range(c.childCount())]
+        self.tree.blockSignals(False)
+
+    # ── conectar y desconectar ──
+    def connect_account(self):
+        if self.busy:
+            return
+        dlg = GDriveConnectDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted or dlg.account is None:
+            return
+        acc = dlg.account
+        old = self.account(acc.id)
+        if old is not None:   # la misma cuenta otra vez: llave nueva, se conserva lo elegido
+            old.email, old.name = acc.email, acc.name
+            acc = old
+        else:
+            self.accounts.append(acc)
+        self.secrets.set(gdrive.token_key(acc.id), dlg.token)
+        self._drives.pop(acc.id, None)
+        acc.last_error = ""
+        self._save()
+        self._selected = acc.id
+        self.refresh()
+        self._select(acc.id)
+        self.win._log(_("Google Drive conectado: {email}").format(email=acc.email), C["ok"])
+
+    def remove(self, acc: gdrive.Account | None):
+        if acc is None:
+            return
+        if self.busy and self.job_account is acc:
+            QMessageBox.information(self.win, APP_NAME, _("Espera a que termine la copia en curso de {name}, o "
+                                                          "detenla.").format(name=acc.email))
+            return
+        box = QMessageBox(QMessageBox.Icon.Question, APP_NAME, "", parent=self.win)
+        box.setText(_("¿Desconectar {name}?").format(name=acc.email))
+        box.setInformativeText(_("La app deja de tener acceso a esa cuenta de Google y no hará más copias de ella. Lo ya "
+                                 "copiado en el disco se conserva."))
+        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
+        box.button(QMessageBox.StandardButton.Yes).setText(_("Desconectar"))
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            return
+        token = self.secrets.get(gdrive.token_key(acc.id))
+        email = acc.email
+
+        def work():
+            gdrive.revoke(token) if token else None
+            try:
+                self.revoked.emit(email, "")
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=work, name="google-desconectar", daemon=True).start()
+        self.accounts.remove(acc)
+        self.secrets.delete_prefix(f"gdrive/{acc.id}/")
+        self._drives.pop(acc.id, None)
         self._save()
         self.refresh()
-        self.refresh_summary()
 
-    def _disconnect_selected(self):
-        srv = self.server(self._selected)
-        if srv is not None:
-            self.remove(srv)
-
-    def _on_unpaired(self, name: str, error: str):
-        if not error:
-            self.win._log(_("Plesk: {name} desconectado").format(name=name), C["muted"])
-            return
-        self.win._log(_("Plesk: {name} desconectado aquí, pero no se pudo avisar al servidor: {error}").format(
-            name=name, error=error), C["warn"])
-        QMessageBox.warning(self.win, APP_NAME, _("{name} se ha desconectado en este ordenador, pero el servidor no "
-                                                  "respondió. Quita también este ordenador en Plesk: extensión DEV "
-                                                  "Backup Studio → Ordenadores conectados → Desconectar.").format(name=name))
+    def _on_revoked(self, email: str, _error: str):
+        self.win._log(_("Google Drive: {email} desconectado").format(email=email), C["muted"])
 
     def _list_menu(self, pos):
         it = self.list.itemAt(pos)
         if it is None:
             return
-        self.list.setCurrentItem(it)
-        srv = self.server(it.data(self.ROLE))
-        if srv is None:
+        acc = self.account(it.data(self.ROLE))
+        if acc is None:
             return
         menu = QMenu(self)
-        menu.addAction(glyph_icon(G.GLOBE, C["text"], 14), _("Abrir Plesk en el navegador"),
-                       lambda: QDesktopServices.openUrl(QUrl(srv.url)))
-        menu.addAction(glyph_icon(G.REFRESH, C["text"], 14), _("Volver a conectar con un código…"),
-                       lambda: self.pair(srv.url, replace=srv))
+        menu.addAction(glyph_icon(G.REFRESH, C["text"], 14), _("Volver a conectar…"), self.connect_account)
         menu.addSeparator()
-        act = menu.addAction(glyph_icon(G.CLOSE, C["err"], 14), _("Desconectar…"), lambda: self.remove(srv))
-        act.setEnabled(not (self.busy and self.op.server is srv))
+        act = menu.addAction(glyph_icon(G.CLOSE, C["err"], 14), _("Desconectar…"), lambda: self.remove(acc))
+        act.setEnabled(not (self.busy and self.job_account is acc))
         menu.exec(self.list.viewport().mapToGlobal(pos))
 
-    def _show_password(self):
-        srv = self.server(self._selected)
-        if srv is None:
-            return
-        pw = self._password(srv.folder_name, create=True)
-        box = QMessageBox(QMessageBox.Icon.Information, APP_NAME, "", parent=self.win)
-        box.setText(_("Contraseña de las copias de {name}").format(name=srv.label))
-        box.setInformativeText(_("Plesk cifra con ella las contraseñas que guarda la copia (de buzones, bases de "
-                                 "datos, FTP…). La app la recuerda, pero anótala en un sitio seguro: si restauras desde "
-                                 "otro ordenador o subes la copia a mano en Plesk, te la pedirá.") + f"\n\n{pw}")
-        box.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        copy_btn = box.addButton(_("Copiar"), QMessageBox.ButtonRole.ActionRole)
-        box.addButton(QMessageBox.StandardButton.Close)
-        box.exec()
-        if box.clickedButton() is copy_btn:
-            QApplication.clipboard().setText(pw)
-
-    def _more_menu(self):
-        srv = self.server(self._selected)
-        menu = QMenu(self)
-        if srv is not None:
-            menu.addAction(glyph_icon(G.GLOBE, C["text"], 14), _("Abrir Plesk en el navegador"),
-                           lambda: QDesktopServices.openUrl(QUrl(srv.url)))
-            menu.addAction(glyph_icon(G.REFRESH, C["text"], 14), _("Volver a conectar con un código…"),
-                           lambda: self.pair(srv.url, replace=srv))
-            menu.addAction(glyph_icon(G.SHIELD, C["text"], 14), _("Contraseña…"), self._show_password)
-        folder = self._folder_of(self._selected)
+    def _open_folder(self):
+        acc = self.account(self._selected)
+        folder = self.folder_of(acc) if acc else None
         if folder and os.path.isdir(folder):
-            menu.addAction(glyph_icon(G.OPEN, C["text"], 14), _("Abrir la carpeta de las copias"),
-                           lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(folder)))
-        b = self._chosen_backup()
-        if b is not None and not self.busy:
-            menu.addSeparator()
-            menu.addAction(glyph_icon(G.TRASH, C["err"], 14), _("Eliminar esta copia del disco…"),
-                           lambda: self._delete_backup(b))
-        if srv is not None and not self.busy:
-            menu.addSeparator()
-            menu.addAction(glyph_icon(G.CLOSE, C["err"], 14), _("Desconectar…"), lambda: self.remove(srv))
-        menu.exec(self.b_more.mapToGlobal(QPoint(0, self.b_more.height() + 4)))
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
-    def _tree_menu(self, pos):
-        it = self.tree.itemAt(pos)
-        if it is None:
-            return
-        it.setSelected(True)
-        self.tree.setCurrentItem(it)
-        b = it.data(0, self.ROLE)
-        menu = QMenu(self)
-        menu.addAction(glyph_icon(G.OPEN, C["text"], 14), _("Mostrar en su carpeta"), self._reveal)
-        if not self.busy:
-            menu.addAction(glyph_icon(G.RESTORE, C["text"], 14), _("Restaurar…"), self._restore)
-            menu.addSeparator()
-            menu.addAction(glyph_icon(G.TRASH, C["err"], 14), _("Eliminar esta copia del disco…"),
-                           lambda: self._delete_backup(b))
-        menu.exec(self.tree.viewport().mapToGlobal(pos))
+    def _on_schedule(self, *_a):
+        acc = self.account(self._selected)
+        if acc is not None:
+            acc.schedule = self.schedule.currentData()
+            self._save()
+            self._render()
 
-    def _reveal(self):
-        b = self._chosen_backup()
-        if b is not None:
-            reveal_path(b.path)
-
-    def _delete_backup(self, b: plesklink.StoredBackup):
-        ans = QMessageBox.question(self.win, APP_NAME, _("¿Eliminar la copia del {date} ({size}) del disco de copia? "
-                                                          "No se puede deshacer.").format(date=short_stamp(b.when),
-                                                                                          size=fmt_bytes(b.size)))
-        if ans != QMessageBox.StandardButton.Yes:
-            return
-        try:
-            plesklink.delete_backup(b)
-        except OSError as exc:
-            QMessageBox.warning(self.win, APP_NAME, _("No se pudo eliminar:\n{exc}").format(exc=exc))
-        self._load_backups()
-
-    # ── copiar y restaurar ──
-    def start_backup(self, sid: str, auto: bool = False) -> bool:
-        srv = self.server(sid)
-        if srv is None or self.busy:
+    # ── copiar ──
+    def start(self, aid: str, auto: bool = False, allow_mass_delete: bool = False) -> bool:
+        acc = self.account(aid)
+        if acc is None or self.busy:
             return False
         root = self.disk_root()
         if not root:
             if not auto:
-                QMessageBox.information(self.win, APP_NAME, _("Conecta el disco de copia: las copias de Plesk se guardan en "
-                                                              "su carpeta PLESK."))
+                QMessageBox.information(self.win, APP_NAME, _("Conecta el disco de copia: las copias de Google Drive "
+                                                              "se guardan en su carpeta GOOGLE DRIVE."))
             return False
-        token = self.secrets.get(plesklink.token_key(srv.id))
-        if not token:
+        try:
+            drive = self.drive_for(acc)
+        except gdrive.DriveError as exc:
             if not auto:
-                self.pair(srv.url, replace=srv)
+                QMessageBox.warning(self.win, APP_NAME, drive_error_text(exc))
             return False
-        folder = os.path.join(plesklink.plesk_root(root), srv.folder_name)
-        op = plesklink.BackupRun(srv, token, self._password(srv.folder_name, create=True), folder, srv.keep)
-        srv.last_try = datetime.now().isoformat(timespec="seconds")
+        gdrive.ensure_folder(gdrive.gdrive_root(root))
+        self.job = gdrive.DriveSync(acc, drive, os.path.join(gdrive.gdrive_root(root), acc.folder_name), root,
+                                    self.index_path(acc), allow_mass_delete=allow_mass_delete)
+        self.job_account = acc
+        acc.last_try = datetime.now().isoformat(timespec="seconds")
         self._save()
-        self._launch(op)
-        self.win._log(_("Plesk: copia completa de {name}{auto}").format(
-            name=srv.label, auto=(" " + _("(automática)")) if auto else ""), C["accent2"])
-        if auto:
-            self.win._notify(_("Copia de Plesk"), _("Copiando {name}…").format(name=srv.label))
-        return True
-
-    def _restore(self):
-        b = self._chosen_backup()
-        if b is None or self.busy or not self.servers:
-            return
-        folder = os.path.basename(os.path.dirname(b.path))
-        default = self.server(self._selected) or next((s for s in self.servers if s.folder_name == folder), None)
-        dlg = PleskRestoreDialog(self.win, b, self.servers, default, self._password(folder))
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        srv = self.server(dlg.target_id)
-        if srv is None:
-            return
-        if dlg.mode == "server":
-            box = QMessageBox(QMessageBox.Icon.Warning, APP_NAME, "", parent=self.win)
-            box.setText(_("¿Restaurar todo {name} con la copia del {date}?").format(name=srv.label,
-                                                                                    date=short_stamp(b.when)))
-            box.setInformativeText(_("Las suscripciones, webs, bases de datos, correo y ajustes que hay ahora en el "
-                                     "servidor se sustituirán por los de la copia. No se puede deshacer desde aquí."))
-            box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
-            box.setDefaultButton(QMessageBox.StandardButton.Cancel)
-            if box.exec() != QMessageBox.StandardButton.Yes:
-                return
-        token = self.secrets.get(plesklink.token_key(srv.id))
-        if not token:
-            self.pair(srv.url, replace=srv)
-            return
-        password = dlg.password.text()
-        if password and not self._password(folder):
-            self.secrets.set(f"plesk/pw/{folder}", password)
-        op = plesklink.RestoreRun(srv, token, b, password, dlg.mode)
-        self._selected = srv.id
-        self._launch(op)
-        self.win._log(_("Plesk: restaurando en {name} la copia del {date} ({how})").format(
-            name=srv.label, date=short_stamp(b.when),
-            how=_("todo el servidor") if dlg.mode == "server" else _("al Gestor de copias")), C["accent2"])
-
-    def _launch(self, op: plesklink.Operation):
-        self.op = op
         self._finalized = False
         self._samples.clear()
-        op.on_change = lambda _op: self.op_changed.emit()
-        self.thread = threading.Thread(target=op.run, name=f"plesk-{op.kind}", daemon=True)
+        self.thread = threading.Thread(target=self.job.run, name="google-drive", daemon=True)
         self.thread.start()
         if self.win.awake_box.isChecked():
-            self.guard.start(_("{app_name}: copia de Plesk en curso ({name})").format(app_name=APP_NAME,
-                                                                                    name=op.server.label))
+            self.guard.start(_("{app_name}: copia de Google Drive en curso ({name})").format(app_name=APP_NAME,
+                                                                                           name=acc.email),
+                             None if engine.is_network(root) else root)
         self.timer.start()
+        self.win._log(_("Google Drive: copia de {email}{auto}").format(
+            email=acc.email, auto=(" " + _("(automática)")) if auto else ""), C["accent2"])
+        if auto:
+            self.win._notify(_("Copia de Google Drive"), _("Copiando {name}…").format(name=acc.email))
         self.refresh()
+        return True
 
     def _stop(self):
         if self.busy:
-            self.op.cancel()
+            self.job.cancel()
             self.b_stop.setEnabled(False)
 
     def stop_and_wait(self, timeout: float = 10.0):
         if self.busy:
-            self.op.cancel()
+            self.job.cancel()
             if self.thread:
                 self.thread.join(timeout=timeout)
         self.guard.stop()
 
     def _tick(self):
-        op = self.op
-        if op is None:
+        job = self.job
+        if job is None:
             self.timer.stop()
             return
-        now = time.monotonic()
-        if op.phase in ("download", "upload"):
-            self._samples.append((now, op.bytes_done))
+        if job.phase == "download":
+            self._samples.append((time.monotonic(), job.bytes_done))
         self._render()
-        if not op.running and not self._finalized:
-            self._finish(op)
+        if not job.running and not self._finalized:
+            self._finish(job)
 
     def _speed(self) -> float:
         if len(self._samples) < 2:
@@ -4458,223 +4464,176 @@ class PleskPage(QWidget):
         return (b1 - b0) / (t1 - t0) if t1 > t0 else 0.0
 
     def _render(self):
-        op = self.op
-        srv = self.server(self._selected)
-        mine = op is not None and srv is not None and op.server is srv
-        self.b_stop.setEnabled(bool(op and op.running and not op.stop.is_set()))
-        if mine and op.running:
-            elapsed = fmt_clock(time.monotonic() - op.started)
-            frac = op.bytes_done / op.bytes_total if op.bytes_total else 0.0
-            if op.phase == "connect":
-                title, text, bar = _("Conectando con {name}…").format(name=srv.label), "", None
-            elif op.phase in ("server", "restore"):
-                if op.phase == "server":
-                    title = _("Plesk está haciendo la copia completa del servidor")
-                else:
-                    title = (_("Plesk está restaurando el servidor") if getattr(op, "mode", "") == "server"
-                             else _("Plesk está añadiendo la copia a su Gestor de copias"))
-                # pleskbackup no cuenta su avance: lo que lleva escrito en el servidor y su registro
-                bar, facts = None, []
-                if op.prepared:
-                    facts.append(_("Preparado en el servidor: {size}").format(size=fmt_bytes(op.prepared)))
-                    if op.phase == "server" and srv.last_size:
-                        est = min(0.99, op.prepared / srv.last_size)
-                        facts.append(_("≈ {pct} según la copia anterior").format(pct=pct(est)))
-                        bar = est
-                text = "  ·  ".join(facts + [op.message or _("Preparando…")])
-            elif op.phase == "verify":
-                title = _("Comprobando el SHA-256")
-                text, bar = f"{fmt_bytes(op.bytes_done)} / {fmt_bytes(op.bytes_total)}", frac
-            else:
-                speed = self._speed()
-                left = (op.bytes_total - op.bytes_done) / speed if speed > 0 else None
-                title = _("Descargando la copia") if op.phase == "download" else _("Subiendo la copia al servidor")
-                text = "  ·  ".join(x for x in (
-                    f"{fmt_bytes(op.bytes_done)} / {fmt_bytes(op.bytes_total)}  ({pct(frac)})",
-                    fmt_speed(speed) if speed > 0 else "",
-                    _("quedan {t}").format(t=fmt_clock(left)) if left is not None else "",
-                    _("seguido desde {size}").format(size=fmt_bytes(op.resumed_from)) if op.resumed_from else "") if x)
-                bar = frac
-            self.banner.set("run", title, f"{text}\n" + _("Transcurrido {t}").format(t=elapsed), G.SYNC)
-            self.progress.setVisible(True)
-            if bar is None:
+        acc = self.account(self._selected)
+        job = self.job
+        mine = job is not None and acc is not None and self.job_account is acc
+        busy = self.busy
+        self.b_stop.setVisible(busy)
+        self.b_stop.setEnabled(bool(busy and not job.stop.is_set()))
+        self.b_copy.setVisible(not busy)
+        self.b_copy.setEnabled(acc is not None)
+        self.b_add.setEnabled(not busy)
+        self.b_disconnect.setVisible(acc is not None)
+        self.b_disconnect.setEnabled(acc is not None and not (busy and mine))
+        self.opts.setVisible(acc is not None)
+        folder = self.folder_of(acc) if acc else None
+        self.b_open.setEnabled(bool(folder and os.path.isdir(folder)))
+        if acc is None:
+            self.banner.hide()
+            self.progress.hide()
+            self.foot.setText("")
+            return
+        self.banner.show()
+        if mine and job.running:
+            elapsed = _("Transcurrido {t}").format(t=fmt_clock(time.monotonic() - job.started))
+            if job.phase in ("connect", "scan"):
+                self.banner.set("run", _("Recorriendo tu Google Drive"),
+                                _("{folders} carpetas · {files} archivos ({size})").format(
+                                    folders=fmt_int(job.folders_scanned), files=fmt_int(job.files_found),
+                                    size=fmt_bytes(job.bytes_found)) + "\n" + elapsed, G.SYNC)
                 self.progress.setRange(0, 0)
             else:
+                done, total = job.bytes_done, max(1, job.bytes_total)
+                speed = self._speed()
+                left = (total - done) / speed if speed > 0 else None
+                bits = [_("{done} de {total} archivos").format(done=fmt_int(job.files_done),
+                                                               total=fmt_int(len(job.to_get))),
+                        f"{fmt_bytes(done)} / {fmt_bytes(job.bytes_total)}"]
+                if speed > 0:
+                    bits.append(fmt_speed(speed))
+                if left is not None:
+                    bits.append(_("quedan {t}").format(t=fmt_clock(left)))
+                self.banner.set("run", _("Descargando de Google Drive"), "  ·  ".join(bits) + "\n" + elapsed, G.SYNC)
                 self.progress.setRange(0, 10000)
-                self.progress.setValue(int(bar * 10000))
+                self.progress.setValue(int(min(1.0, done / total) * 10000))
+            self.progress.show()
         else:
             self.progress.hide()
-            if op is not None and mine and not op.running:
-                self._result_banner(op)
-            elif srv is not None:
-                if srv.last_error and (not srv.last_ok or srv.last_try > srv.last_ok):
-                    self.banner.set("err", _("Falló la última copia ({when})").format(when=fmt_ago(srv.last_try)),
-                                    srv.last_error, G.ERROR)
-                elif srv.last_ok:
-                    nxt = self._next_text(srv)
-                    self.banner.set("ok", _("Última copia completa {when}").format(when=fmt_ago(srv.last_ok)),
-                                    _("{size} · comprobada con SHA-256").format(size=fmt_bytes(srv.last_size)) + nxt,
-                                    G.DONE)
-                else:
-                    self.banner.set("info", _("Listo para la primera copia"),
-                                    _("La copia completa la hace Plesk con «pleskbackup server»; después se descarga y "
-                                      "se comprueba aquí.") + self._next_text(srv), G.INFO)
-            elif self._selected.startswith("disk:"):
-                self.banner.set("info", _("Copias de un servidor que ya no está conectado"),
-                                _("Elige una y pulsa «Restaurar…» para subirla a uno de tus servidores Plesk."), G.INFO)
-            self.banner.setVisible(srv is not None or self._selected.startswith("disk:"))
-        self._update_actions()
+            if mine and not job.running:
+                self._result_banner(job)
+            elif acc.last_error and (not acc.last_ok or acc.last_try > acc.last_ok):
+                self.banner.set("err", _("Falló la última copia ({when})").format(when=fmt_ago(acc.last_try)),
+                                acc.last_error, G.ERROR)
+            elif acc.last_ok:
+                self.banner.set("ok", _("Última copia {when}").format(when=fmt_ago(acc.last_ok)),
+                                _("{files} archivos · {size}").format(files=fmt_int(acc.last_files),
+                                                                       size=fmt_bytes(acc.last_size))
+                                + self._next_text(acc), G.DONE)
+            else:
+                self.banner.set("info", _("Listo para la primera copia"),
+                                _("Marca abajo qué copiar y pulsa «Copiar ahora». La primera vez se descarga todo; "
+                                  "después, solo lo nuevo o cambiado.") + self._next_text(acc), G.INFO)
+        self.foot.setText(_("Copia en {path}").format(path=folder) if folder else
+                          _("Conecta el disco de copia para guardar o ver las copias."))
 
-    def _next_text(self, srv: plesklink.Server) -> str:
-        days = plesklink.SCHEDULE_DAYS.get(srv.schedule, 0)
+    def _next_text(self, acc: gdrive.Account) -> str:
+        days = gdrive.SCHEDULE_DAYS.get(acc.schedule, 0)
         if not days:
             return ""
         return "  ·  " + (_("copia automática cada día") if days == 1 else _("copia automática cada semana"))
 
-    def _result_banner(self, op: plesklink.Operation):
-        details = (_("Ver detalles"), lambda: self._show_details(op))
-        if op.phase == "done" and op.kind == "backup":
-            r = op.result
-            extra = _("  ·  quitadas {n} antiguas").format(n=len(op.pruned)) if getattr(op, "pruned", None) else ""
-            if op.warning:
-                self.banner.set("warn", _("Copia guardada con avisos de Plesk"),
-                                _("Plesk terminó con errores en algo concreto, pero hizo la copia: {warning}").format(
-                                    warning=op.warning) + "\n" + _("{size} · SHA-256 comprobado · {path}").format(
-                                    size=fmt_bytes(r.size), path=r.path), G.WARN, details)
-                return
-            self.banner.set("ok", _("Copia completa guardada"),
-                            _("{size} · SHA-256 comprobado · {path}").format(size=fmt_bytes(r.size), path=r.path) + extra,
-                            G.DONE, (_("Mostrar"), lambda: reveal_path(r.path)))
-        elif op.phase == "done":
-            if op.warning == "auth":
-                self.banner.set("warn", _("Restauración en marcha en Plesk"),
-                                _("La copia restaurada trae otras conexiones de la extensión, así que este ordenador ya no "
-                                  "puede seguirla. Mira el resultado en Plesk y, si hace falta, vuelve a conectarlo."),
-                                G.WARN, (_("Abrir Plesk"), lambda: QDesktopServices.openUrl(QUrl(op.server.url))))
-            elif getattr(op, "mode", "") == "server":
-                self.banner.set("ok", _("Servidor restaurado"),
-                                _("Plesk terminó la restauración. Revisa en el panel que todo está como esperabas."),
-                                G.DONE, (_("Abrir Plesk"), lambda: QDesktopServices.openUrl(QUrl(op.server.url))))
-            else:
-                self.banner.set("ok", _("Copia subida a Plesk"),
-                                _("Está en Herramientas y configuración → Gestor de copias de seguridad. Elige allí qué "
-                                  "restaurar."),
-                                G.DONE, (_("Abrir Plesk"), lambda: QDesktopServices.openUrl(QUrl(op.server.url))))
-        elif op.phase == "cancelled":
-            self.banner.set("warn", _("Detenido"), _("No se ha cambiado nada en el disco de copia. Lo ya descargado se "
-                                                     "aprovecha la próxima vez.") if op.kind == "backup"
-                            else _("La copia no se ha restaurado."), G.WARN)
+    def _result_banner(self, job: gdrive.DriveSync):
+        details = (_("Ver detalles"), lambda: self._show_details(job))
+        if job.phase == "done" and job.held:
+            self.banner.set("warn", _("Copia hecha, pero no se ha apartado nada de lo borrado"),
+                            _("Han desaparecido de Google Drive {n} archivos de golpe. Por si fue un error (un permiso "
+                              "retirado, una unidad que ya no ves), siguen en el disco. Si lo borraste tú, apártalos a "
+                              "versiones.").format(n=fmt_int(len(job.held))), G.WARN,
+                            (_("Apartarlos a versiones"), lambda: self.start(self.job_account.id, allow_mass_delete=True)))
+        elif job.phase == "done":
+            parts = [_("{n} nuevos o cambiados").format(n=fmt_int(job.files_done)),
+                     _("{n} iguales").format(n=fmt_int(job.unchanged))]
+            if job.versioned:
+                parts.append(_("{n} a versiones").format(n=fmt_int(job.versioned)))
+            if job.errors or job.skipped:
+                parts.append(_("{n} sin copiar").format(n=fmt_int(len(job.errors) + len(job.skipped))))
+            self.banner.set("warn" if job.errors else "ok",
+                            _("Copia de Google Drive terminada") if not job.errors
+                            else _("Copia terminada con archivos que no se pudieron copiar"),
+                            "  ·  ".join(parts), G.WARN if job.errors else G.DONE,
+                            details if job.errors or job.skipped else None)
+        elif job.phase == "cancelled":
+            self.banner.set("warn", _("Detenido"), _("Lo ya descargado se queda; la próxima vez sigue donde iba."),
+                            G.WARN)
         else:
-            err = op.error
-            action = details if op.log or op.activity else None
-            if err and err.kind in ("auth", "cert"):
-                action = (_("Volver a conectar…"), lambda: self.pair(op.server.url, replace=op.server))
-            self.banner.set("err", _("No se pudo copiar el servidor") if op.kind == "backup"
-                            else _("No se pudo restaurar"), plesk_error_text(err), G.ERROR, action)
+            err = job.error
+            action = details if job.errors else None
+            if err and err.kind in ("auth", "noclient"):
+                action = (_("Volver a conectar…"), self.connect_account)
+            self.banner.set("err", _("No se pudo copiar Google Drive"), drive_error_text(err), G.ERROR, action)
 
-    def _show_details(self, op: plesklink.Operation):
-        """Lo que contó Plesk: su registro propio (PMM) y la salida de su herramienta, para saber qué pasó."""
+    def _show_details(self, job: gdrive.DriveSync):
+        reasons = {"google": _("formulario, sitio o mapa de Google: no tiene archivo"),
+                   "shortcut": _("acceso directo: se copia el original si está marcado")}
+        lines = []
+        if job.errors:
+            lines += ["── " + _("No se pudieron copiar") + " ──"] + [f"{rel}  ·  {msg}" for rel, msg in job.errors] + [""]
+        if job.skipped:
+            lines += ["── " + _("Omitidos") + " ──"] + [f"{rel}  ·  {reasons.get(why, why)}" for rel, why in job.skipped]
         dlg = QDialog(self.win)
         dlg.setWindowTitle(APP_NAME)
         dlg.setWindowIcon(app_icon())
-        dlg.resize(900, 560)
+        dlg.resize(860, 520)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(22, 20, 22, 18)
-        lay.setSpacing(10)
-        title = QLabel(_("Lo que contó Plesk"))
-        title.setObjectName("h1")
-        lay.addWidget(title)
-        hint = QLabel(_("Su registro completo está en el servidor, en /var/log/plesk/PMM/ (la carpeta backup-… o "
-                        "restore-… de esta fecha), y en la página de la extensión."))
-        hint.setObjectName("muted")
-        hint.setWordWrap(True)
-        lay.addWidget(hint)
-        text = []
-        if op.error:
-            text += [plesk_error_text(op.error), ""]
-        if op.warning and op.warning != "auth":
-            text += [op.warning, ""]
-        if op.activity:
-            text += ["── " + _("Registro de Plesk (PMM)") + " ──"] + op.activity + [""]
-        if op.log:
-            text += ["── " + _("Salida de la herramienta de Plesk") + " ──"] + op.log
-        box = QPlainTextEdit("\n".join(text))
+        box = QPlainTextEdit("\n".join(lines))
         box.setReadOnly(True)
         box.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         lay.addWidget(box, 1)
         row = QHBoxLayout()
         row.addStretch(1)
-        b_copy = QPushButton("  " + _("Copiar"))
-        b_copy.setIcon(glyph_icon(G.COPY, C["text"], 14))
-        b_copy.clicked.connect(lambda: QApplication.clipboard().setText(box.toPlainText()))
-        b_close = QPushButton(_("Cerrar"))
-        b_close.setObjectName("primary")
-        b_close.clicked.connect(dlg.accept)
-        for b in (b_copy, b_close):
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            row.addWidget(b)
+        b = QPushButton(_("Cerrar"))
+        b.setObjectName("primary")
+        b.clicked.connect(dlg.accept)
+        row.addWidget(b)
         lay.addLayout(row)
         set_dark_titlebar(dlg)
         dlg.exec()
 
-    def _finish(self, op: plesklink.Operation):
+    def _finish(self, job: gdrive.DriveSync):
         self._finalized = True
         self.timer.stop()
         self.guard.stop()
-        srv = op.server
-        name = srv.label
-        if op.phase == "done":
-            if op.kind == "backup":
-                self.win._log(_("Plesk: copia de {name} guardada ({size}, SHA-256 comprobado) en {path}").format(
-                    name=name, size=fmt_bytes(op.result.size), path=op.result.path), C["ok"])
-                for b in getattr(op, "pruned", []):
-                    self.win._log(_("Plesk: quitada la copia antigua {path}").format(path=b.path), C["muted"])
-                self.win._notify(_("Copia de Plesk terminada"), _("{name}: {size} guardados en el disco de copia.").format(
-                    name=name, size=fmt_bytes(op.result.size)))
-            else:
-                self.win._log(_("Plesk: restauración en {name} terminada").format(name=name), C["ok"])
-                self.win._notify(_("Restauración de Plesk terminada"), name)
-        elif op.phase == "failed":
-            text = plesk_error_text(op.error)
-            if op.kind == "backup":
-                srv.last_error = text
-            self.win._log(_("Plesk: {name}: {text}").format(name=name, text=text), C["err"])
-            for line in (op.activity or op.log)[-15:]:
-                self.win._log("    " + line, C["muted"])
-            self.win._notify(_("Copia de Plesk") if op.kind == "backup" else _("Restauración de Plesk"),
-                             f"{name}: {text}")
+        acc = self.job_account
+        if job.phase == "done":
+            acc.last_ok = datetime.now().isoformat(timespec="seconds")
+            acc.last_error = ""
+            acc.last_files = job.files_found
+            acc.last_size = job.bytes_found
+            self.win._log(_("Google Drive: {email}: {n} nuevos o cambiados, {same} iguales, {v} a versiones").format(
+                email=acc.email, n=fmt_int(job.files_done), same=fmt_int(job.unchanged), v=fmt_int(job.versioned)),
+                C["ok"])
+            for rel, msg in job.errors[:20]:
+                self.win._log(f"    {rel}: {msg}", C["warn"])
+            self.win._notify(_("Copia de Google Drive terminada"), acc.email)
+        elif job.phase == "failed":
+            acc.last_error = drive_error_text(job.error)
+            self.win._log(_("Google Drive: {email}: {text}").format(email=acc.email, text=acc.last_error), C["err"])
+            self.win._notify(_("Copia de Google Drive"), f"{acc.email}: {acc.last_error}")
         else:
-            self.win._log(_("Plesk: {name}: detenido").format(name=name), C["warn"])
+            self.win._log(_("Google Drive: {email}: detenido").format(email=acc.email), C["warn"])
         self._save()
         self.refresh()
-        self.refresh_summary()
         QTimer.singleShot(5000, self.check_due)
 
-    # ── copias automáticas ──
-    def due(self, srv: plesklink.Server, now: datetime | None = None) -> bool:
-        days = plesklink.SCHEDULE_DAYS.get(srv.schedule, 0)
+    # ── automáticas ──
+    def due(self, acc: gdrive.Account, now: datetime | None = None) -> bool:
+        days = gdrive.SCHEDULE_DAYS.get(acc.schedule, 0)
         if not days:
             return False
         now = now or datetime.now()
-        last = reminders.parse_time(srv.last_ok)
-        tried = reminders.parse_time(srv.last_try)
+        last = reminders.parse_time(acc.last_ok)
+        tried = reminders.parse_time(acc.last_try)
         if tried and (now - tried) < timedelta(hours=2):
-            return False  # tras un fallo, no se reintenta enseguida
+            return False
         return last is None or (now - last) >= timedelta(days=days) - timedelta(hours=2)
 
     def check_due(self):
         if self.busy or not self.disk_root():
             return
-        for srv in self.servers:
-            if self.due(srv) and self.start_backup(srv.id, auto=True):
+        for acc in self.accounts:
+            if self.due(acc) and self.start(acc.id, auto=True):
                 return
-
-    def summary(self) -> str:
-        if not self.servers:
-            return _("Ningún servidor conectado")
-        if self.busy:
-            return _("Copiando {name}…").format(name=self.op.server.label)
-        return _n("{n} servidor conectado", "{n} servidores conectados", len(self.servers)).format(n=len(self.servers))
 
 
 CURRENT_VERSION = os.environ.get("DEVBACKUP_PRETEND_VERSION") or APP_VERSION  # para probar el actualizador
@@ -5815,6 +5774,13 @@ class MainWindow(QMainWindow):
         self._bar_target: str | None = None
 
         self._load_settings()
+        self.vault = vault.Secrets(os.path.join(DATA_DIR, "secretos.json"))
+        if self.settings.contains("plesk_servers"):
+            self.settings.remove("plesk_servers")
+        try:
+            os.remove(os.path.join(DATA_DIR, "plesk.json"))
+        except OSError:
+            pass
         self._build()
         self._apply_settings()
         self.timer = QTimer(self)
@@ -6281,6 +6247,29 @@ class MainWindow(QMainWindow):
         self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_update.clicked.connect(lambda: self._check_updates(manual=True))
         upd.body.addWidget(self.btn_update)
+
+        gds = section("gdrive", "Google Drive", G.GLOBE)
+        link = html.escape(_("Cómo conseguirlo"))
+        hint = QLabel(html.escape(_("Para conectar cuentas de Google Drive hace falta tu propio ID de cliente de Google "
+                                    "(OAuth, tipo «App de escritorio»). Se crea gratis una vez en Google Cloud."))
+                      + f" <a href='{GDRIVE_GUIDE_URL}' style='color:{C['accent2']}; text-decoration:none'>{link}</a>")
+        hint.setObjectName("faint")
+        hint.setWordWrap(True)
+        hint.setOpenExternalLinks(True)
+        gds.body.addWidget(hint)
+        self.gd_client_id = QLineEdit()
+        self.gd_client_id.setPlaceholderText(_("ID de cliente (…apps.googleusercontent.com)"))
+        self.gd_client_secret = QLineEdit()
+        self.gd_client_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self.gd_client_secret.setPlaceholderText(_("Secreto del cliente"))
+        for w in (self.gd_client_id, self.gd_client_secret):
+            w.editingFinished.connect(self._save_gdrive_client)
+            gds.body.addWidget(w)
+        self.gd_client_status = QLabel("")
+        self.gd_client_status.setObjectName("faint")
+        self.gd_client_status.setWordWrap(True)
+        gds.body.addWidget(self.gd_client_status)
+        self._load_gdrive_client()
         lay.addStretch(1)
 
         folded = self._cfg.get("folded")
@@ -6296,6 +6285,44 @@ class MainWindow(QMainWindow):
         scroll.setWidget(inner)
         self.sidebar = inner
         return scroll
+
+    # ── Google Drive: el ID de cliente ───────────────────────────────────
+    def _load_gdrive_client(self):
+        """Los campos de la barra lateral, con lo guardado (también tras cambiarlo en «Conectar cuenta»)."""
+        for w in (self.gd_client_id, self.gd_client_secret):
+            w.blockSignals(True)
+        own = str(self.settings.value("gdrive_client_id", "") or "")
+        self.gd_client_id.setText(own)
+        self.gd_client_secret.setText(self.vault.get("gdrive/client_secret") if own else "")
+        for w in (self.gd_client_id, self.gd_client_secret):
+            w.blockSignals(False)
+        self._gdrive_client_status()
+
+    def _gdrive_client_status(self, note: str = ""):
+        own = str(self.settings.value("gdrive_client_id", "") or "")
+        text = (_("Listo: se usa tu ID de cliente.") if own else
+                _("Aún sin ID de cliente: escríbelo para poder conectar cuentas."))
+        self.gd_client_status.setText(text + (f" {note}" if note else ""))
+        self._refresh_summaries()
+
+    def _save_gdrive_client(self):
+        cid, secret = self.gd_client_id.text().strip(), self.gd_client_secret.text().strip()
+        old_id = str(self.settings.value("gdrive_client_id", "") or "")
+        old_secret = self.vault.get("gdrive/client_secret") if old_id else ""
+        if (cid, secret if cid else "") == (old_id, old_secret):
+            return
+        self.settings.setValue("gdrive_client_id", cid)
+        self.vault.set("gdrive/client_secret", secret if cid else "")
+        self.settings.sync()
+        note = ""
+        if hasattr(self, "gdrive"):
+            self.gdrive.client_changed()
+            if self.gdrive.accounts:
+                # Google ata cada llave al ID con el que se creó
+                note = _("Vuelve a conectar tus cuentas de Google Drive: las llaves se crearon con el ID anterior.")
+        self._gdrive_client_status(note)
+        if hasattr(self, "gdrive"):
+            self.gdrive.setup.refresh()
 
     # ── idioma ───────────────────────────────────────────────────────────
     def _on_language_changed(self):
@@ -6373,6 +6400,9 @@ class MainWindow(QMainWindow):
         sec["idioma"].set_summary(_("Automático · {name}").format(name=name) if choice == "auto" else name)
         sec["actualizaciones"].set_summary(f"v{APP_VERSION}  ·  " + (_("automáticas") if self.update_box.isChecked()
                                                                        else _("solo a mano")))
+        if "gdrive" in sec:
+            own = bool(self.settings.value("gdrive_client_id", "") or "")
+            sec["gdrive"].set_summary(_("Con tu ID de cliente") if own else _("Sin ID de cliente"))
 
     def _build_main(self) -> QVBoxLayout:
         col = QVBoxLayout()
@@ -6396,13 +6426,13 @@ class MainWindow(QMainWindow):
             self.seg_group.addButton(b, i)
             self.seg_buttons.append(b)
             sl.addWidget(b)
-        b = QPushButton("  Plesk")
+        b = QPushButton("  Google Drive")
         b.setObjectName("seg")
         b.setCheckable(True)
         b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.setIcon(plesk_icon(14))
-        b.setToolTip(_("Copias completas de tus servidores Plesk"))
-        self.seg_group.addButton(b, PAGE_PLESK)
+        b.setIcon(gdrive_icon(14))
+        b.setToolTip(_("Copia de tu Google Drive en el disco de copia"))
+        self.seg_group.addButton(b, PAGE_GDRIVE)
         self.seg_buttons.append(b)
         sl.addWidget(b)
         top.addWidget(seg)
@@ -6421,11 +6451,11 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self._build_issues_page())
         self.recover = RecoverPage(self)
         self.stack.addWidget(self.recover)
-        self.plesk = PleskPage(self)
-        self.stack.addWidget(self.plesk)
+        self.gdrive = GDrivePage(self)
+        self.stack.addWidget(self.gdrive)
         self.seg_group.idClicked.connect(self.stack.setCurrentIndex)
         self.stack.currentChanged.connect(lambda i: self.recover.show_page() if i == PAGE_RECOVER else None)
-        self.stack.currentChanged.connect(lambda i: self.plesk.refresh() if i == PAGE_PLESK else None)
+        self.stack.currentChanged.connect(lambda i: self.gdrive.refresh() if i == PAGE_GDRIVE else None)
         self.keep_combo.currentIndexChanged.connect(lambda *_a: self.recover.mark_stale())
         self.seg_buttons[PAGE_TREE].setChecked(True)
         col.addWidget(self.stack, 1)
@@ -7014,8 +7044,8 @@ class MainWindow(QMainWindow):
             self._invalidate_plan()
             self._save_settings()
         self._refresh_disk_status()
-        self.plesk.refresh()
-        QTimer.singleShot(30_000, self.plesk.check_due)  # copias de Plesk pendientes, sin pisar el aviso del disco
+        self.gdrive.refresh()
+        QTimer.singleShot(30_000, self.gdrive.check_due)  # copias de Drive pendientes, sin pisar el aviso del disco
         if self._state in RUNNING or (self.dialog and self.dialog.isVisible()):
             return
         action = self.connect_combo.currentData()
@@ -7110,8 +7140,8 @@ class MainWindow(QMainWindow):
         self._invalidate_plan()
         if hasattr(self, "recover"):
             self.recover.mark_stale()
-        if hasattr(self, "plesk"):
-            self.plesk.refresh()
+        if hasattr(self, "gdrive"):
+            self.gdrive.refresh()
         if hasattr(self, "cloud_state"):
             self._check_cloud()
 
@@ -8459,14 +8489,15 @@ class MainWindow(QMainWindow):
             self.job.cancel()
             if self.job_thread:
                 self.job_thread.join(timeout=15)
-        if self.plesk.busy:
-            ans = QMessageBox.question(self, APP_NAME, _("Hay una copia o restauración de Plesk en curso. ¿Detenerla y "
-                                                         "salir?\n\nLo ya descargado se aprovecha la próxima vez."))
+        if self.gdrive.busy:
+            ans = QMessageBox.question(self, APP_NAME, _("Hay una copia de Google Drive en curso. ¿Detenerla y salir?"
+                                                         "\n\nLo ya descargado se queda; la próxima vez sigue donde "
+                                                         "iba."))
             if ans != QMessageBox.StandardButton.Yes:
                 self._quitting = False
                 event.ignore()
                 return
-        self.plesk.stop_and_wait()
+        self.gdrive.stop_and_wait()
         self._guard_stop()
         if self.tray:
             self.tray.hide()
@@ -8600,7 +8631,7 @@ class MainWindow(QMainWindow):
             self.job.cancel()
             if self.job_thread:
                 self.job_thread.join(timeout=4)
-        self.plesk.stop_and_wait(timeout=4)
+        self.gdrive.stop_and_wait(timeout=4)
         self._guard_stop()
 
     def _allow_quit(self) -> bool:
@@ -8616,13 +8647,14 @@ class MainWindow(QMainWindow):
                 self.job.cancel()
                 if self.job_thread:
                     self.job_thread.join(timeout=15)
-            if IS_MAC and self.plesk.busy:
+            if IS_MAC and self.gdrive.busy:
                 self._show_window()
-                ans = QMessageBox.question(self, APP_NAME, _("Hay una copia o restauración de Plesk en curso. ¿Detenerla "
-                                                             "y salir?\n\nLo ya descargado se aprovecha la próxima vez."))
+                ans = QMessageBox.question(self, APP_NAME, _("Hay una copia de Google Drive en curso. ¿Detenerla y "
+                                                             "salir?\n\nLo ya descargado se queda; la próxima vez sigue "
+                                                             "donde iba."))
                 if ans != QMessageBox.StandardButton.Yes:
                     return False
-                self.plesk.stop_and_wait()
+                self.gdrive.stop_and_wait()
             self._quitting = True
         return True
 
@@ -8692,157 +8724,129 @@ def install_crash_log() -> None:
     threading.excepthook = lambda a: hook(a.exc_type, a.exc_value, a.exc_traceback)
 
 
-def selftest_plesk(win: "MainWindow", say) -> None:
-    """Copias de Plesk contra una imitación de la API de la extensión (en CI no hay Plesk ni PHP):
-    emparejar, copiar con un corte a mitad de descarga, conservar N, restaurar, la carpeta PLESK con su
-    icono y que la sincronización espejo no la toque."""
+def selftest_gdrive(win: "MainWindow", say) -> None:
+    """Google Drive contra una imitación de su API (en CI no hay cuenta de Google): copia con un corte a
+    mitad, Documentos exportados, nombres repetidos, carpeta desmarcada, cambios a versiones, y que la
+    sincronización espejo no toque GOOGLE DRIVE (ni PLESK, de versiones anteriores) en la raíz del disco."""
     import http.server
 
-    state = {"jobs": {}, "uploads": {}, "devices": set(), "calls": []}
-    payload = os.urandom(3_000_000)
+    files = {
+        "p": ("Proyectos", gdrive.FOLDER, "root", b""), "a": ("a.txt", "text/plain", "p", b"hola"),
+        "b": ("grande.bin", "application/octet-stream", "p", os.urandom(600_000)),
+        "d1": ("dup.txt", "text/plain", "p", b"uno"), "d2": ("dup.txt", "text/plain", "p", b"dos"),
+        "doc": ("Informe", "application/vnd.google-apps.document", "p", b""),
+        "f": ("Fotos", gdrive.FOLDER, "root", b""), "x": ("x.jpg", "image/jpeg", "f", b"jpg"),
+    }
+    cut = {"b"}
 
     class Fake(http.server.BaseHTTPRequestHandler):
         def log_message(self, *_a):
             pass
 
         def _json(self, data, status=200):
-            raw = json.dumps({**data, "protocol": plesklink.PROTOCOL}).encode()
+            raw = json.dumps(data).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
             self.wfile.write(raw)
 
-        def _route(self):
-            from urllib.parse import parse_qs, urlsplit
+        def do_POST(self):  # noqa: N802
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            self._json({"access_token": "at", "refresh_token": "rt", "expires_in": 3600})
+
+        def do_GET(self):  # noqa: N802
+            from urllib.parse import parse_qsl, urlsplit
             u = urlsplit(self.path)
-            q = {k: v[0] for k, v in parse_qs(u.query).items()}
-            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
-            a = q.get("a")
-            state["calls"].append(a)
-            if u.path != plesklink.API_PATH:
-                return self._json({}, 404)
-            if a == "pair":
-                if json.loads(body)["code"] != "123456":
-                    return self._json({"error": "code"}, 403)
-                state["devices"].add("t" * 64)
-                return self._json({"token": "t" * 64, "device": "d1", "server": {"hostname": "plesk.test",
-                                                                                  "plesk_version": "18.0.70"}})
-            if self.headers.get("X-DBS-Token") not in state["devices"]:
-                return self._json({"error": "auth"}, 401)
-            if a == "info":
-                return self._json({"server": {"hostname": "plesk.test", "plesk_version": "18.0.70"}})
-            if a == "backup":
-                jid = uuid_hex()
-                state["jobs"][jid] = {"id": jid, "kind": "backup", "state": "done", "size": len(payload),
-                                      "sha256": hashlib.sha256(payload).hexdigest(), "log": ["Backup finished"]}
-                return self._json({"job": state["jobs"][jid]})
-            if a == "job":
-                return self._json({"job": state["jobs"][q["id"]]})
-            if a == "download":
-                start = int((self.headers.get("Range") or "bytes=0-")[6:].rstrip("-"))
-                cut = state.pop("cut", None)  # la primera descarga se corta a mitad
-                data = payload[start:]
-                self.send_response(206 if start else 200)
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data[:cut] if cut else data)
-                if cut:
-                    self.close_connection = True
-                return None
-            if a in ("release", "cancel"):
-                state["jobs"].pop(q["id"], None)
-                return self._json({})
-            if a == "upload_start":
-                meta = json.loads(body)
-                state["uploads"]["u1"] = {"meta": meta, "data": b""}
-                return self._json({"upload": {"id": "u1", "received": 0}})
-            if a == "upload_chunk":
-                up = state["uploads"][q["id"]]
-                if int(q["offset"]) == len(up["data"]):
-                    up["data"] += body
-                return self._json({"upload": {"id": "u1", "received": len(up["data"])}})
-            if a == "restore":
-                req = json.loads(body)
-                up = state["uploads"][req["upload"]]
-                ok = hashlib.sha256(up["data"]).hexdigest() == up["meta"]["sha256"]
-                state["restored"] = (req["mode"], ok)
-                state["jobs"]["r1"] = {"id": "r1", "kind": "restore", "state": "done" if ok else "failed"}
-                return self._json({"job": state["jobs"]["r1"]})
-            return self._json({"error": "server"}, 400)
-
-        do_GET = do_POST = _route
-
-    def uuid_hex() -> str:
-        return os.urandom(16).hex()
+            q = dict(parse_qsl(u.query))
+            if u.path.endswith("/about"):
+                return self._json({"user": {"emailAddress": "prueba@example.com", "permissionId": "p1"}})
+            if u.path.endswith("/drives"):
+                return self._json({"drives": []})
+            if u.path.endswith("/files"):
+                parent = q.get("q", "").split("'")[1] if "in parents" in q.get("q", "") else ""
+                out = []
+                for fid, (name, mime, par, data) in files.items():
+                    if par == parent:
+                        meta = {"id": fid, "name": name, "mimeType": mime, "modifiedTime": "2026-11-01T10:00:00Z"}
+                        if not mime.startswith("application/vnd.google-apps."):
+                            meta.update(size=str(len(data)), md5Checksum=hashlib.md5(data).hexdigest())
+                        out.append(meta)
+                return self._json({"files": out})
+            fid = u.path.split("/files/")[1].split("/")[0]
+            name, mime, _par, data = files[fid]
+            if u.path.endswith("/export"):
+                data = b"EXPORT " + q["mimeType"].encode()
+            start = int((self.headers.get("Range") or "bytes=0-")[6:].rstrip("-"))
+            body = data[start:]
+            self.send_response(206 if start else 200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if fid in cut:
+                cut.discard(fid)
+                self.wfile.write(body[: len(body) // 2])
+                self.close_connection = True
+                return
+            self.wfile.write(body)
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fake)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    url = plesklink.normalize_url(f"http://127.0.0.1:{server.server_address[1]}")
-    saved_poll, plesklink.POLL_S = plesklink.POLL_S, 0.05
+    base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
         with tempfile.TemporaryDirectory() as vol:
-            try:
-                plesklink.pair(url, "000000", "PC")
-                raise AssertionError("Plesk: aceptó un código erróneo")
-            except plesklink.PleskError as exc:
-                assert exc.kind == "code", exc.kind
-            for kind in ("code", "unreachable", "cert", "auth", "noext", "old", "busy", "running", "server", "space",
-                         "serverspace", "serverfull", "signature", "verify", "missing", "cancelled", "otro"):
-                for detail in ("", "[WinError 10061] rechazada", "1234567"):
-                    assert plesk_error_text(plesklink.PleskError(kind, detail)), f"Plesk: sin texto para {kind}"
-            srv, token = plesklink.pair(url, "123 456", "PC")
-            assert srv.label == "plesk.test" and token == "t" * 64, "Plesk: emparejar"
-            folder = os.path.join(plesklink.plesk_root(vol), srv.folder_name)
-            state["cut"] = 1_000_000
-            op = plesklink.BackupRun(srv, token, "clave", folder, keep=2)
-            op.run()
-            assert op.phase == "done", f"Plesk: copia {op.phase} {op.error}"
-            with open(op.result.path, "rb") as fh:
-                assert fh.read() == payload, "Plesk: la copia descargada no es igual"
-            assert "release" in state["calls"] and not state["jobs"], "Plesk: no se borró del servidor"
-            for i in range(2):
-                time.sleep(1.05)
-                again = plesklink.BackupRun(srv, token, "clave", folder, keep=2)
-                again.run()
-                assert again.phase == "done", again.error
-            kept = plesklink.list_backups(folder)
-            assert len(kept) == 2 and kept[0].sha256 == hashlib.sha256(payload).hexdigest(), "Plesk: conservar 2"
+            drive = gdrive.Drive("rt", "cid", "secreto", api=base + "/drive/v3", token_url=base + "/token")
+            acc = gdrive.Account(id="p1", email="prueba@example.com", excluded=["f"])
+            folder = os.path.join(gdrive.gdrive_root(vol), acc.folder_name)
+            idx = os.path.join(vol, "_estado", "gd.json")
+
+            def run():
+                job = gdrive.DriveSync(acc, drive, folder, vol, idx)
+                job.run()
+                assert job.phase == "done", f"Google Drive: {job.phase} {job.error} {job.errors}"
+                return job
+
+            j = run()
+            my = os.path.join(folder, gdrive.MY_DRIVE, "Proyectos")
+            with open(os.path.join(my, "grande.bin"), "rb") as fh:
+                assert fh.read() == files["b"][3], "Google Drive: el archivo cortado a mitad no quedó entero"
+            names = sorted(os.listdir(my))
+            assert "Informe.docx" in names and len([n for n in names if n.startswith("dup")]) == 2, names
+            assert not os.path.exists(os.path.join(folder, gdrive.MY_DRIVE, "Fotos")), "Google Drive: copió lo desmarcado"
+            assert run().files_done == 0, "Google Drive: volvió a bajar lo que no cambió"
+            time.sleep(1.1)
+            files["a"] = ("a.txt", "text/plain", "p", b"hola cambiado")
+            del files["d2"]
+            j = run()
+            assert j.files_done == 1 and j.versioned == 2, f"Google Drive: {j.files_done} bajados, {j.versioned} a versiones"
             if IS_WIN:
-                root = plesklink.plesk_root(vol)
-                assert os.path.exists(os.path.join(root, "desktop.ini")), "Plesk: carpeta sin icono"
-                assert ctypes.windll.kernel32.GetFileAttributesW(root) & 0x1, "Plesk: desktop.ini no se aplicará"
-            rest = plesklink.RestoreRun(srv, token, kept[0], "clave", "server")
-            rest.run()
-            assert rest.phase == "done" and state.get("restored") == ("server", True), f"Plesk: restaurar {rest.error}"
-            # la sincronización espejo con el destino en la raíz del disco no toca la carpeta PLESK
+                gdrive.ensure_folder(gdrive.gdrive_root(vol))
+                assert os.path.exists(os.path.join(gdrive.gdrive_root(vol), "desktop.ini")), "GOOGLE DRIVE sin icono"
+            # la sincronización espejo con el destino en la raíz del disco no toca GOOGLE DRIVE ni PLESK
+            os.makedirs(os.path.join(vol, "PLESK", "srv"))
+            with open(os.path.join(vol, "PLESK", "srv", "copia.tar"), "wb") as fh:
+                fh.write(b"tar")
             with tempfile.TemporaryDirectory() as side:
                 src, meta = os.path.join(side, "src"), os.path.join(side, "meta")
-                os.makedirs(os.path.join(src, "PLESK"))
+                os.makedirs(os.path.join(src, "GOOGLE DRIVE"))
                 os.makedirs(meta)
                 with open(os.path.join(src, "a.txt"), "w") as fh:
                     fh.write("a")
-                with open(os.path.join(src, "PLESK", "otro.txt"), "w") as fh:
+                with open(os.path.join(src, "GOOGLE DRIVE", "otro.txt"), "w") as fh:
                     fh.write("no se copia encima")
                 job = engine.BackupJob(src, vol, [], [], meta_root=meta, scrub_seconds=0)
                 job.dst_is_root = True
                 job.allow_mass_delete = True
                 job.run()
-                assert job.phase == "done" and len(plesklink.list_backups(folder)) == 2, "Plesk: la sincronización tocó PLESK"
-                assert not os.path.exists(os.path.join(folder, "..", "otro.txt")), "Plesk: se copió encima de PLESK"
-                assert os.path.exists(os.path.join(vol, "a.txt")), "Plesk: la sincronización no copió"
-            # la página: conectar y quitar
-            page = win.plesk
-            before = list(page.servers)
-            page.servers.append(srv)
-            page.refresh()
-            assert page.list.count() >= 1 and page.summary()
-            page.servers[:] = before
-            page.refresh()
-        say("  Plesk: emparejar con código, copia con corte a mitad y SHA-256, conservar 2, restaurar, "
-            "carpeta PLESK con icono y a salvo de la sincronización")
+                assert job.phase == "done" and os.path.exists(os.path.join(my, "grande.bin")), "la sincronización tocó GOOGLE DRIVE"
+                assert os.path.exists(os.path.join(vol, "PLESK", "srv", "copia.tar")), "la sincronización tocó PLESK"
+                assert not os.path.exists(os.path.join(gdrive.gdrive_root(vol), "otro.txt")), "se copió encima de GOOGLE DRIVE"
+            for kind in ("noclient", "auth", "denied", "unreachable", "quota", "server", "space", "cancelled", "otro"):
+                for detail in ("", "texto", "1234567"):
+                    assert drive_error_text(gdrive.DriveError(kind, detail)), f"Google Drive: sin texto para {kind}"
+            win.gdrive.refresh()
+        say("  Google Drive: copia con corte a mitad y MD5, Documentos a Office, nombres repetidos, carpeta "
+            "desmarcada, cambios a versiones, GOOGLE DRIVE y PLESK a salvo de la sincronización")
     finally:
-        plesklink.POLL_S = saved_poll
         server.shutdown()
 
 
@@ -9007,7 +9011,7 @@ def selftest() -> int:
         win._refresh_disk_status()
         say("  interfaz: construida")
         # los diálogos se cierran (QDialog.done) sin errores: ningún atributo tapa sus métodos
-        for cls in (PairDialog, ConnectDialog, UpdateDialog):
+        for cls in (PairDialog, ConnectDialog, UpdateDialog, GDriveConnectDialog):
             clash = [n for n in vars(cls) if n in ("done", "accept", "reject", "exec", "open", "result")
                      and isinstance(vars(cls)[n], pyqtSignal)]
             assert not clash, f"{cls.__name__}: {clash} tapa un método de QDialog"
@@ -9144,7 +9148,7 @@ def selftest() -> int:
         pair.accept()  # pasa por QDialog.done(): si algo lo tapa, el resultado no cambia
         assert pair.result() == QDialog.DialogCode.Accepted, "el diálogo «Conectar con mi nube» no se cierra"
         say("  conectar con la nube: el diálogo abre y se cierra")
-        selftest_plesk(win, say)
+        selftest_gdrive(win, say)
         if IS_LINUX:
             # montaje con GVFS: un «gio» de mentira con las mismas preguntas que el de verdad
             with tempfile.TemporaryDirectory() as fake:

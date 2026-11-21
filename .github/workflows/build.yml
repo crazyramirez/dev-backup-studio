@@ -65,7 +65,7 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --windowed --name "DEV Backup Studio" \
             --icon assets/icon.ico --version-file build/version_info.txt \
-            --add-data "assets/tour:assets/tour" --add-data "assets/plesk:assets/plesk" --add-data "locales:locales" backup_studio.py
+            --add-data "assets/tour:assets/tour" --add-data "assets/gdrive:assets/gdrive" --add-data "locales:locales" backup_studio.py
 
       - name: Autoprueba de la app (Windows)
         if: runner.os == 'Windows'
@@ -114,7 +114,7 @@ jobs:
           version="${{ steps.version.outputs.version }}"
           pyinstaller --noconfirm --clean --windowed --name "DEV Backup Studio" \
             --icon assets/icon.png --osx-bundle-identifier com.crazyramirez.devbackupstudio \
-            --add-data "assets/tour:assets/tour" --add-data "assets/plesk:assets/plesk" --add-data "locales:locales" backup_studio.py
+            --add-data "assets/tour:assets/tour" --add-data "assets/gdrive:assets/gdrive" --add-data "locales:locales" backup_studio.py
           plist="dist/DEV Backup Studio.app/Contents/Info.plist"
           plutil -replace CFBundleShortVersionString -string "$version" "$plist"
           plutil -replace CFBundleVersion -string "$version" "$plist"
@@ -137,22 +137,12 @@ jobs:
           hdiutil create -volname "DEV Backup Studio" -srcfolder dmg -ov -format UDZO \
             "dist/DEV-Backup-Studio-${{ steps.version.outputs.version }}-macOS.dmg"
 
-      # ── extensión de Plesk: comprobar PHP y bash, empaquetar el .zip (una vez, en Linux) ──
-      - name: Extensión de Plesk
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get install -y -q --no-install-recommends php-cli
-          find plesk-extension -name '*.php' -o -name '*.phtml' | xargs -n1 php -l
-          bash -n plesk-extension/sbin/devbackup
-          python3 tools/build_plesk_extension.py --check
-          python3 tools/build_plesk_extension.py
-
       # ── Linux: app → autoprueba → AppImage → autoprueba del AppImage ──
       - name: Compilar app (Linux)
         if: runner.os == 'Linux'
         run: |
           pyinstaller --noconfirm --clean --name "DEV Backup Studio" \
-            --add-data "assets/tour:assets/tour" --add-data "assets/plesk:assets/plesk" --add-data "locales:locales" backup_studio.py
+            --add-data "assets/tour:assets/tour" --add-data "assets/gdrive:assets/gdrive" --add-data "locales:locales" backup_studio.py
 
       - name: Autoprueba de la app (Linux)
         if: runner.os == 'Linux'
@@ -194,7 +184,6 @@ jobs:
             dist/DEV-Backup-Studio-Setup-*.exe
             dist/*.dmg
             dist/*.AppImage
-            dist/DEV-Backup-Studio-Plesk-*.zip
           if-no-files-found: error
 
   release:

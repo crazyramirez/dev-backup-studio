@@ -1,4 +1,2 @@
 installer/linux/* text eol=lf
 *.sh text eol=lf
-plesk-extension/** text eol=lf
-plesk-extension/**/*.png binary

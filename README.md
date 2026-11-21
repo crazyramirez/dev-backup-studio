@@ -18,7 +18,6 @@ En [Releases](https://github.com/crazyramirez/dev-backup-studio/releases/latest)
 | Windows 10/11 (64 bits) | `DEV-Backup-Studio-Setup-x.y.z.exe` | Asistente de instalación. Por defecto se instala para tu usuario, sin pedir permisos de administrador; crea el acceso en el menú Inicio (y en el escritorio si lo marcas) y se desinstala desde *Configuración → Aplicaciones*. |
 | macOS 12+ (Apple Silicon) | `DEV-Backup-Studio-x.y.z-macOS.dmg` | Abre el `.dmg` y arrastra la app a *Aplicaciones*. |
 | Linux x86_64 (Ubuntu 22.04+, Debian 12+, Fedora 36+…) | `DEV-Backup-Studio-x.y.z-x86_64.AppImage` | Un solo archivo, sin instalar: guárdalo donde quieras (por ejemplo `~/Aplicaciones`), dale permiso de ejecución (*Propiedades → Permitir ejecutar*, o `chmod +x`) y ábrelo. Al abrirlo se añade solo al menú de aplicaciones. |
-| Plesk Obsidian 18 (Linux) | `DEV-Backup-Studio-Plesk-x.y.z.zip` | La extensión para hacer copias de tus servidores Plesk (ver [Copias de servidores Plesk](#copias-de-servidores-plesk)). |
 
 Para actualizar, instala la versión nueva encima: si la app está abierta (también en la bandeja), el
 asistente pide cerrarla antes. Los ajustes, índices y copias se conservan, también al desinstalar. La
@@ -146,49 +145,48 @@ Conectarlas es cosa de un minuto, sin escribir direcciones ni contraseñas:
 Si la nube está apagada o fuera de alcance, la app lo dice en un segundo y ofrece sincronizar en
 cuanto vuelve, igual que al conectar un disco.
 
-## Copias de servidores Plesk
+## Google Drive
 
-En la pestaña **Plesk** la app guarda en tu disco de copia una **copia completa de tus servidores
-Plesk**: ajustes del servidor, suscripciones, webs, bases de datos, correo y DNS. No es una copia a su
-manera: la hace el propio Plesk con su herramienta oficial (`plesk bin pleskbackup --server`), así que
-se restaura como cualquier copia de Plesk.
+En la pestaña **Google Drive** la app copia tu Drive en el disco de copia **sin instalar la app de
+Google**: habla directamente con la API oficial de Google Drive.
 
-Para conectar un servidor no hacen falta contraseñas ni acceso por SSH:
+- **Conectar**: *Conectar cuenta…*. Se abre el navegador, entras con tu cuenta de Google (de Gmail o
+  de empresa) y das permiso **de solo lectura**: la app no ve tu contraseña y nunca cambia nada en tu
+  Drive. Puedes conectar varias cuentas.
+- **Elegir qué copiar**: un árbol con casillas de *Mi unidad*, cada *unidad compartida* y *Compartido
+  conmigo*, hasta la última carpeta o archivo. Se cambia en cualquier momento y se aplica a la
+  siguiente copia.
+- **Copiar**: *Copiar ahora*, o automática cada día o cada semana con la app abierta (o en la bandeja)
+  y el disco conectado. Solo se descarga lo nuevo o cambiado; cada archivo se comprueba con el MD5 de
+  Google y, si la descarga se corta, sigue donde iba. Los Documentos, Hojas y Presentaciones de Google
+  se guardan como `.docx`, `.xlsx` y `.pptx` (los formularios, sitios y mapas no tienen archivo).
+- **Dónde**: `GOOGLE DRIVE/<cuenta>/` en la **raíz del disco de copia**, en una carpeta con el icono de
+  Drive. Lo que borras o cambias en Drive se aparta a `.devbackup/versiones`, con los mismos plazos que
+  la sincronización; lo que desmarcas se queda en el disco sin tocar. Si de golpe desaparece mucho de
+  Drive (un permiso retirado, una unidad que ya no ves), no se aparta nada sin confirmarlo.
 
-1. Descarga `DEV-Backup-Studio-Plesk-x.y.z.zip` de
-   [Releases](https://github.com/crazyramirez/dev-backup-studio/releases/latest) y súbelo en Plesk:
-   *Extensiones → Mis extensiones → Subir extensión* (o `plesk bin extension --install archivo.zip`).
-   Plesk esconde ese botón por defecto: para verlo, añade a `/usr/local/psa/admin/conf/panel.ini`
-   (o con la extensión *Panel.ini Editor*) las líneas `[ext-catalog]` y `extensionUpload = true`.
-2. Abre la extensión *DEV Backup Studio* y pulsa *Conectar un ordenador*: aparece un código de 6
-   cifras (sirve una vez y caduca a los 10 minutos).
-3. En la app, pestaña *Plesk → Conectar servidor…*: escribe la dirección del panel (el puerto 8443 se
-   pone solo) y el código.
+Las copias de servidores Plesk que hace Plesk en Google Drive (su carpeta `My Plesk`) se pueden copiar
+así también a tu disco.
 
-Cada ordenador recibe su propia llave, que se puede quitar en cualquier momento desde la extensión.
-Si el panel usa el certificado propio de Plesk (no uno de Let's Encrypt u otra autoridad), la app
-enseña su huella SHA-256 —la misma que muestra la extensión junto al código— y, una vez aceptada, la
-fija: con otro certificado no se conecta.
+### El ID de cliente de Google
 
-**Copiar.** *Copiar ahora*, o automática cada día o cada semana mientras la app está abierta (o en la
-bandeja) y el disco de copia conectado. Plesk prepara la copia en el servidor; la app la descarga
-(si se corta, sigue donde iba), comprueba su SHA-256 y la guarda en `PLESK/<servidor>/` en la **raíz
-del disco de copia**, una carpeta con el icono de Plesk. Después se borra del servidor. Se conservan
-las 3, 7, 14 o 30 últimas. La sincronización de tus proyectos nunca toca la carpeta `PLESK`, aunque el
-destino sea la raíz del disco.
+Para leer tu Drive, Google exige que la app se identifique con un **ID de cliente** registrado en
+Google Cloud. DEV Backup Studio **no trae ninguno**: cada persona usa el suyo, así nadie depende del
+proyecto de Google de otro ni de sus límites (Google deja a las apps sin verificar un máximo de 100
+usuarios). Se crea gratis, una sola vez, en unos minutos:
 
-**Restaurar.** Elige una copia y pulsa *Restaurar…*. Se sube al servidor que elijas y:
-
-- **Subirla al Gestor de copias de seguridad de Plesk** no cambia nada: luego, en Plesk, restauras lo
-  que quieras (todo, una suscripción, una base de datos…).
-- **Restaurar todo el servidor** usa la restauración oficial, `plesk bin pleskrestore --restore …
-  -level server`. Sirve también para pasar todo a un servidor nuevo: instala la extensión allí,
-  conéctalo y restaura en él.
-
-Plesk cifra las contraseñas que guarda la copia (buzones, bases de datos, FTP…) con una contraseña
-que la app crea para cada servidor y recuerda. Anótala (*Contraseña…*): la pedirá Plesk si restauras
-desde otro ordenador o subes la copia a mano en su Gestor de copias. Las copias son archivos `.tar`
-normales de Plesk, así que también se pueden subir y restaurar a mano sin la app.
+1. En [Google Cloud Console](https://console.cloud.google.com/) crea un proyecto.
+2. *APIs y servicios → Biblioteca*: busca **Google Drive API** y pulsa *Habilitar*.
+3. *Google Auth Platform* (pantalla de consentimiento de OAuth): tipo **Externo** (o *Interno* si solo
+   lo vas a usar con cuentas de tu Google Workspace), nombre de la app y tu correo. En *Acceso a los
+   datos* añade el permiso `.../auth/drive.readonly`. En *Público*, pulsa **Publicar la app**: en modo
+   *Prueba* Google retira el permiso a los 7 días. Sin verificarla, Google enseña al conectar que la
+   app no está verificada (*Configuración avanzada → Ir a…*) y la limita a 100 usuarios: para uso
+   propio no hace falta más.
+4. *Clientes → Crear cliente*: tipo **App de escritorio**. Copia el ID y el secreto.
+5. En la app: *Ajustes → Google Drive* (o al conectar la primera cuenta), pega el ID y el secreto.
+   Se guardan solo en tu ordenador; el secreto, cifrado. Si un día cambias de ID, vuelve a conectar
+   las cuentas.
 
 ## Cómo decide qué copiar
 
@@ -212,12 +210,11 @@ cambiado. Cada 7 días, o si cambia la configuración, se lee el destino entero.
 
 - **En el disco de copia**: carpeta oculta `.devbackup/` en la raíz con la marca del disco
   (`disco.json`), el historial de copias, las versiones y `latido`, el archivo diminuto que mantiene
-  despierto el disco. Las copias de Plesk, en `PLESK/<servidor>/` (un `.tar` y un `.json` con su
-  SHA-256 por copia).
+  despierto el disco. Las copias de Google Drive, en `GOOGLE DRIVE/<cuenta>/`.
 - **En el equipo**: ajustes (con las copias habituales de los recordatorios), índices y registros en
   `%APPDATA%\DEV Backup Studio` (Windows), `~/Library/Application Support/DEV Backup Studio` (macOS) o
-  `~/.config/DEV Backup Studio` (Linux). Las llaves de los servidores Plesk y las contraseñas de sus
-  copias van aparte, en `plesk.json` (en Windows cifradas con DPAPI; en macOS y Linux, legibles solo
+  `~/.config/DEV Backup Studio` (Linux). Las llaves de las cuentas de Google van aparte, en
+  `secretos.json` (en Windows cifradas con DPAPI; en macOS y Linux, legibles solo
   por tu usuario).
 
 ## Ejecutar desde el código
@@ -241,9 +238,7 @@ sección en `CHANGELOG.md`, de donde salen las notas de la versión), GitHub Act
 3. en macOS empaqueta la `.app` en un `.dmg`;
 4. en Linux (Ubuntu 22.04) crea el `.AppImage` (`installer/linux/build-appimage.sh`) y repite la
    autoprueba con él;
-5. comprueba la extensión de Plesk (`php -l`, `bash -n`) y la empaqueta
-   (`python tools/build_plesk_extension.py`, código en `plesk-extension/`);
-6. publica la versión con el instalador, el `.dmg`, el `.AppImage` y la extensión de Plesk.
+5. publica la versión con el instalador, el `.dmg` y el `.AppImage`.
 
 ```bash
 git tag v1.8.0
@@ -261,9 +256,8 @@ de la app: `python tools/make_tour.py` (Windows; monta datos de ejemplo con `sub
   fuera de casa.
 - Las versiones guardan el archivo completo (no hay deduplicación por bloques como en restic).
 - La versión de macOS se compila para Apple Silicon y la de Linux para x86_64.
-- La extensión de Plesk es para Plesk Obsidian en Linux (no Plesk para Windows). Las copias son
-  completas, no incrementales, y el servidor necesita sitio libre para prepararlas. Plesk y su logotipo
-  son marcas de sus propietarios; esta app no está afiliada a Plesk.
+- Google Drive: los Documentos de Google de más de 10 MB no se pueden exportar (límite de Google)
+  y se avisa de ellos; los formularios, sitios y mapas no tienen archivo.
 - En Linux, *Conectar con mi nube…* necesita GVFS con su módulo SMB (`gvfs-backends` en Ubuntu y
   Debian, `gvfs-smb` en Fedora y Arch), que traen GNOME, Cinnamon, MATE y XFCE. En KDE hay que
   instalarlo; si falta, la app lo dice.
