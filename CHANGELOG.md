@@ -1,5 +1,17 @@
 # Novedades
 
+## 2.7.3
+
+- **El destino sigue al origen.** Al cambiar el origen, el destino vuelve a la carpeta de la copia de ese
+  origen. Antes, al pasar de Google Drive a una carpeta del equipo, el destino podía quedarse en la copia de
+  Drive, y al analizar salía que se apartaría el 100 % de la copia.
+- **Aviso antes de mezclar dos copias.** Si al analizar el destino guarda la copia de otro origen, se
+  pregunta qué hacer: usar la carpeta de la copia de ese origen, guardarla aparte en una carpeta nueva,
+  elegir otra o copiar ahí igualmente. Las copias programadas sin nadie delante no copian encima.
+- **Mi nube sin otro código.** Si este ordenador ya se conectó a Personal Cloud Storage, al elegir «Mi nube»
+  se ofrece usar esa conexión (las credenciales ya están guardadas en el sistema) o conectar con un código
+  nuevo.
+
 ## 2.7.2
 
 - **Google Drive de origen volvía a fallar al empezar** («Google Drive ha respondido con un error

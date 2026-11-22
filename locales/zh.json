@@ -1060,6 +1060,21 @@
   "leyendo la lista entera de Drive (solo la primera vez)": "正在读取完整的 Drive 列表（仅首次）",
   "pidiendo los cambios desde la última vez": "正在获取自上次以来的更改",
   "Google Drive: lista entera (la primera vez y cada semana)": "Google 云端硬盘：完整列表（首次及每周）",
-  "Google Drive: solo los cambios": "Google 云端硬盘：仅更改"
+  "Google Drive: solo los cambios": "Google 云端硬盘：仅更改",
+  "Este ordenador ya está conectado a tu nube «{name}»": "这台电脑已连接到你的云「{name}」",
+  "Las copias irán a {path}. No hace falta otro código.": "备份将保存到 {path}。无需新的代码。",
+  "Usar esta conexión": "使用此连接",
+  "Conectar con un código nuevo": "用新代码连接",
+  "Destino: {path} (conexión anterior con tu nube)": "目标:{path}(之前与云的连接)",
+  "No se copia: {dst} guarda la copia de {owner}, no la de {src}.": "未复制:{dst} 保存的是 {owner} 的备份,而不是 {src} 的。",
+  "Esa carpeta ya guarda la copia de {owner}": "该文件夹已保存 {owner} 的备份",
+  "Si copias aquí {src}, la copia de {owner} pasaría entera a versiones.": "如果把 {src} 复制到这里,{owner} 的备份将全部移入版本。",
+  "Si copias aquí {src}, las dos copias quedarían mezcladas en la misma carpeta.": "如果把 {src} 复制到这里,两个备份会混在同一个文件夹中。",
+  "La copia de {src} está en {path}.": "{src} 的备份在 {path}。",
+  "Puedes guardarla aparte, en {path}.": "你可以单独保存到 {path}。",
+  "Usar esa carpeta": "使用该文件夹",
+  "Guardarla aparte": "单独保存",
+  "Elegir otra carpeta…": "选择其他文件夹…",
+  "Copiar aquí igualmente": "仍然复制到这里"
  }
 }

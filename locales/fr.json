@@ -1097,6 +1097,21 @@
   "leyendo la lista entera de Drive (solo la primera vez)": "lecture de la liste complète de Drive (la première fois seulement)",
   "pidiendo los cambios desde la última vez": "demande des modifications depuis la dernière fois",
   "Google Drive: lista entera (la primera vez y cada semana)": "Google Drive : liste complète (la première fois et chaque semaine)",
-  "Google Drive: solo los cambios": "Google Drive : modifications seulement"
+  "Google Drive: solo los cambios": "Google Drive : modifications seulement",
+  "Este ordenador ya está conectado a tu nube «{name}»": "Cet ordinateur est déjà connecté à ton cloud « {name} »",
+  "Las copias irán a {path}. No hace falta otro código.": "Les sauvegardes iront dans {path}. Pas besoin d’un nouveau code.",
+  "Usar esta conexión": "Utiliser cette connexion",
+  "Conectar con un código nuevo": "Se connecter avec un nouveau code",
+  "Destino: {path} (conexión anterior con tu nube)": "Destination : {path} (connexion précédente à ton cloud)",
+  "No se copia: {dst} guarda la copia de {owner}, no la de {src}.": "Pas copié : {dst} contient la sauvegarde de {owner}, pas celle de {src}.",
+  "Esa carpeta ya guarda la copia de {owner}": "Ce dossier contient déjà la sauvegarde de {owner}",
+  "Si copias aquí {src}, la copia de {owner} pasaría entera a versiones.": "Si tu copies {src} ici, la sauvegarde de {owner} passerait entièrement dans les versions.",
+  "Si copias aquí {src}, las dos copias quedarían mezcladas en la misma carpeta.": "Si tu copies {src} ici, les deux sauvegardes seraient mélangées dans le même dossier.",
+  "La copia de {src} está en {path}.": "La sauvegarde de {src} se trouve dans {path}.",
+  "Puedes guardarla aparte, en {path}.": "Tu peux la garder à part, dans {path}.",
+  "Usar esa carpeta": "Utiliser ce dossier",
+  "Guardarla aparte": "La garder à part",
+  "Elegir otra carpeta…": "Choisir un autre dossier…",
+  "Copiar aquí igualmente": "Copier ici quand même"
  }
 }

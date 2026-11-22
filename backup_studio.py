@@ -65,7 +65,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.7.2"
+APP_VERSION = "2.7.3"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -7298,16 +7298,19 @@ class MainWindow(QMainWindow):
 
     def _on_src_changed(self):
         src = self.src_card.path()
-        last = getattr(self, "_last_src", src)
         self._last_src = src
-        if gdrive_src.is_src(last) and not gdrive_src.is_src(src) and self._state not in RUNNING:
-            # de Google Drive a una carpeta: el destino de antes de esa carpeta, no la copia de Drive
-            new = self._remembered_dst(src)
-            if new is None and gdrive.ROOT_DIR.lower() in os.path.normcase(self.dst_card.path()).lower().split(os.sep):
-                new = ""
-            if new is not None and os.path.normcase(new) != os.path.normcase(self.dst_card.path()):
-                self.dst_card.set_path(new)
-                self._on_dst_changed()
+        dst = self.dst_card.path()
+        if self._state not in RUNNING and src and not gdrive_src.is_src(src) and not self._drive_dest():
+            # el destino guarda la copia de otro origen (p. ej. la de Google Drive): el de la copia de este
+            owner = self._dst_owner(dst)
+            in_drive_area = gdrive.ROOT_DIR.lower() in os.path.normcase(dst).lower().split(os.sep)
+            if (owner and not self._same_src(owner, src)) or in_drive_area:
+                new = self._remembered_dst(src)
+                if new is None and in_drive_area:
+                    new = ""  # la carpeta de una copia de Drive no es para una carpeta del equipo: a elegir
+                if new is not None and os.path.normcase(new) != os.path.normcase(dst):
+                    self.dst_card.set_path(new)
+                    self._on_dst_changed()
         info = self._drive_dest()
         if info and self._state not in RUNNING and not gdrive_src.is_src(src):
             # en Drive, la carpeta de la copia se llama como el origen
@@ -7331,16 +7334,79 @@ class MainWindow(QMainWindow):
         if hasattr(self, "cloud_state"):
             self._check_cloud()
 
+    def _cloud_previous(self) -> str:
+        """La carpeta de la nube de la conexión anterior (sus credenciales ya están guardadas en el sistema),
+        para el origen elegido si ya tiene copia allí. "" si este ordenador nunca se conectó."""
+        host = str(self.settings.value("nube_host", "") or "")
+        if not host:
+            return ""
+
+        def on_cloud(path: str):
+            parts = cloudlink.unc_parts(path or "")
+            return parts if parts and parts[0].lower() == host.lower() else None
+
+        src = self.src_card.path()
+        mine = self._remembered_dst(src) if src else None
+        if mine and on_cloud(mine):
+            return mine
+        saved = str(self.settings.value("nube_dst", "") or "")
+        if saved and on_cloud(saved):
+            return saved
+        # conexiones de antes de recordarla: la carpeta del ordenador en la nube, sacada de las copias hechas
+        paths = [it.get("dst", "") for it in self.registry.to_list()]
+        try:
+            prev = json.loads(self.settings.value("prev_local_pair", "") or "[]")
+            if len(prev) == 2:
+                paths.append(prev[1])
+        except (TypeError, ValueError):
+            pass
+        for path in paths:
+            q = os.path.normpath(path or "")
+            while True:
+                parts = on_cloud(q)
+                if not parts or not parts[2]:
+                    break
+                if "\\" not in parts[2] and "/" not in parts[2]:
+                    if parts[2].lower() != gdrive.ROOT_DIR.lower():
+                        return q
+                    break
+                q = os.path.dirname(q)
+        return ""
+
     def _pair_cloud(self):
         if self._state in RUNNING:
             QMessageBox.information(self, APP_NAME, _("Espera a que termine la copia en curso."))
             return
+        prev = self._cloud_previous()
+        if prev and cloudlink.IS_MAC and not os.path.isdir(prev):
+            prev = ""  # macOS: la carpeta ya no está montada; hay que volver a conectar
+        if prev and os.path.normcase(prev) != os.path.normcase(self.dst_card.path()):
+            host = str(self.settings.value("nube_host", "") or "")
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Question)
+            box.setWindowTitle(APP_NAME)
+            box.setText(_("Este ordenador ya está conectado a tu nube «{name}»").format(name=host.split(".")[0]))
+            box.setInformativeText(_("Las copias irán a {path}. No hace falta otro código.").format(path=prev))
+            use = box.addButton(_("Usar esta conexión"), QMessageBox.ButtonRole.AcceptRole)
+            new = box.addButton(_("Conectar con un código nuevo"), QMessageBox.ButtonRole.ActionRole)
+            box.addButton(_("Cancelar"), QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(use)
+            box.exec()
+            if box.clickedButton() is use:
+                self.dst_card.set_path(prev)
+                self._on_dst_changed()  # comprueba la nube aparte y enseña «Conectado» o «no responde»
+                self._save_settings()
+                self._log(_("Destino: {path} (conexión anterior con tu nube)").format(path=prev), C["accent2"])
+                return
+            if box.clickedButton() is not new:
+                return
         dlg = PairDialog(self)
         if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.result_path:
             return
         self.dst_card.set_path(dlg.result_path)
         if dlg.link_host:
             self.settings.setValue("nube_host", dlg.link_host)
+        self.settings.setValue("nube_dst", dlg.result_path)
         self._on_dst_changed()
         self._save_settings()
         QMessageBox.information(self, APP_NAME, _("Conectado. Las copias se guardarán en {path}.").format(path=dlg.result_path))
@@ -7573,12 +7639,19 @@ class MainWindow(QMainWindow):
             return _("El disco de {dst} no está conectado.").format(dst=dst)
         return None
 
-    def _start(self, copy: bool, show_progress: bool = True, scrub_all: bool = False) -> bool:
+    def _start(self, copy: bool, show_progress: bool = True, scrub_all: bool = False,
+               interactive: bool = True) -> bool:
         src, dst = self.src_card.path(), self.dst_card.path()
         problem = self._validate(src, dst)
         if problem:
             QMessageBox.warning(self, APP_NAME, problem)
             return False
+        if not self._drive_dest(dst):
+            verdict = self._check_dst_owner(src, dst, interactive)
+            if verdict == "cancel":
+                return False
+            if verdict == "changed":
+                return self._start(copy, show_progress, scrub_all, interactive)
         self.excl_map[self._excl_key()] = self.tree.excluded
         self.rem_checker.cancel()
         drive = self._drive_dest(dst)
@@ -8462,6 +8535,104 @@ class MainWindow(QMainWindow):
                            else _("Google Drive…"))
         a.triggered.connect(lambda _c=False: self._choose_drive_src(None))
         return menu
+
+    @staticmethod
+    def _same_src(a: str, b: str) -> bool:
+        return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
+
+    def _dst_owner(self, dst: str) -> str | None:
+        """El origen de la última copia que se hizo en esa carpeta, o None si no se sabe."""
+        if not dst or gdrive_up.is_dest(dst):
+            return None
+        key = os.path.normcase(os.path.normpath(dst))
+        roots = self._disk_roots()
+        for it in self.registry.to_list():  # la más reciente primero
+            # donde está ahora su disco (puede haber cambiado de letra) o la ruta con que se hizo
+            for where in (self._pair_dest(it, roots), it.get("dst")):
+                if where and os.path.normcase(os.path.normpath(where)) == key:
+                    return it.get("src") or None
+        # copias hechas desde otro equipo: el historial que guarda el propio disco
+        try:
+            root = engine.volume_root(dst)
+            with open(os.path.join(root, engine.META_DIR, "historial.jsonl"), encoding="utf-8") as fh:
+                lines = fh.read().splitlines()
+        except (OSError, ValueError):
+            return None
+        tail = os.path.normcase(os.path.splitdrive(os.path.normpath(dst))[1])
+        for line in reversed(lines):
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            where = str(entry.get("destino") or "")
+            if where and os.path.normcase(os.path.splitdrive(os.path.normpath(where))[1]) == tail:
+                return str(entry.get("origen") or "") or None
+        return None
+
+    def _new_dst_for(self, src: str, dst: str) -> str:
+        """Una carpeta nueva para la copia de ese origen, junto a la que ya guarda otra copia."""
+        base = os.path.dirname(os.path.normpath(dst)) or dst
+        if os.path.basename(base).lower() == gdrive.ROOT_DIR.lower():
+            base = os.path.dirname(base)  # no dentro de «GOOGLE DRIVE»
+        if os.path.normcase(base) == os.path.normcase(os.path.normpath(dst)):
+            base = dst  # el destino era la raíz del disco
+        name = gdrive_up.folder_for(src)
+        new, n = os.path.join(base, name), 2
+        while os.path.exists(new) and not self._same_src(self._dst_owner(new) or src, src):
+            new, n = os.path.join(base, f"{name} ({n})"), n + 1
+        return new
+
+    def _check_dst_owner(self, src: str, dst: str, interactive: bool) -> str:
+        """Antes de analizar: si el destino guarda la copia de otro origen, se pregunta qué hacer.
+        «ok» (seguir), «changed» (se eligió otra carpeta) o «cancel»."""
+        pair = (os.path.normcase(os.path.normpath(src)), os.path.normcase(os.path.normpath(dst)))
+        if getattr(self, "_owner_ok", None) == pair:
+            return "ok"  # ya se dijo «copiar aquí igualmente» para esta pareja
+        owner = self._dst_owner(dst)
+        if not owner or self._same_src(owner, src):
+            return "ok"
+        who, what = self._dst_text(owner), self._dst_text(src)
+        if not interactive:
+            self._log(_("No se copia: {dst} guarda la copia de {owner}, no la de {src}.").format(
+                dst=dst, owner=who, src=what), C["err"])
+            return "cancel"
+        mirror = self.mode_combo.currentData() == engine.MODE_MIRROR
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(APP_NAME)
+        box.setText(_("Esa carpeta ya guarda la copia de {owner}").format(owner=who))
+        info = (_("Si copias aquí {src}, la copia de {owner} pasaría entera a versiones.") if mirror
+                else _("Si copias aquí {src}, las dos copias quedarían mezcladas en la misma carpeta.")).format(
+            src=what, owner=who)
+        remembered = self._remembered_dst(src)
+        if remembered and os.path.normcase(remembered) == os.path.normcase(dst):
+            remembered = None
+        target = remembered or self._new_dst_for(src, dst)
+        info += "\n\n" + (_("La copia de {src} está en {path}.") if remembered
+                           else _("Puedes guardarla aparte, en {path}.")).format(src=what, path=target)
+        box.setInformativeText(info)
+        use = box.addButton(_("Usar esa carpeta") if remembered else _("Guardarla aparte"),
+                            QMessageBox.ButtonRole.AcceptRole)
+        pick = box.addButton(_("Elegir otra carpeta…"), QMessageBox.ButtonRole.ActionRole)
+        here = box.addButton(_("Copiar aquí igualmente"), QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(_("Cancelar"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(use)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is here:
+            self._owner_ok = pair
+            return "ok"
+        if clicked is use:
+            self.dst_card.set_path(target)
+        elif clicked is pick:
+            self.dst_card.pick_folder()
+            if os.path.normcase(self.dst_card.path()) == os.path.normcase(dst):
+                return "cancel"
+        else:
+            return "cancel"
+        self._on_dst_changed()
+        self._save_settings()
+        return "changed"
 
     def _remembered_dst(self, src: str) -> str | None:
         """El destino de la última copia de ese origen (copias habituales), o None."""
@@ -9446,7 +9617,7 @@ class MainWindow(QMainWindow):
         watching = self.isVisible() and not self.isMinimized() and self.isActiveWindow()
         if not watching and not manual:
             self._notify(_("Copia programada en marcha"), self._plan_title(p))
-        started = self._start(copy=True, show_progress=manual or not watching)
+        started = self._start(copy=True, show_progress=manual or not watching, interactive=manual or watching)
         if not started:
             self._plan_running = None
             self.plans.finish(p.id, "failed", now, _("no pudo empezar"))
@@ -10186,6 +10357,72 @@ def selftest_plans(win: "MainWindow", say) -> None:
     say("  copias programadas: a su hora, una sola vez, esperando al disco y al conectarlo")
 
 
+def selftest_owner(win: "MainWindow", say) -> None:
+    """El destino de otra copia: al cambiar el origen vuelve a la carpeta de su copia; al analizar con la
+    carpeta de otro origen, se pregunta (y sin nadie delante, no se copia encima). La nube: la conexión
+    anterior se ofrece sin pedir otro código. Al terminar, todo queda como estaba."""
+    keys = ("nube_host", "nube_dst", "prev_local_pair")
+    saved = dict(src=win.src_card.path(), dst=win.dst_card.path(), copias=win.registry.to_list(),
+                 disk_id=win.disk_id, dst_rel=win.dst_rel, settings={k: win.settings.value(k) for k in keys})
+    real = (engine.volume_root, engine.volume_present, engine.mounted_volumes)
+    with tempfile.TemporaryDirectory() as tmp:
+        vol = os.path.join(tmp, "USB")
+        vroot = vol + os.sep
+        a, b = os.path.join(tmp, "Proyectos"), os.path.join(tmp, "Fotos")
+        da, dg = os.path.join(vol, "Proyectos"), os.path.join(vol, gdrive.ROOT_DIR, "cuenta")
+        for d in (a, b, da, dg):
+            os.makedirs(d)
+
+        def under(p: str) -> bool:
+            p = os.path.normcase(os.path.abspath(p))
+            return p == os.path.normcase(vol) or p.startswith(os.path.normcase(vroot))
+
+        engine.volume_root = lambda p: vroot if under(p) else real[0](p)
+        engine.volume_present = lambda p: os.path.isdir(vol) if under(p) else real[1](p)
+        engine.mounted_volumes = lambda network=True, extra=(): {vroot}
+        try:
+            now = datetime.now()
+            win.registry = reminders.Registry([])
+            win.registry.record(a, da, "", "", "USB", now - timedelta(days=1), [], set())
+            win.registry.record(gdrive_src.make_src("p1"), dg, "", "", "USB", now, [], set())
+            same = MainWindow._same_src
+            assert win._dst_owner(dg) == gdrive_src.make_src("p1") and same(win._dst_owner(da), a), "dueño del destino"
+            # el caso real: origen Drive → una carpeta, con el destino de la copia de Drive puesto
+            win.dst_card.set_path(dg)
+            win.src_card.set_path(a)
+            win._on_src_changed()
+            assert same(win.dst_card.path(), da), f"no volvió a la carpeta de su copia: {win.dst_card.path()}"
+            win.src_card.set_path(b)
+            win._on_src_changed()
+            assert same(win.dst_card.path(), da), "un origen sin copia no debe cambiar el destino solo"
+            assert win._check_dst_owner(b, da, interactive=False) == "cancel", "copió encima de otra copia"
+            assert win._check_dst_owner(a, da, interactive=False) == "ok", "su propia copia"
+            assert same(win._new_dst_for(b, da), os.path.join(vol, "Fotos")), "carpeta aparte"
+            assert same(win._new_dst_for(b, dg), os.path.join(vol, "Fotos")), "aparte, fuera de GOOGLE DRIVE"
+            # la nube: la carpeta del ordenador, sacada de la conexión anterior
+            nas = "\\\\nube.local\\DEV_Backup_Studio" if IS_WIN else "/nube"
+            if IS_WIN:
+                win.settings.setValue("nube_host", "nube.local")
+                win.settings.remove("nube_dst")
+                win.settings.setValue("prev_local_pair", json.dumps([a, nas + "\\PC\\Proyectos"]))
+                assert win._cloud_previous() == nas + "\\PC", f"conexión anterior: {win._cloud_previous()!r}"
+        finally:
+            engine.volume_root, engine.volume_present, engine.mounted_volumes = real
+            for k, v in saved["settings"].items():
+                if v is None:
+                    win.settings.remove(k)
+                else:
+                    win.settings.setValue(k, v)
+            win.registry = reminders.Registry(saved["copias"])
+            win._save_registry()
+            win.src_card.set_path(saved["src"])
+            win.dst_card.set_path(saved["dst"])
+            win.disk_id, win.dst_rel = saved["disk_id"], saved["dst_rel"]
+            win._save_settings()
+    say("  destino de otra copia: vuelve a la suya al cambiar el origen y pregunta antes de mezclar · nube: "
+        "la conexión anterior sin otro código")
+
+
 def selftest() -> int:
     """Prueba sin ventana: sincroniza, verifica, repara y construye la interfaz.
 
@@ -10486,6 +10723,7 @@ def selftest() -> int:
         say("  conectar con la nube: el diálogo abre y se cierra")
         selftest_gdrive(win, say)
         selftest_plans(win, say)
+        selftest_owner(win, say)
         selftest_gdrive_up(win, say)
         if IS_LINUX:
             # montaje con GVFS: un «gio» de mentira con las mismas preguntas que el de verdad

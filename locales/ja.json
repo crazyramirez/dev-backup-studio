@@ -1060,6 +1060,21 @@
   "leyendo la lista entera de Drive (solo la primera vez)": "Drive の全体リストを読み込み中（初回のみ）",
   "pidiendo los cambios desde la última vez": "前回からの変更を取得中",
   "Google Drive: lista entera (la primera vez y cada semana)": "Google ドライブ：全体リスト（初回と毎週）",
-  "Google Drive: solo los cambios": "Google ドライブ：変更のみ"
+  "Google Drive: solo los cambios": "Google ドライブ：変更のみ",
+  "Este ordenador ya está conectado a tu nube «{name}»": "このパソコンはすでにクラウド「{name}」に接続されています",
+  "Las copias irán a {path}. No hace falta otro código.": "バックアップは {path} に保存されます。新しいコードは不要です。",
+  "Usar esta conexión": "この接続を使う",
+  "Conectar con un código nuevo": "新しいコードで接続",
+  "Destino: {path} (conexión anterior con tu nube)": "保存先: {path}(以前のクラウド接続)",
+  "No se copia: {dst} guarda la copia de {owner}, no la de {src}.": "コピーしません: {dst} には {src} ではなく {owner} のバックアップがあります。",
+  "Esa carpeta ya guarda la copia de {owner}": "そのフォルダーにはすでに {owner} のバックアップがあります",
+  "Si copias aquí {src}, la copia de {owner} pasaría entera a versiones.": "ここに {src} をコピーすると、{owner} のバックアップはすべてバージョンに移動されます。",
+  "Si copias aquí {src}, las dos copias quedarían mezcladas en la misma carpeta.": "ここに {src} をコピーすると、2 つのバックアップが同じフォルダーに混在します。",
+  "La copia de {src} está en {path}.": "{src} のバックアップは {path} にあります。",
+  "Puedes guardarla aparte, en {path}.": "別の場所 ({path}) に保存できます。",
+  "Usar esa carpeta": "そのフォルダーを使う",
+  "Guardarla aparte": "別に保存する",
+  "Elegir otra carpeta…": "別のフォルダーを選択…",
+  "Copiar aquí igualmente": "それでもここにコピー"
  }
 }
