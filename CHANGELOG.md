@@ -1,5 +1,12 @@
 # Novedades
 
+## 2.7.2
+
+- **Google Drive de origen volvía a fallar al empezar** («Google Drive ha respondido con un error
+  (invalidParameter)»). La 2.7.1 pedía a Google un dato que no existe con ese nombre al leer la lista
+  entera; ya se pide el correcto. Las pruebas con el Drive simulado ahora rechazan, como Google, los
+  datos que no existen, para que no vuelva a pasar.
+
 ## 2.7.1
 
 - **Google Drive de origen, mucho más rápido.** La primera vez se pide a Google la lista de todo el

@@ -43,7 +43,7 @@ ROOTS = [gdrive.MY_DRIVE, gdrive.SHARED_DRIVES, gdrive.SHARED_WITH_ME]
 DEFAULT_EXCLUDED = {norm_rel(gdrive.SHARED_WITH_ME)}  # lo compartido contigo: solo si lo marcas
 LIST_THREADS = 6
 FULL_DAYS = 7      # la lista entera de Drive se vuelve a pedir cada semana
-FIELDS_ALL = "id,name,mimeType,parents,size,md5Checksum,modifiedTime,sharedWithMe,driveId,trashed"
+FIELDS_ALL = "id,name,mimeType,parents,size,md5Checksum,modifiedTime,sharedWithMeTime,driveId,trashed"
 DOWNLOAD_THREADS = 6
 SEP = re.compile(r"[\\/]+")
 
@@ -126,7 +126,7 @@ class DriveCache:
     def _row(it: dict, drive: str = "") -> tuple:
         return (it["id"], it.get("name", ""), it.get("mimeType", ""), json.dumps(it.get("parents") or []),
                 str(it.get("size") or ""), it.get("md5Checksum") or "", it.get("modifiedTime") or "",
-                1 if it.get("sharedWithMe") else 0, it.get("driveId") or drive)
+                1 if it.get("sharedWithMeTime") else 0, it.get("driveId") or drive)
 
     def sync(self, drive: gdrive.Drive, stop: threading.Event | None = None, progress=None,
              force: bool = False) -> str:

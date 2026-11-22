@@ -13,6 +13,19 @@ import threading
 from urllib.parse import parse_qsl, urlsplit
 
 FOLDER = "application/vnd.google-apps.folder"
+# los campos que de verdad tiene un archivo en la API v3: Google rechaza cualquier otro (400 invalidParameter)
+FILE_FIELDS = {"id", "name", "mimeType", "parents", "size", "md5Checksum", "modifiedTime", "createdTime", "trashed",
+               "appProperties", "sharedWithMeTime", "driveId", "webViewLink", "kind", "explicitlyTrashed"}
+
+
+def bad_field(fields: str) -> str:
+    """El primer campo de archivo que no existe en «fields» (dentro de files(...) o file(...)), o ""."""
+    for inner in re.findall(r"\bfiles?\(([^()]*)\)", fields or ""):
+        for name in inner.split(","):
+            name = name.strip().split("/")[0]
+            if name and name not in FILE_FIELDS:
+                return name
+    return ""
 
 
 class FakeDrive:
@@ -65,7 +78,7 @@ class FakeDrive:
         f = self.files[fid]
         out = {"id": fid, "name": f["name"], "mimeType": f["mimeType"], "parents": list(f["parents"]),
                "modifiedTime": f["modifiedTime"], "createdTime": f["createdTime"], "trashed": f["trashed"],
-               "appProperties": dict(f["appProperties"]), "sharedWithMe": bool(f.get("shared")),
+               "appProperties": dict(f["appProperties"]), "sharedWithMeTime": "2026-01-01T00:00:00.000Z" if f.get("shared") else None,
                "driveId": self.drive_of(fid)}
         if f["mimeType"] != FOLDER and not f["mimeType"].startswith("application/vnd.google-apps."):
             out["size"] = str(len(f["data"]))
@@ -278,6 +291,10 @@ class FakeDrive:
                 u = urlsplit(self.path)
                 q = dict(parse_qsl(u.query))
                 fake.requests.append(("GET", u.path, q.get("q", "")))
+                if bad_field(q.get("fields", "")):
+                    return self._send(400, {"error": {"code": 400, "errors": [{
+                        "reason": "invalidParameter", "location": "fields",
+                        "message": "Invalid field selection " + bad_field(q.get("fields", ""))}]}})
                 with fake.lock:
                     if u.path.endswith("/about"):
                         return self._send(200, {"user": {"emailAddress": "prueba@example.com", "permissionId": "p1"},
