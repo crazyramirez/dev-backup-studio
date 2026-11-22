@@ -10495,6 +10495,20 @@ def selftest() -> int:
                     b = os.path.join(dst, os.path.relpath(a, src))
                     assert open(a, "rb").read() == open(b, "rb").read(), f"distinto: {b}"
             say("  espejo exacto: sí")
+            # en red se leen por adelantado varias carpetas a la vez: mismo resultado que de una en una
+            net = engine._is_network_safe
+            engine._is_network_safe = lambda p: True
+            try:
+                s = run(force_full=True)
+                assert not s.fast and s.files_done == 0 and s.del_files == 0 and s.moves_done == 0, "lectura adelantada"
+                with open(os.path.join(src, "proyecto", "src", "f3.txt"), "ab") as fh:
+                    fh.write(b"+")
+                os.remove(os.path.join(src, "proyecto", "src", "f5.txt"))
+                s = run(force_full=True)
+                assert s.files_done == 1 and s.del_files == 1 and s.versions_saved == 2, "lectura adelantada: cambios"
+            finally:
+                engine._is_network_safe = net
+            say("  en red: lectura adelantada, mismo resultado")
 
             # el disco desaparece a mitad de la copia y vuelve: se espera y no falla nada
             class Flaky(engine.BackupJob):

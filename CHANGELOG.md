@@ -11,6 +11,10 @@
 - **Mi nube sin otro código.** Si este ordenador ya se conectó a Personal Cloud Storage, al elegir «Mi nube»
   se ofrece usar esa conexión (las credenciales ya están guardadas en el sistema) o conectar con un código
   nuevo.
+- **Análisis más rápido en red.** Con el origen o el destino en una carpeta de red (tu nube, un NAS), el
+  análisis lee por adelantado, varias a la vez, las carpetas que vienen, en lugar de esperar a cada una.
+  En la revisión completa semanal de una copia en Personal Cloud Storage tarda alrededor de un tercio
+  menos (lo que da de sí el servidor); el resultado es el mismo. En un disco local no cambia nada.
 
 ## 2.7.2
 

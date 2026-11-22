@@ -52,6 +52,7 @@ import uuid
 
 from i18n import N_, _, _n
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -65,6 +66,10 @@ _SECTOR = 4096  # alineación de las lecturas sin caché
 # escrituras grandes a la vez solo provocan saltos del cabezal.
 BIG_FILE = 64 * 1024 * 1024
 META_DIR = ".devbackup"
+# En red, cada carpeta es una ida y vuelta al servidor: el análisis lee por adelantado, varias a la vez,
+# las siguientes carpetas que va a recorrer (las de arriba de la pila). En un disco local no hace falta.
+AHEAD_DIRS = 48
+AHEAD_THREADS = 12
 FULL_CHECK_DAYS = 7
 # Por debajo de este tamaño un renombrado solo se reconoce si conserva el nombre.
 MOVE_MIN_SIZE = 64 * 1024
@@ -656,6 +661,35 @@ def ensure_disk_id(root: str) -> str:
     return data["id"]
 
 
+def _read_dest_dir(ddir: str):
+    """(archivos, subcarpetas) de una carpeta del destino, o None si no existe. Sin efectos: se puede
+    llamar desde otro hilo. Los demás errores de lectura salen como OSError."""
+    try:
+        with os.scandir(lp(ddir)) as it:
+            files, dirs = {}, {}
+            for e in it:
+                try:
+                    if is_link(e):
+                        continue
+                    if e.is_file(follow_symlinks=False):
+                        st = e.stat(follow_symlinks=False)
+                        files[fold(e.name)] = (e.name, st.st_size, st.st_mtime_ns)
+                    elif e.is_dir(follow_symlinks=False):
+                        dirs[fold(e.name)] = e.name
+                except OSError:
+                    pass
+            return files, dirs
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+
+
+def _is_network_safe(path: str) -> bool:
+    try:
+        return is_network(path)
+    except (OSError, ValueError):
+        return False
+
+
 def append_history(root: str, entry: dict) -> None:
     try:
         with open(os.path.join(root, META_DIR, "historial.jsonl"), "a", encoding="utf-8") as fh:
@@ -1036,6 +1070,9 @@ class Stats:
 class BackupJob:
     """Una ejecución de sincronización. Se controla desde otro hilo; la UI solo lee."""
 
+    _ahead: dict | None = None          # lecturas adelantadas en red (ver _start_ahead)
+    _ahead_pool: ThreadPoolExecutor | None = None
+
     def __init__(self, src: str, dst: str, patterns: list[str], excluded: set[str] | list[str],
                  mode: str = MODE_MIRROR, threads: int = 16, index_path: str | None = None,
                  force_full: bool = False, keep_days: int = 30, meta_root: str | None = None,
@@ -1247,6 +1284,14 @@ class BackupJob:
         # lo que cambie en el origen a partir de aquí ya no entra en esta copia (recordatorios)
         self.scan_started_at = datetime.now()
         self._open_index()
+        self._start_ahead()
+        try:
+            return self._scan_tree()
+        finally:
+            self._stop_ahead()
+
+    def _scan_tree(self) -> bool:
+        s = self.stats
         stack = [""]
         while stack:
             if self._cancel.is_set():
@@ -1264,7 +1309,7 @@ class BackupJob:
                 dfiles, ddirs = dest
             self._seen_dirs.append(rel)
             try:
-                entries = self._src_entries(rel, sdir)
+                entries = self._src_listing(rel, sdir)
             except OSError as exc:
                 self._error(sdir, exc)
                 continue
@@ -1336,6 +1381,7 @@ class BackupJob:
                 self._dest_leftovers(rel, ddir, dfiles, ddirs)
             subdirs.sort(key=str.lower, reverse=True)
             stack.extend(subdirs)
+            self._read_ahead(stack)
             s.dirs_scanned += 1
         if self.mode == MODE_MIRROR:
             self._detect_moves()
@@ -1398,26 +1444,53 @@ class BackupJob:
             if not self._reader.has_dir(rel):
                 return None
             return self._reader.files(rel), self._reader.subdirs(rel)
+        ahead = self._ahead.pop(("d", rel), None) if self._ahead is not None else None
         try:
-            with os.scandir(lp(ddir)) as it:
-                files, dirs = {}, {}
-                for e in it:
-                    try:
-                        if is_link(e):
-                            continue
-                        if e.is_file(follow_symlinks=False):
-                            st = e.stat(follow_symlinks=False)
-                            files[fold(e.name)] = (e.name, st.st_size, st.st_mtime_ns)
-                        elif e.is_dir(follow_symlinks=False):
-                            dirs[fold(e.name)] = e.name
-                    except OSError:
-                        pass
-                return files, dirs
-        except (FileNotFoundError, NotADirectoryError):
-            return None
+            return ahead.result() if ahead is not None else _read_dest_dir(ddir)
         except OSError as exc:
             self._error(ddir, exc)
             return {}, {}
+
+    # ── lectura por adelantado (orígenes y destinos en red) ──────────────────
+    def _start_ahead(self) -> None:
+        """En red, un grupo de hilos lee por adelantado las carpetas que vienen. Solo para la lectura
+        normal de carpetas: Google Drive y el índice tienen la suya."""
+        self._ahead, self._ahead_pool = None, None
+        src_ahead = type(self)._src_entries is BackupJob._src_entries and _is_network_safe(self.src)
+        dst_ahead = (type(self)._dest_state is BackupJob._dest_state and not self._reader
+                     and _is_network_safe(self.dst))
+        if not (src_ahead or dst_ahead):
+            return
+        self._ahead = {}
+        self._ahead_src, self._ahead_dst = src_ahead, dst_ahead
+        self._ahead_pool = ThreadPoolExecutor(max_workers=max(2, min(AHEAD_THREADS, self.threads)),
+                                              thread_name_prefix="leer-antes")
+
+    def _read_ahead(self, stack: list[str]) -> None:
+        if self._ahead is None:
+            return
+        for rel in reversed(stack[-AHEAD_DIRS:]):  # las que se van a leer antes
+            if ("k", rel) in self._ahead:
+                continue
+            self._ahead[("k", rel)] = None
+            if self._ahead_src:
+                self._ahead[("s", rel)] = self._ahead_pool.submit(
+                    self._src_entries, rel, os.path.join(self.src, rel) if rel else self.src)
+            if self._ahead_dst:
+                self._ahead[("d", rel)] = self._ahead_pool.submit(
+                    _read_dest_dir, os.path.join(self.dst, rel) if rel else self.dst)
+
+    def _src_listing(self, rel: str, sdir: str) -> list[tuple]:
+        ahead = None
+        if self._ahead is not None:
+            self._ahead.pop(("k", rel), None)
+            ahead = self._ahead.pop(("s", rel), None)
+        return ahead.result() if ahead is not None else self._src_entries(rel, sdir)
+
+    def _stop_ahead(self) -> None:
+        if self._ahead_pool is not None:
+            self._ahead_pool.shutdown(wait=False, cancel_futures=True)
+        self._ahead, self._ahead_pool = None, None
 
     def _dest_leftovers(self, rel: str, ddir: str, dfiles: dict, ddirs: dict) -> None:
         """Lo que hay en el destino y ya no está en el origen."""
