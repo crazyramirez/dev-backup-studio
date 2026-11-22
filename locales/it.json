@@ -1091,6 +1091,12 @@
   "faltaba en el destino (¿borrado a mano?); bajado de nuevo de Google Drive": "mancava nella destinazione (eliminato a mano?); scaricato di nuovo da Google Drive",
   "contenido dañado en el destino; bajado de nuevo de Google Drive (la versión dañada está en versiones)": "contenuto danneggiato nella destinazione; scaricato di nuovo da Google Drive (la versione danneggiata è nelle versioni)",
   "Google no acepta la llave de esta cuenta: vuelve a elegir Google Drive como origen para conectarla de nuevo.": "Google non accetta la chiave di questo account: scegli di nuovo Google Drive come origine per ricollegarlo.",
-  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google non consente di leggere questo Drive: scegli di nuovo Google Drive come origine e concedi il permesso di lettura."
+  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google non consente di leggere questo Drive: scegli di nuovo Google Drive come origine e concedi il permesso di lettura.",
+  "leyendo la lista entera: {n} elementos": "lettura dell'elenco completo: {n} elementi",
+  "{n} cambios desde la última vez": "{n} modifiche dall'ultima volta",
+  "leyendo la lista entera de Drive (solo la primera vez)": "lettura dell'elenco completo di Drive (solo la prima volta)",
+  "pidiendo los cambios desde la última vez": "richiesta delle modifiche dall'ultima volta",
+  "Google Drive: lista entera (la primera vez y cada semana)": "Google Drive: elenco completo (la prima volta e ogni settimana)",
+  "Google Drive: solo los cambios": "Google Drive: solo le modifiche"
  }
 }

@@ -1054,6 +1054,12 @@
   "faltaba en el destino (¿borrado a mano?); bajado de nuevo de Google Drive": "目标中缺少该文件（手动删除了？）；已从 Google 云端硬盘重新下载",
   "contenido dañado en el destino; bajado de nuevo de Google Drive (la versión dañada está en versiones)": "目标中的内容已损坏；已从 Google 云端硬盘重新下载（损坏的版本在版本中）",
   "Google no acepta la llave de esta cuenta: vuelve a elegir Google Drive como origen para conectarla de nuevo.": "Google 不接受此帐号的密钥：请重新选择 Google 云端硬盘作为源以重新连接。",
-  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google 不允许读取此 Drive：请重新选择 Google 云端硬盘作为源并授予读取权限。"
+  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google 不允许读取此 Drive：请重新选择 Google 云端硬盘作为源并授予读取权限。",
+  "leyendo la lista entera: {n} elementos": "正在读取完整列表：{n} 项",
+  "{n} cambios desde la última vez": "自上次以来 {n} 处更改",
+  "leyendo la lista entera de Drive (solo la primera vez)": "正在读取完整的 Drive 列表（仅首次）",
+  "pidiendo los cambios desde la última vez": "正在获取自上次以来的更改",
+  "Google Drive: lista entera (la primera vez y cada semana)": "Google 云端硬盘：完整列表（首次及每周）",
+  "Google Drive: solo los cambios": "Google 云端硬盘：仅更改"
  }
 }

@@ -1054,6 +1054,12 @@
   "faltaba en el destino (¿borrado a mano?); bajado de nuevo de Google Drive": "バックアップ先にありませんでした（手動で削除？）。Google ドライブから再ダウンロードしました",
   "contenido dañado en el destino; bajado de nuevo de Google Drive (la versión dañada está en versiones)": "バックアップ先の内容が破損していました。Google ドライブから再ダウンロードしました（破損したバージョンはバージョンにあります）",
   "Google no acepta la llave de esta cuenta: vuelve a elegir Google Drive como origen para conectarla de nuevo.": "Google がこのアカウントのキーを受け付けません。もう一度 Google ドライブをコピー元に選んで接続し直してください。",
-  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google がこのドライブの読み取りを許可していません。もう一度 Google ドライブをコピー元に選び、読み取り権限を付与してください。"
+  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google がこのドライブの読み取りを許可していません。もう一度 Google ドライブをコピー元に選び、読み取り権限を付与してください。",
+  "leyendo la lista entera: {n} elementos": "全体リストを読み込み中：{n} 件",
+  "{n} cambios desde la última vez": "前回から {n} 件の変更",
+  "leyendo la lista entera de Drive (solo la primera vez)": "Drive の全体リストを読み込み中（初回のみ）",
+  "pidiendo los cambios desde la última vez": "前回からの変更を取得中",
+  "Google Drive: lista entera (la primera vez y cada semana)": "Google ドライブ：全体リスト（初回と毎週）",
+  "Google Drive: solo los cambios": "Google ドライブ：変更のみ"
  }
 }

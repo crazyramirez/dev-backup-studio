@@ -19,6 +19,7 @@ class FakeDrive:
     def __init__(self):
         self.files: dict[str, dict] = {}
         self.drives: list[tuple[str, str]] = []   # unidades compartidas: (id, nombre)
+        self.log: list[str] = []                    # registro de cambios (changes.list): ids en orden
         self.sessions: dict[str, dict] = {}
         self.lock = threading.RLock()
         self.ids = itertools.count(1)
@@ -37,6 +38,26 @@ class FakeDrive:
     def new_id(self):
         return f"f{next(self.ids):05d}"
 
+    def touch(self, fid):
+        """Apunta un cambio hecho a mano en «files» (para el registro de cambios)."""
+        self.log.append(fid)
+
+    def remove(self, fid):
+        self.delete_tree(fid)
+
+    def drive_of(self, fid, depth=0):
+        drive_ids = {d for d, _n in self.drives}
+        f = self.files.get(fid)
+        if f is None or depth > 50:
+            return ""
+        for p in f["parents"]:
+            if p in drive_ids:
+                return p
+            d = self.drive_of(p, depth + 1)
+            if d:
+                return d
+        return ""
+
     def usage(self):
         return sum(len(f.get("data") or b"") for f in self.files.values())
 
@@ -44,7 +65,8 @@ class FakeDrive:
         f = self.files[fid]
         out = {"id": fid, "name": f["name"], "mimeType": f["mimeType"], "parents": list(f["parents"]),
                "modifiedTime": f["modifiedTime"], "createdTime": f["createdTime"], "trashed": f["trashed"],
-               "appProperties": dict(f["appProperties"])}
+               "appProperties": dict(f["appProperties"]), "sharedWithMe": bool(f.get("shared")),
+               "driveId": self.drive_of(fid)}
         if f["mimeType"] != FOLDER and not f["mimeType"].startswith("application/vnd.google-apps."):
             out["size"] = str(len(f["data"]))
             out["md5Checksum"] = hashlib.md5(f["data"]).hexdigest()
@@ -55,6 +77,7 @@ class FakeDrive:
         self.files[fid] = {"name": name, "parents": list(parents), "mimeType": mime, "data": data,
                            "appProperties": dict(props or {}), "modifiedTime": mtime, "shared": shared,
                            "createdTime": f"2026-01-01T00:00:{len(self.files) % 60:02d}.{fid[1:]}Z", "trashed": False}
+        self.log.append(fid)
         return fid
 
     def path_of(self, fid):
@@ -73,6 +96,7 @@ class FakeDrive:
         for c in self.children(fid):
             self.delete_tree(c)
         self.files.pop(fid, None)
+        self.log.append(fid)
 
     def match(self, q, fid):
         f = self.files[fid]
@@ -224,6 +248,7 @@ class FakeDrive:
                     if f is None:
                         return self._err(404, "notFound")
                     meta = json.loads(body) if body else {}
+                    fake.log.append(fid)
                     if "name" in meta:
                         f["name"] = meta["name"]
                     for k, v in (meta.get("appProperties") or {}).items():
@@ -258,6 +283,23 @@ class FakeDrive:
                         return self._send(200, {"user": {"emailAddress": "prueba@example.com", "permissionId": "p1"},
                                                 "storageQuota": {"limit": str(fake.limit),
                                                                  "usage": str(fake.usage())}})
+                    if u.path == "/drive/v3/files/root":
+                        return self._send(200, {"id": "root"})
+                    if u.path == "/drive/v3/changes/startPageToken":
+                        return self._send(200, {"startPageToken": str(len(fake.log))})
+                    if u.path == "/drive/v3/changes":
+                        start = int(q.get("pageToken") or 0)
+                        if start > len(fake.log):
+                            return self._err(404, "notFound")
+                        ids = fake.log[start:start + 3]
+                        out = {"changes": [{"changeType": "file", "fileId": fid, "removed": fid not in fake.files,
+                                            **({"file": fake.meta(fid)} if fid in fake.files else {})}
+                                           for fid in ids]}
+                        if start + 3 < len(fake.log):
+                            out["nextPageToken"] = str(start + 3)
+                        else:
+                            out["newStartPageToken"] = str(len(fake.log))
+                        return self._send(200, out)
                     if u.path == "/drive/v3/drives":
                         return self._send(200, {"drives": [{"id": i, "name": n} for i, n in fake.drives]})
                     if u.path.endswith("/export"):
@@ -272,6 +314,10 @@ class FakeDrive:
                         return
                     if u.path == "/drive/v3/files":
                         found = [fake.meta(fid) for fid in sorted(fake.files) if fake.match(q["q"], fid)]
+                        if q.get("corpora") == "drive":
+                            found = [m for m in found if m["driveId"] == q.get("driveId")]
+                        elif q.get("includeItemsFromAllDrives") != "true":
+                            found = [m for m in found if not m["driveId"]]
                         start = int(q.get("pageToken") or 0)
                         size = 3  # páginas cortas: así se prueba la paginación
                         page = found[start:start + size]

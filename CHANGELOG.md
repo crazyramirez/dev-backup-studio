@@ -1,5 +1,16 @@
 # Novedades
 
+## 2.7.1
+
+- **Google Drive de origen, mucho más rápido.** La primera vez se pide a Google la lista de todo el
+  Drive de golpe (de 1000 en 1000, no carpeta por carpeta) y se guarda en el equipo; después, cada
+  análisis solo pide lo que ha cambiado desde la vez anterior: sin cambios son un par de peticiones,
+  aunque el Drive tenga cientos de miles de archivos. Cada semana se vuelve a pedir la lista entera.
+  El árbol de *Carpetas* sale al momento de esa lista.
+- **Un índice por copia.** Antes había uno por disco de copia: alternar dos copias en el mismo disco
+  (por ejemplo `D:\DEV` y Google Drive) obligaba a releer el destino entero cada vez. Ahora cada copia
+  tiene el suyo y las dos van siempre en análisis rápido.
+
 ## 2.7.0
 
 - **Google Drive, también como origen.** La pestaña *Google Drive* desaparece: tu Drive se elige en la

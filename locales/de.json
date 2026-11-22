@@ -1091,6 +1091,12 @@
   "faltaba en el destino (¿borrado a mano?); bajado de nuevo de Google Drive": "fehlte im Ziel (manuell gelöscht?); erneut aus Google Drive heruntergeladen",
   "contenido dañado en el destino; bajado de nuevo de Google Drive (la versión dañada está en versiones)": "beschädigter Inhalt im Ziel; erneut aus Google Drive heruntergeladen (die beschädigte Version liegt in den Versionen)",
   "Google no acepta la llave de esta cuenta: vuelve a elegir Google Drive como origen para conectarla de nuevo.": "Google akzeptiert den Schlüssel dieses Kontos nicht: Wählen Sie Google Drive erneut als Quelle, um es neu zu verbinden.",
-  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google erlaubt nicht, dieses Drive zu lesen: Wählen Sie Google Drive erneut als Quelle und erteilen Sie Lesezugriff."
+  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google erlaubt nicht, dieses Drive zu lesen: Wählen Sie Google Drive erneut als Quelle und erteilen Sie Lesezugriff.",
+  "leyendo la lista entera: {n} elementos": "vollständige Liste wird gelesen: {n} Elemente",
+  "{n} cambios desde la última vez": "{n} Änderungen seit dem letzten Mal",
+  "leyendo la lista entera de Drive (solo la primera vez)": "vollständige Drive-Liste wird gelesen (nur beim ersten Mal)",
+  "pidiendo los cambios desde la última vez": "Änderungen seit dem letzten Mal werden abgefragt",
+  "Google Drive: lista entera (la primera vez y cada semana)": "Google Drive: vollständige Liste (beim ersten Mal und wöchentlich)",
+  "Google Drive: solo los cambios": "Google Drive: nur Änderungen"
  }
 }

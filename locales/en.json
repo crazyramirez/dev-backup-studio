@@ -1091,6 +1091,12 @@
   "faltaba en el destino (¿borrado a mano?); bajado de nuevo de Google Drive": "it was missing from the destination (deleted by hand?); downloaded again from Google Drive",
   "contenido dañado en el destino; bajado de nuevo de Google Drive (la versión dañada está en versiones)": "damaged content in the destination; downloaded again from Google Drive (the damaged version is in versions)",
   "Google no acepta la llave de esta cuenta: vuelve a elegir Google Drive como origen para conectarla de nuevo.": "Google doesn't accept this account's key: choose Google Drive as the source again to reconnect it.",
-  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google doesn't allow reading this Drive: choose Google Drive as the source again and grant read access."
+  "Google no deja leer este Drive: vuelve a elegir Google Drive como origen y da el permiso de lectura.": "Google doesn't allow reading this Drive: choose Google Drive as the source again and grant read access.",
+  "leyendo la lista entera: {n} elementos": "reading the full list: {n} items",
+  "{n} cambios desde la última vez": "{n} changes since last time",
+  "leyendo la lista entera de Drive (solo la primera vez)": "reading the full Drive list (first time only)",
+  "pidiendo los cambios desde la última vez": "asking for the changes since last time",
+  "Google Drive: lista entera (la primera vez y cada semana)": "Google Drive: full list (first time and weekly)",
+  "Google Drive: solo los cambios": "Google Drive: changes only"
  }
 }

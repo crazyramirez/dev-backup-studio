@@ -65,7 +65,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.7.0"
+APP_VERSION = "2.7.1"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -4265,6 +4265,10 @@ class GDriveAccounts(QObject):
         threading.Thread(target=work, name="google-desconectar", daemon=True).start()
         self.accounts.remove(acc)
         self.secrets.delete_prefix(f"gdrive/{acc.id}/")
+        try:
+            os.remove(self.win._drive_cache_path(acc.id))  # la lista guardada de su Drive
+        except OSError:
+            pass
         self._drives.pop(acc.id, None)
         self._save()
         self.win._refresh_gdrive_accounts()
@@ -7041,7 +7045,25 @@ class MainWindow(QMainWindow):
         self.integ_status.setText(self.integrity_text(long=True))
 
     def _index_path(self) -> str | None:
-        return os.path.join(DATA_DIR, "estado", f"{self.disk_id}.db") if self.disk_id else None
+        """El índice de esta copia: uno por origen y carpeta del disco. Así, alternar dos copias en el mismo
+        disco (p. ej. D:\\DEV y Google Drive) no obliga a releer el destino entero cada vez."""
+        if not self.disk_id:
+            return None
+        src, dst = self.src_card.path(), self.dst_card.path()
+        rel = os.path.normcase(engine.rel_to_volume(dst)) if dst and not gdrive_up.is_dest(dst) else ""
+        key = hashlib.sha1(f"{os.path.normcase(os.path.normpath(src))}|{rel}".encode("utf-8")).hexdigest()[:10]
+        path = os.path.join(DATA_DIR, "estado", f"{self.disk_id}-{key}.db")
+        old = os.path.join(DATA_DIR, "estado", f"{self.disk_id}.db")  # el de antes, uno por disco
+        if not os.path.exists(path) and os.path.exists(old):
+            try:
+                shutil.copy2(old, path)  # si es de esta copia, el primer análisis ya es rápido
+            except OSError:
+                pass
+        return path
+
+    def _drive_cache_path(self, account_id: str) -> str:
+        """La lista guardada de un Google Drive de origen (gdrive_src.DriveCache)."""
+        return os.path.join(DATA_DIR, "estado", f"gdrive-origen-{vault.safe_name(account_id)}.db")
 
     def scrub_seconds(self) -> int:
         if gdrive_up.is_dest(self.dst_card.path()):
@@ -7259,7 +7281,10 @@ class MainWindow(QMainWindow):
             except gdrive.DriveError:
                 drive = None
             if drive is not None:
-                self.tree.load(src, excluded, self._active_rules(), source=gdrive_src.DriveSource(drive))
+                # las carpetas salen de la lista guardada (al momento); sin ella, se piden a Google
+                cache = gdrive_src.DriveCache(self._drive_cache_path(acc.id))
+                self.tree.load(src, excluded, self._active_rules(),
+                               source=gdrive_src.DriveSource(drive, snapshot_loader=cache.snapshot))
             else:
                 self.tree.clear()
             self._refresh_src_card()
@@ -7583,6 +7608,7 @@ class MainWindow(QMainWindow):
                 except OSError:
                     pass
             job = gdrive_src.DriveSourceJob(src, dst, self._active_rules(), self.tree.excluded, reader,
+                                            cache_path=self._drive_cache_path(acc.id),
                                             mode=self.mode_combo.currentData(), threads=self.threads_spin.value(),
                                             index_path=self._index_path(), force_full=self.full_box.isChecked(),
                                             keep_days=self.keep_combo.currentData(),
@@ -9803,7 +9829,8 @@ def selftest_gdrive(win: "MainWindow", say) -> None:
             def run():
                 time.sleep(1.05)
                 job = gdrive_src.DriveSourceJob(src, folder, [], set(gdrive_src.DEFAULT_EXCLUDED), drive,
-                                                index_path=idx, meta_root=vol, scrub_seconds=0)
+                                                index_path=idx, meta_root=vol, scrub_seconds=0,
+                                                cache_path=os.path.join(vol, "_estado", "drive.db"))
                 job.run()
                 assert job.phase == "done", f"Google Drive: {job.phase} {job.fatal} {job.errors[:2]}"
                 return job
@@ -9816,11 +9843,16 @@ def selftest_gdrive(win: "MainWindow", say) -> None:
             assert os.path.exists(os.path.join(folder, gdrive.SHARED_DRIVES, "Equipo", "x.txt")), "unidad compartida"
             assert not os.path.exists(os.path.join(folder, gdrive.SHARED_WITH_ME)), "copió lo desmarcado"
             assert j.stats.verified_copies >= 5, "Google Drive: sin MD5"
-            assert run().stats.files_done == 0, "Google Drive: volvió a bajar lo que no cambió"
+            assert j.listing == "full", "Google Drive: la primera vez, la lista entera"
+            n0 = len(fake.requests)
+            j = run()
+            assert j.stats.files_done == 0 and j.listing == "changes", "Google Drive: volvió a bajar lo que no cambió"
+            assert len(fake.requests) - n0 <= 6, f"Google Drive: {len(fake.requests) - n0} peticiones sin cambios"
             with fake.lock:
                 a = next(f for f, x in fake.files.items() if x["name"] == "a.txt")
                 fake.files[a]["data"], fake.files[a]["modifiedTime"] = b"hola cambiado", "2026-03-02T09:00:00.000Z"
-                fake.files.pop([f for f, x in fake.files.items() if x["name"] == "dup.txt"][1])
+                fake.touch(a)
+                fake.remove([f for f, x in fake.files.items() if x["name"] == "dup.txt"][1])
             j = run()
             assert j.stats.files_done == 1 and j.stats.versions_saved == 2, \
                 f"Google Drive: {j.stats.files_done} bajados, {j.stats.versions_saved} a versiones"
@@ -9896,14 +9928,21 @@ def selftest_gdrive(win: "MainWindow", say) -> None:
                 assert win.job.phase == "done" and win.job.stats.files_done >= 5, \
                     f"Google Drive desde la ventana: {win.job.phase} {win.job.fatal}"
                 temp_disk = win.disk_id
+                assert os.path.basename(win._index_path()).startswith(temp_disk + "-"), "índice por copia"
             finally:
                 engine.volume_root, engine.volume_present, engine.mounted_volumes = real
                 if temp_disk:
                     try:
-                        os.remove(os.path.join(DATA_DIR, "estado", f"{temp_disk}.db"))
+                        for name in os.listdir(os.path.join(DATA_DIR, "estado")):
+                            if name.startswith(temp_disk):
+                                os.remove(os.path.join(DATA_DIR, "estado", name))
                     except OSError:
                         pass
                 win.gdrive.accounts[:] = saved["accounts"]
+                try:
+                    os.remove(win._drive_cache_path("p1"))
+                except OSError:
+                    pass
                 win.gdrive.drive_for = types.MethodType(GDriveAccounts.drive_for, win.gdrive)
                 win.settings.setValue("gdrive_client_id", saved["client"])
                 win.excl_map = saved["excl"]
@@ -10133,7 +10172,9 @@ def selftest_plans(win: "MainWindow", say) -> None:
             win.dst_card.set_path(saved["dst"])
             if temp_disk:
                 try:
-                    os.remove(os.path.join(DATA_DIR, "estado", f"{temp_disk}.db"))
+                    for name in os.listdir(os.path.join(DATA_DIR, "estado")):
+                        if name.startswith(temp_disk):
+                            os.remove(os.path.join(DATA_DIR, "estado", name))
                 except OSError:
                     pass
             win.disk_id, win.dst_rel = saved["disk_id"], saved["dst_rel"]

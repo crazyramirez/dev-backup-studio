@@ -5,8 +5,10 @@ compartidas/<unidad>» y «Compartido conmigo». Lo que se copia se elige en el 
 Carpetas, con casillas, como en cualquier origen (y las reglas, p. ej. node_modules, también valen).
 
 - El análisis es el del motor (engine.BackupJob): solo cambia de dónde sale «lo que hay en el
-  origen»: Drive se recorre una vez al empezar, varias carpetas a la vez (cada carpeta es una
-  petición a Google), sin entrar en lo desmarcado.
+  origen». La primera vez se pide a Google la lista de todo el Drive de golpe (de 1000 en 1000, no
+  carpeta por carpeta) y se guarda en el equipo (DriveCache); después, cada análisis solo pide lo que
+  ha cambiado desde la vez anterior (el registro de cambios de Drive: unas pocas peticiones). Una
+  vez por semana se vuelve a pedir la lista entera, por si acaso.
 - Copiar es bajar: lo nuevo o cambiado, comprobado con el MD5 de Google; la fecha del archivo en el
   disco es la de Drive (así la próxima vez se reconoce sin bajarlo). Los Documentos, Hojas y
   Presentaciones de Google se guardan como .docx, .xlsx y .pptx (y los dibujos como .png); se
@@ -21,8 +23,10 @@ from __future__ import annotations
 import hashlib
 import http.client
 import os
+import json
 import queue
 import re
+import sqlite3
 import threading
 import time
 from dataclasses import dataclass
@@ -38,6 +42,8 @@ from i18n import _
 ROOTS = [gdrive.MY_DRIVE, gdrive.SHARED_DRIVES, gdrive.SHARED_WITH_ME]
 DEFAULT_EXCLUDED = {norm_rel(gdrive.SHARED_WITH_ME)}  # lo compartido contigo: solo si lo marcas
 LIST_THREADS = 6
+FULL_DAYS = 7      # la lista entera de Drive se vuelve a pedir cada semana
+FIELDS_ALL = "id,name,mimeType,parents,size,md5Checksum,modifiedTime,sharedWithMe,driveId,trashed"
 DOWNLOAD_THREADS = 6
 SEP = re.compile(r"[\\/]+")
 
@@ -83,6 +89,172 @@ def error_text(exc: DriveError) -> str:
     return gdrive_up.error_text(exc)
 
 
+# ── lo que hay en Drive, guardado en el equipo ─────────────────────────────
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY, name TEXT, mime TEXT, parents TEXT, size TEXT, md5 TEXT,
+                                 mtime TEXT, shared INTEGER, drive TEXT);
+"""
+
+
+class DriveCache:
+    """Todas las carpetas y archivos de un Drive (Mi unidad, unidades compartidas y lo compartido
+    contigo), guardados en el equipo. sync() lo pone al día: la primera vez (y cada semana) con la
+    lista entera, de 1000 en 1000; las demás, solo con lo que ha cambiado desde la última vez."""
+
+    def __init__(self, path: str):
+        self.path = path
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    def _con(self) -> sqlite3.Connection:
+        con = sqlite3.connect(self.path)
+        con.executescript(_SCHEMA)
+        return con
+
+    def meta(self) -> dict:
+        try:
+            con = self._con()
+            try:
+                return dict(con.execute("SELECT k, v FROM meta"))
+            finally:
+                con.close()
+        except sqlite3.Error:
+            return {}
+
+    @staticmethod
+    def _row(it: dict, drive: str = "") -> tuple:
+        return (it["id"], it.get("name", ""), it.get("mimeType", ""), json.dumps(it.get("parents") or []),
+                str(it.get("size") or ""), it.get("md5Checksum") or "", it.get("modifiedTime") or "",
+                1 if it.get("sharedWithMe") else 0, it.get("driveId") or drive)
+
+    def sync(self, drive: gdrive.Drive, stop: threading.Event | None = None, progress=None,
+             force: bool = False) -> str:
+        """Pone la lista al día. Devuelve «full» (se pidió entera) o «changes» (solo lo cambiado)."""
+        meta = self.meta()
+        full = force or not meta.get("token") or time.time() - float(meta.get("full_at") or 0) > FULL_DAYS * 86400
+        drives = drive.shared_drives()
+        con = self._con()
+        try:
+            if not full:
+                try:
+                    self._changes(con, drive, meta["token"], stop, progress)
+                except DriveError as exc:
+                    if exc.kind not in ("notfound", "denied", "server"):
+                        raise
+                    full = True  # el registro de cambios ya no sirve: se pide todo de nuevo
+            if full:
+                token = drive.get("/changes/startPageToken", {"supportsAllDrives": "true"}, stop)["startPageToken"]
+                root = drive.get("/files/root", {"fields": "id"}, stop)["id"]
+                con.execute("DELETE FROM items")
+                self._list(con, drive, {}, "", stop, progress)
+                for d in drives:
+                    self._list(con, drive, {"corpora": "drive", "driveId": d["id"]}, d["id"], stop, progress)
+                con.executemany("INSERT OR REPLACE INTO meta VALUES (?, ?)",
+                                [("token", token), ("root", root), ("full_at", str(time.time()))])
+            else:
+                known = {d["id"] for d in json.loads(meta.get("drives") or "[]")}
+                for d in drives:  # unidades compartidas nuevas: se piden enteras
+                    if d["id"] not in known:
+                        self._list(con, drive, {"corpora": "drive", "driveId": d["id"]}, d["id"], stop, progress)
+                now = {d["id"] for d in drives}
+                for gone in known - now:   # ya no eres miembro: fuera de la lista
+                    con.execute("DELETE FROM items WHERE drive = ?", (gone,))
+            con.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", ("drives", json.dumps(drives)))
+            con.commit()
+        finally:
+            con.close()
+        return "full" if full else "changes"
+
+    def _list(self, con, drive: gdrive.Drive, extra: dict, drive_id: str, stop, progress) -> None:
+        token, count = "", 0
+        while True:
+            params = {"q": "trashed = false", "pageSize": 1000, "fields": f"nextPageToken,files({FIELDS_ALL})",
+                      **extra}
+            if drive_id:
+                params.update(supportsAllDrives="true", includeItemsFromAllDrives="true")
+            if token:
+                params["pageToken"] = token
+            data = drive.get("/files", params, stop)
+            rows = [self._row(it, drive_id) for it in data.get("files") or [] if not it.get("trashed")]
+            con.executemany("INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+            count += len(rows)
+            if progress:
+                progress(count)
+            token = data.get("nextPageToken") or ""
+            if not token:
+                return
+
+    def _changes(self, con, drive: gdrive.Drive, token: str, stop, progress) -> None:
+        count = 0
+        while True:
+            data = drive.get("/changes", {
+                "pageToken": token, "pageSize": 1000, "includeRemoved": "true", "supportsAllDrives": "true",
+                "includeItemsFromAllDrives": "true",
+                "fields": f"nextPageToken,newStartPageToken,changes(changeType,fileId,removed,file({FIELDS_ALL}))"},
+                stop)
+            for ch in data.get("changes") or []:
+                if ch.get("changeType") == "drive":
+                    continue
+                f = ch.get("file") or {}
+                if ch.get("removed") or f.get("trashed") or not f:
+                    con.execute("DELETE FROM items WHERE id = ?", (ch.get("fileId"),))
+                else:
+                    con.execute("INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", self._row(f))
+                count += 1
+            if progress:
+                progress(count)
+            if data.get("newStartPageToken"):
+                con.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", ("token", data["newStartPageToken"]))
+                return
+            token = data.get("nextPageToken") or ""
+            if not token:
+                return
+
+    def snapshot(self) -> "Snapshot | None":
+        """La lista en memoria (None si aún no se ha pedido nunca)."""
+        meta = self.meta()
+        if not meta.get("root"):
+            return None
+        con = self._con()
+        try:
+            rows = con.execute("SELECT id, name, mime, parents, size, md5, mtime, shared, drive FROM items").fetchall()
+        finally:
+            con.close()
+        return Snapshot(meta["root"], json.loads(meta.get("drives") or "[]"), rows)
+
+
+class Snapshot:
+    """La lista de un Drive en memoria: los hijos de cada carpeta, como los da la API."""
+
+    def __init__(self, root: str, drives: list[dict], rows: list[tuple]):
+        self.root = root
+        self.drives = drives
+        self.kids: dict[str, list[dict]] = {}
+        known = {r[0] for r in rows}
+        self.shared: list[dict] = []
+        for fid, name, mime, parents, size, md5, mtime, shared, drive in rows:
+            it = {"id": fid, "name": name, "mimeType": mime, "modifiedTime": mtime}
+            if size:
+                it["size"] = size
+            if md5:
+                it["md5Checksum"] = md5
+            ps = json.loads(parents or "[]")
+            for p in ps:
+                self.kids.setdefault(p, []).append(it)
+            # lo compartido contigo cuya carpeta no ves: arriba del todo en «Compartido conmigo»
+            if shared and not drive and not any(p in known or p == root for p in ps):
+                self.shared.append(it)
+
+    def children(self, fid: str) -> list[dict]:
+        if fid == "@drives":
+            return [{"id": d["id"], "name": d.get("name", ""), "mimeType": FOLDER, "_drive": d["id"]}
+                    for d in self.drives]
+        if fid == "@shared":
+            return list(self.shared)
+        return list(self.kids.get(self.root if fid == "root" else fid, []))
+
+
 @dataclass
 class Item:
     name: str
@@ -97,8 +269,10 @@ class DriveSource:
     """Un Drive visto como carpeta: rutas «Mi unidad/…», «Unidades compartidas/<unidad>/…» y
     «Compartido conmigo/…». Recuerda el id de cada carpeta que ve (para el árbol y para el análisis)."""
 
-    def __init__(self, drive: gdrive.Drive):
+    def __init__(self, drive: gdrive.Drive, snapshot: "Snapshot | None" = None, snapshot_loader=None):
         self.drive = drive
+        self.snapshot = snapshot
+        self._loader = snapshot_loader   # para el árbol: la lista guardada se lee al desplegar, en otro hilo
         self._lock = threading.Lock()
         self._dirs: dict[str, tuple[str, str]] = {
             norm_rel(gdrive.MY_DRIVE): ("root", ""),
@@ -110,6 +284,16 @@ class DriveSource:
         self.folders = 0
 
     def _children(self, fid: str, did: str, stop: threading.Event | None) -> list[dict]:
+        if self.snapshot is None and self._loader is not None:
+            with self._lock:
+                if self._loader is not None:
+                    try:
+                        self.snapshot = self._loader()
+                    except (sqlite3.Error, OSError, ValueError):
+                        self.snapshot = None
+                    self._loader = None
+        if self.snapshot is not None:
+            return self.snapshot.children(fid)  # de la lista guardada: sin esperar a Google
         if fid == "@drives":
             return [{"id": d["id"], "name": d.get("name", ""), "mimeType": FOLDER, "_drive": d["id"]}
                     for d in self.drive.shared_drives()]
@@ -276,10 +460,13 @@ def _md5(path: str) -> str:
 class DriveSourceJob(engine.BackupJob):
     """Una sincronización con Google Drive de origen. Misma interfaz que engine.BackupJob."""
 
-    def __init__(self, src: str, dst: str, patterns, excluded, drive: gdrive.Drive, *args, **kwargs):
+    def __init__(self, src: str, dst: str, patterns, excluded, drive: gdrive.Drive, *args,
+                 cache_path: str | None = None, **kwargs):
         super().__init__(src, dst, patterns, excluded, *args, **kwargs)
         self.account = parse_src(src)
         self.drive = drive
+        self.cache = DriveCache(cache_path) if cache_path else None
+        self.listing = ""   # «full» o «changes»: cómo se puso al día la lista de Drive
         self.source = DriveSource(drive)
         self.threads = max(1, min(self.threads, DOWNLOAD_THREADS))
         self._tree: dict[str, dict] = {}
@@ -326,11 +513,25 @@ class DriveSourceJob(engine.BackupJob):
         def progress(rel: str) -> None:
             s.current_dir = "Google Drive  ›  " + rel
 
+        if self.cache is not None:
+            first = not self.cache.meta().get("token") or self.force_full
+
+            def counted(n: int) -> None:
+                s.current_dir = "Google Drive  ·  " + (_("leyendo la lista entera: {n} elementos").format(n=n) if first
+                                                     else _("{n} cambios desde la última vez").format(n=n))
+
+            s.current_dir = "Google Drive  ·  " + (_("leyendo la lista entera de Drive (solo la primera vez)")
+                                                 if first else _("pidiendo los cambios desde la última vez"))
+            self.listing = self.cache.sync(self.drive, self._cancel, counted, force=self.force_full)
+            self.source = DriveSource(self.drive, self.cache.snapshot())
         self._tree, self._items = self.source.walk(self.excluded, self.patterns, self._cancel, progress)
         for rel, msg in self.source.errors:
             self._error(os.path.join(self.src, rel), OSError(0, msg))
         ok = super().scan()
         s.scan_start = start  # el análisis incluye recorrer Drive
+        if self.listing:
+            self.index_note += "  ·  " + (_("Google Drive: lista entera (la primera vez y cada semana)")
+                                          if self.listing == "full" else _("Google Drive: solo los cambios"))
         return ok
 
     def _src_entries(self, rel: str, sdir: str) -> list[tuple]:
