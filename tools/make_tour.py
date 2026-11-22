@@ -375,6 +375,124 @@ def capture() -> None:
     after(300, remind_due)
     after(900, remind_grab)
 
+    # copias programadas: la tarjeta con una copia programada y el diálogo del horario
+    import planner
+
+    def plans_grab():
+        offset[0] = timedelta(0)
+        key_src, key_dst, disk_id, rel, label = win._current_plan_key()
+        pid = bs.reminders.pair_id(key_src, disk_id, rel, key_dst)
+        plan = planner.Plan(id=pid, src=os.path.normpath(key_src), dst=os.path.normpath(key_dst), disk_id=disk_id,
+                            dst_rel=rel, label=label or D["label"], days=[0, 1, 2, 3, 4], at="21:00")
+        win.plans.put(plan, win._now())
+        win.plans_box.setChecked(True)
+        win.sections["programadas"].set_expanded(True, animate=False)
+        win._refresh_plans()
+        state["plan"] = plan
+
+    def plans_shot():
+        card = win.card_plans
+        row = win.plan_rows.itemAt(0).widget() if win.plan_rows.count() else None
+        if row is None or not row.isVisible():
+            return False
+        grab("plans", card, rects={"row": rect_in(row, card), "add": rect_in(win.btn_plan_add, card)})
+        dlg = bs.ScheduleDialog(win, state["plan"], True)
+        dlg.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        dlg.move(-3000, 60)
+        dlg.show()
+        state["dlg"] = dlg
+        return None
+
+    def schedule_shot():
+        dlg = state["dlg"]
+        days = dlg.day_btns[0].parentWidget()
+        grab("schedule", dlg, rects={"days": rect_in(days, dlg), "at": rect_in(dlg.at, dlg),
+                                     "preview": rect_in(dlg.preview, dlg)})
+        dlg.reject()
+        win.plans.remove(state["plan"].id)
+        win._refresh_plans()
+
+    state: dict = {}
+    after(300, plans_grab)
+    after(500, plans_shot)
+    after(400, schedule_shot)
+
+    # Google Drive: una cuenta de ejemplo con un Drive de mentira (gdrive_fake), de origen y de destino
+    import gdrive
+    import gdrive_fake
+    import gdrive_up
+
+    fake = gdrive_fake.FakeDrive()
+    fake.limit = 2 * 1024 ** 4
+    stamp = "2026-03-02T10:00:00.000Z"
+    with fake.lock:
+        for name in (P["web"], P["shop"], P["app"], P["game"]):
+            folder = fake.add(name, ["root"], mtime=stamp)
+            fake.add("README.md", [folder], "text/markdown", b"# demo", mtime=stamp)
+        fake.drives += [("d1", "Marketing"), ("d2", "Studio")]
+        fake.add("2026", ["d1"], mtime=stamp)
+        fake.add("Ana", [], mtime=stamp, shared=True)
+    acc = gdrive.Account(id="demo", email="alex@example.com", name="Alex",
+                         scopes=[gdrive.SCOPE, gdrive.SCOPE_FILE])
+
+    def drive_api():
+        return gdrive.Drive("rt", "cid", "sec", api=fake.base + "/drive/v3", token_url=fake.base + "/token")
+
+    gdrive_up.machine_name = lambda: "PC"  # el nombre de este equipo no sale en las capturas
+    bs.GDriveAccounts.client = lambda self: ("cid", "sec")
+    bs.GDriveAccounts.drive_for = lambda self, a: drive_api()
+    bs.GDriveAccounts.writer_for = lambda self, a: gdrive_up.Writer(
+        "rt", "cid", "sec", api=fake.base + "/drive/v3", token_url=fake.base + "/token")
+
+    def drive_src():
+        win.gdrive.accounts[:] = [acc]
+        win._refresh_gdrive_accounts()
+        win._choose_drive_src(acc.id)
+        win.seg_buttons[bs.PAGE_TREE].click()
+
+    def drive_tree():
+        tree = win.tree
+        if tree.topLevelItemCount() < 3:
+            return False
+        top = tree.topLevelItem(0)
+        if not top.isExpanded():
+            top.setExpanded(True)
+            return False
+        if top.childCount() < 4 or top.data(0, bs.FolderTree.LOADING):
+            return False
+        page = win.stack.widget(bs.PAGE_TREE)
+        r = tree.visualItemRect(top)
+        last = tree.visualItemRect(tree.topLevelItem(tree.topLevelItemCount() - 1))
+        grab("drive_tree", page, rects={"top": QRect(tree.viewport().mapTo(page, r.topLeft()), r.size()),
+                                        "tree": rect_in(tree, page),
+                                        "last": QRect(tree.viewport().mapTo(page, last.topLeft()), last.size())})
+        grab("drive_src_pair", win.card_pair, rects={"src": rect_in(win.src_card, win.card_pair)})
+        return None
+
+    def drive_dst():
+        win.src_card.set_path(src)
+        win._on_src_changed()
+        win.dst_card.set_path(win._drive_dest_for(acc.id, src))
+        win._on_dst_changed()
+        win._fetch_drive_quota(acc)
+
+    def drive_dst_shot():
+        if acc.id not in win._drive_quota:
+            return False
+        win._refresh_dst_card()
+        card = win.card_pair
+        grab("drive_dst_pair", card, rects={"dst": rect_in(win.dst_card.cloud_box, card)})
+        win.dst_card.set_path(dst)
+        win._on_dst_changed()
+        win.gdrive.accounts[:] = []
+        win._refresh_gdrive_accounts()
+        return None
+
+    after(300, drive_src)
+    after(600, drive_tree)
+    after(300, drive_dst)
+    after(500, drive_dst_shot)
+
     def tour_open():
         win.settings.setValue("tour", 0)
         win.seg_buttons[bs.PAGE_PROGRESS].click()
@@ -404,6 +522,7 @@ def capture() -> None:
     finally:
         subst(SRC_LETTER, None)
         subst(DST_LETTER, None)
+        fake.stop()
     with open(os.path.join(RAW, "meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=1)
     if win.job:
@@ -616,7 +735,31 @@ def compose() -> None:
                         radius=12, strong=True)
     save(img, p, "4-sincroniza", [foot_at("scan", 4), foot_at("start", 4)])
 
-    # 5 · recuperar: la línea de tiempo con lo apartado y los botones para devolverlo
+    # 5 · copias programadas: la tarjeta con la copia programada y el diálogo del horario
+    img, p = canvas()
+    pl = meta["plans"]
+    psc = min(0.82, (H - 52) / pl["h"])
+    _r, plans_at = panel(p, "plans", 30, (H - pl["h"] * psc) / 2, scale=psc)
+    sc = meta["schedule"]
+    ssc = min(0.62, (H - 36) / sc["h"])
+    _r, sched_at = panel(p, "schedule", W - sc["w"] * ssc - 30, (H - sc["h"] * ssc) / 2, scale=ssc, strong=True)
+    save(img, p, "5-programa", [plans_at("row", 4), sched_at("days", 4), sched_at("at", 4)])
+
+    # 6 · Google Drive: el árbol de un Drive de origen y una copia guardada en Drive
+    img, p = canvas()
+    tree = meta["drive_tree"]
+    tsc = 0.86
+    tx, ty = tree["tree"][0], tree["tree"][1]
+    th = min(tree["last"][1] + tree["last"][3] + 14 - ty, (H - 52) / tsc)
+    _r, tree_at = panel(p, "drive_tree", 30, (H - th * tsc) / 2, scale=tsc, crop=(tx, ty, 470, th))
+    dp = meta["drive_dst_pair"]
+    dsc = min(0.78, (W - 470 * tsc - 100) / dp["w"])
+    _r, dst_at = panel(p, "drive_dst_pair", W - dp["w"] * dsc - 30, (H - dp["h"] * dsc) / 2, scale=dsc, strong=True)
+    top = tree_at("top", 3)
+    top[2] = 190.0  # la fila ocupa todo el árbol: se destaca solo la casilla, el icono y el nombre
+    save(img, p, "6-drive", [top, dst_at("dst", 5)])
+
+    # 7 · recuperar: la línea de tiempo con lo apartado y los botones para devolverlo
     img, p = canvas()
     rec = meta["recover"]
     rsc = 0.62
@@ -629,9 +772,9 @@ def compose() -> None:
     asc = 0.95
     _r, act_at = panel(p, "recover_actions", W - (ax1 - ax0) * asc - 28, H - ah * asc - 22, scale=asc,
                        crop=(ax0, ay0, ax1 - ax0, ah), radius=12, strong=True)
-    save(img, p, "5-recupera", [rec_at("date", 4), act_at("restore", 4)])
+    save(img, p, "7-recupera", [rec_at("date", 4), act_at("restore", 4)])
 
-    # 6 · conectar el disco y recordatorios: el aviso arriba, la tarjeta y el diálogo al enchufar el disco
+    # 8 · conectar el disco y recordatorios: el aviso arriba, la tarjeta y el diálogo al enchufar el disco
     img, p = canvas()
     bar = meta["remind_bar"]
     bsc = 0.84
@@ -642,7 +785,7 @@ def compose() -> None:
     dlg = meta["dialog"]
     dsc = 0.66
     _r, dlg_at = panel(p, "dialog", W - dlg["w"] * dsc - 28, H - dlg["h"] * dsc - 18, scale=dsc, strong=True)
-    save(img, p, "6-conecta", [bar_at("go", 4), dlg_at("sync", 4)])
+    save(img, p, "8-conecta", [bar_at("go", 4), dlg_at("sync", 4)])
 
     # capturas del README de este idioma con el diseño actual
     for name, out, width in [] if LANG not in DOC_DIRS else (

@@ -804,8 +804,6 @@
   "inhibición de systemd, solo inactividad": "systemd inhibitor, idle only",
   "7, 30 o 60 días": "7, 30 or 60 days",
   "Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia, lo comprueba y, si fuera a apartar media copia de golpe, se para a preguntarte.": "Analyze shows what's new, modified and moved without touching anything. Sync copies and verifies it, and if it were about to set aside half the backup at once, it stops to ask you.",
-  "Copia tu carpeta de proyectos a un disco externo o a tu nube: rápido, comprobado y con un historial para recuperar lo que borres.": "Back up your projects folder to an external drive or your cloud: fast, verified and with a history to recover what you delete.",
-  "El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo o de tu nube en casa.": "The source is your projects folder; the destination, a folder on the external drive or on your home cloud.",
   "Este escritorio no puede abrir carpetas de red. Instala el paquete gvfs-backends (Ubuntu, Debian) o gvfs-smb (Fedora, Arch) y pulsa «Conectar»: no hace falta otro código.": "This desktop can't open network folders. Install the gvfs-backends package (Ubuntu, Debian) or gvfs-smb (Fedora, Arch) and press “Connect”: you don't need another code.",
   "Frena los borrados masivos": "Stops mass deletions",
   "Lo que borras o cambias pasa a versiones. En Recuperar eliges una fecha, buscas el archivo y lo devuelves a su sitio, sin sobrescribir nada.": "What you delete or change goes to versions. In Recover you pick a date, find the file and put it back where it was, without overwriting anything.",
@@ -1112,6 +1110,18 @@
   "Usar esa carpeta": "Use that folder",
   "Guardarla aparte": "Keep it separate",
   "Elegir otra carpeta…": "Choose another folder…",
-  "Copiar aquí igualmente": "Copy here anyway"
+  "Copiar aquí igualmente": "Copy here anyway",
+  "Copia tus proyectos a un disco externo, a tu nube o a Google Drive: rápido, comprobado y con un historial para recuperar lo que borres.": "Back up your projects to an external drive, your home cloud or Google Drive: fast, verified and with a history to recover whatever you delete.",
+  "El origen es tu carpeta de proyectos o tu Google Drive; el destino, una carpeta del disco externo, de tu nube en casa o de Google Drive.": "The source is your projects folder or your Google Drive; the destination, a folder on the external drive, your home cloud or Google Drive.",
+  "Programa tus copias": "Schedule your backups",
+  "Elige qué días y a qué hora se hace sola, aunque la ventana esté cerrada. Si el equipo estaba apagado o el disco no estaba, se hace en cuanto se pueda.": "Choose the days and time it runs on its own, even with the window closed. If the computer was off or the drive wasn't there, it runs as soon as it can.",
+  "Días y hora a tu medida": "Days and time, your way",
+  "Recupera las que se pierden": "Catches up on missed ones",
+  "Con la ventana cerrada": "With the window closed",
+  "Google Drive, en los dos sentidos": "Google Drive, both ways",
+  "Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de tus carpetas. Con tu propia cuenta de Google, sin instalar nada más.": "Back up your Google Drive to a disk (after the first time, only what changes) or keep your folders' backups in Drive. With your own Google account, nothing else to install.",
+  "De Drive a tu disco": "From Drive to your disk",
+  "De tu disco a Drive": "From your disk to Drive",
+  "Con tu propio ID de Google": "With your own Google ID"
  }
 }

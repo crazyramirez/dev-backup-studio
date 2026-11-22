@@ -228,12 +228,10 @@
   "la bandeja": "dem Infobereich",
   "Guía rápida": "Kurzanleitung",
   "Tus proyectos, siempre a salvo": "Ihre Projekte, immer sicher",
-  "Copia tu carpeta de proyectos a un disco externo o a tu nube: rápido, comprobado y con un historial para recuperar lo que borres.": "Sichern Sie Ihren Projektordner auf einem externen Laufwerk oder in Ihrer Cloud: schnell, geprüft und mit einem Verlauf, um Gelöschtes wiederherzustellen.",
   "Verificado con SHA-256": "Mit SHA-256 geprüft",
   "Versiones de lo que cambias": "Versionen Ihrer Änderungen",
   "Detecta movidos": "Erkennt Verschobenes",
   "Elige origen y destino": "Quelle und Ziel wählen",
-  "El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo o de tu nube en casa.": "Die Quelle ist Ihr Projektordner, das Ziel ein Ordner auf dem externen Laufwerk oder in Ihrer Cloud zu Hause.",
   "Una carpeta o un disco entero": "Ein Ordner oder ein ganzes Laufwerk",
   "Lo reconoce aunque cambie de letra": "Erkannt, auch wenn sich der Laufwerksbuchstabe ändert",
   "Tu nube, con un código": "Ihre Cloud, mit einem Code",
@@ -1112,6 +1110,18 @@
   "Usar esa carpeta": "Diesen Ordner verwenden",
   "Guardarla aparte": "Getrennt ablegen",
   "Elegir otra carpeta…": "Anderen Ordner wählen…",
-  "Copiar aquí igualmente": "Trotzdem hierher kopieren"
+  "Copiar aquí igualmente": "Trotzdem hierher kopieren",
+  "Copia tus proyectos a un disco externo, a tu nube o a Google Drive: rápido, comprobado y con un historial para recuperar lo que borres.": "Sichern Sie Ihre Projekte auf einem externen Laufwerk, in Ihrer Cloud zu Hause oder in Google Drive: schnell, geprüft und mit einem Verlauf, um Gelöschtes wiederherzustellen.",
+  "El origen es tu carpeta de proyectos o tu Google Drive; el destino, una carpeta del disco externo, de tu nube en casa o de Google Drive.": "Die Quelle ist Ihr Projektordner oder Ihr Google Drive; das Ziel ein Ordner auf dem externen Laufwerk, in Ihrer Cloud zu Hause oder in Google Drive.",
+  "Programa tus copias": "Sicherungen planen",
+  "Elige qué días y a qué hora se hace sola, aunque la ventana esté cerrada. Si el equipo estaba apagado o el disco no estaba, se hace en cuanto se pueda.": "Wählen Sie Tage und Uhrzeit, zu denen sie von selbst läuft, auch bei geschlossenem Fenster. War der Computer aus oder das Laufwerk nicht da, läuft sie, sobald es geht.",
+  "Días y hora a tu medida": "Tage und Uhrzeit nach Wunsch",
+  "Recupera las que se pierden": "Holt Verpasstes nach",
+  "Con la ventana cerrada": "Bei geschlossenem Fenster",
+  "Google Drive, en los dos sentidos": "Google Drive in beide Richtungen",
+  "Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de tus carpetas. Con tu propia cuenta de Google, sin instalar nada más.": "Sichern Sie Ihr Google Drive auf ein Laufwerk (danach nur, was sich ändert) oder legen Sie die Sicherungen Ihrer Ordner in Drive ab. Mit Ihrem eigenen Google-Konto, ohne weitere Installation.",
+  "De Drive a tu disco": "Von Drive auf Ihr Laufwerk",
+  "De tu disco a Drive": "Von Ihrem Laufwerk nach Drive",
+  "Con tu propio ID de Google": "Mit Ihrer eigenen Google-ID"
  }
 }

@@ -1,5 +1,12 @@
 # Novedades
 
+## 2.7.4
+
+- **La guía rápida, al día.** Dos pasos nuevos: *Programa tus copias* (qué días y a qué hora se hace sola) y
+  *Google Drive, en los dos sentidos* (copiar tu Drive a un disco o guardar tus copias en Drive). Los
+  textos de bienvenida y de origen y destino ya mencionan Google Drive, y todas las ilustraciones están
+  rehechas con el diseño actual, en los siete idiomas. Quien actualice la verá una vez.
+
 ## 2.7.3
 
 - **El destino sigue al origen.** Al cambiar el origen, el destino vuelve a la carpeta de la copia de ese

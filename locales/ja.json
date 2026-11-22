@@ -773,8 +773,6 @@
   "inhibición de systemd, solo inactividad": "systemd の抑止（アイドルのみ）",
   "7, 30 o 60 días": "7・30・60 日",
   "Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia, lo comprueba y, si fuera a apartar media copia de golpe, se para a preguntarte.": "「分析」は新規・変更・移動を何も変えずに表示します。「同期」はコピーして検証し、バックアップの大半を一度に退避しそうなときは、止まって確認します。",
-  "Copia tu carpeta de proyectos a un disco externo o a tu nube: rápido, comprobado y con un historial para recuperar lo que borres.": "プロジェクトフォルダーを外付けディスクやあなたのクラウドへバックアップ。高速で検証済み、削除したものも履歴から復元できます。",
-  "El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo o de tu nube en casa.": "コピー元はプロジェクトフォルダー、コピー先は外付けディスクか自宅のクラウドのフォルダーです。",
   "Este escritorio no puede abrir carpetas de red. Instala el paquete gvfs-backends (Ubuntu, Debian) o gvfs-smb (Fedora, Arch) y pulsa «Conectar»: no hace falta otro código.": "このデスクトップではネットワークフォルダーを開けません。gvfs-backends（Ubuntu、Debian）または gvfs-smb（Fedora、Arch）パッケージをインストールして「接続」を押してください。新しいコードは不要です。",
   "Frena los borrados masivos": "大量削除を食い止める",
   "Lo que borras o cambias pasa a versiones. En Recuperar eliges una fecha, buscas el archivo y lo devuelves a su sitio, sin sobrescribir nada.": "削除・変更したものはバージョンに残ります。「復元」で日付を選び、ファイルを探して元の場所に戻せます。何も上書きしません。",
@@ -1075,6 +1073,18 @@
   "Usar esa carpeta": "そのフォルダーを使う",
   "Guardarla aparte": "別に保存する",
   "Elegir otra carpeta…": "別のフォルダーを選択…",
-  "Copiar aquí igualmente": "それでもここにコピー"
+  "Copiar aquí igualmente": "それでもここにコピー",
+  "Copia tus proyectos a un disco externo, a tu nube o a Google Drive: rápido, comprobado y con un historial para recuperar lo que borres.": "プロジェクトを外付けディスク、自宅のクラウド、Google ドライブにバックアップ。高速で検証済み、削除したものも履歴から復元できます。",
+  "El origen es tu carpeta de proyectos o tu Google Drive; el destino, una carpeta del disco externo, de tu nube en casa o de Google Drive.": "コピー元はプロジェクトフォルダーまたは Google ドライブ、コピー先は外付けディスク、自宅のクラウド、Google ドライブのフォルダーです。",
+  "Programa tus copias": "バックアップを予約",
+  "Elige qué días y a qué hora se hace sola, aunque la ventana esté cerrada. Si el equipo estaba apagado o el disco no estaba, se hace en cuanto se pueda.": "自動で実行する曜日と時刻を選べます。ウィンドウを閉じていても実行されます。パソコンの電源が切れていたりディスクがなかったりした場合は、できしだい実行します。",
+  "Días y hora a tu medida": "曜日と時刻を自由に",
+  "Recupera las que se pierden": "逃した分も実行",
+  "Con la ventana cerrada": "ウィンドウを閉じても",
+  "Google Drive, en los dos sentidos": "Google ドライブを双方向に",
+  "Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de tus carpetas. Con tu propia cuenta de Google, sin instalar nada más.": "Google ドライブをディスクにバックアップ（2 回目からは変更分のみ）、またはフォルダーのバックアップをドライブに保存。自分の Google アカウントで、追加のインストールは不要です。",
+  "De Drive a tu disco": "ドライブからディスクへ",
+  "De tu disco a Drive": "ディスクからドライブへ",
+  "Con tu propio ID de Google": "自分の Google ID で"
  }
 }

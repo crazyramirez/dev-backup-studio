@@ -773,8 +773,6 @@
   "inhibición de systemd, solo inactividad": "systemd 抑制锁，仅闲置",
   "7, 30 o 60 días": "7、30 或 60 天",
   "Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia, lo comprueba y, si fuera a apartar media copia de golpe, se para a preguntarte.": "“分析”会列出新增、修改和移动的内容，不做任何改动。“同步”会复制并校验；如果要一次性移走大半备份，它会先停下来询问你。",
-  "Copia tu carpeta de proyectos a un disco externo o a tu nube: rápido, comprobado y con un historial para recuperar lo que borres.": "把项目文件夹备份到外部磁盘或你的云：快速、经过校验，并保留历史记录，删掉的也能找回。",
-  "El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo o de tu nube en casa.": "源是你的项目文件夹；目标是外部磁盘或你家中云上的一个文件夹。",
   "Este escritorio no puede abrir carpetas de red. Instala el paquete gvfs-backends (Ubuntu, Debian) o gvfs-smb (Fedora, Arch) y pulsa «Conectar»: no hace falta otro código.": "此桌面环境无法打开网络文件夹。请安装 gvfs-backends（Ubuntu、Debian）或 gvfs-smb（Fedora、Arch）软件包，然后点“连接”，无需新的代码。",
   "Frena los borrados masivos": "拦截大规模删除",
   "Lo que borras o cambias pasa a versiones. En Recuperar eliges una fecha, buscas el archivo y lo devuelves a su sitio, sin sobrescribir nada.": "你删除或修改的内容会进入版本。在“恢复”中选一个日期，找到文件，把它放回原处，不会覆盖任何东西。",
@@ -1075,6 +1073,18 @@
   "Usar esa carpeta": "使用该文件夹",
   "Guardarla aparte": "单独保存",
   "Elegir otra carpeta…": "选择其他文件夹…",
-  "Copiar aquí igualmente": "仍然复制到这里"
+  "Copiar aquí igualmente": "仍然复制到这里",
+  "Copia tus proyectos a un disco externo, a tu nube o a Google Drive: rápido, comprobado y con un historial para recuperar lo que borres.": "把项目备份到外置磁盘、家中的云或 Google 云端硬盘：快速、经过校验，并有历史记录可找回删除的内容。",
+  "El origen es tu carpeta de proyectos o tu Google Drive; el destino, una carpeta del disco externo, de tu nube en casa o de Google Drive.": "源是你的项目文件夹或 Google 云端硬盘；目标是外置磁盘、家中云或 Google 云端硬盘中的文件夹。",
+  "Programa tus copias": "定时备份",
+  "Elige qué días y a qué hora se hace sola, aunque la ventana esté cerrada. Si el equipo estaba apagado o el disco no estaba, se hace en cuanto se pueda.": "选择自动备份的日期和时间，即使关闭窗口也会执行。如果电脑当时关机或磁盘不在，会在可以时尽快执行。",
+  "Días y hora a tu medida": "日期和时间随你定",
+  "Recupera las que se pierden": "补上错过的备份",
+  "Con la ventana cerrada": "关闭窗口也能执行",
+  "Google Drive, en los dos sentidos": "Google 云端硬盘，双向备份",
+  "Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de tus carpetas. Con tu propia cuenta de Google, sin instalar nada más.": "把 Google 云端硬盘备份到磁盘（之后只复制变化的部分），或把文件夹的备份保存到云端硬盘。使用你自己的 Google 账号，无需安装其他软件。",
+  "De Drive a tu disco": "从云端硬盘到磁盘",
+  "De tu disco a Drive": "从磁盘到云端硬盘",
+  "Con tu propio ID de Google": "使用你自己的 Google ID"
  }
 }

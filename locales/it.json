@@ -804,8 +804,6 @@
   "inhibición de systemd, solo inactividad": "inibizione di systemd, solo inattività",
   "7, 30 o 60 días": "7, 30 o 60 giorni",
   "Analizar enseña lo nuevo, modificado y movido sin tocar nada. Sincronizar lo copia, lo comprueba y, si fuera a apartar media copia de golpe, se para a preguntarte.": "Analizza mostra ciò che è nuovo, modificato o spostato senza toccare nulla. Sincronizza lo copia e lo verifica e, se stesse per mettere da parte metà del backup in una volta, si ferma a chiedertelo.",
-  "Copia tu carpeta de proyectos a un disco externo o a tu nube: rápido, comprobado y con un historial para recuperar lo que borres.": "Copia la cartella dei progetti su un disco esterno o sul tuo cloud: veloce, verificato e con una cronologia per recuperare ciò che elimini.",
-  "El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo o de tu nube en casa.": "L'origine è la cartella dei progetti; la destinazione, una cartella del disco esterno o del tuo cloud di casa.",
   "Este escritorio no puede abrir carpetas de red. Instala el paquete gvfs-backends (Ubuntu, Debian) o gvfs-smb (Fedora, Arch) y pulsa «Conectar»: no hace falta otro código.": "Questo desktop non può aprire cartelle di rete. Installa il pacchetto gvfs-backends (Ubuntu, Debian) o gvfs-smb (Fedora, Arch) e premi «Connetti»: non serve un altro codice.",
   "Frena los borrados masivos": "Ferma le eliminazioni di massa",
   "Lo que borras o cambias pasa a versiones. En Recuperar eliges una fecha, buscas el archivo y lo devuelves a su sitio, sin sobrescribir nada.": "Ciò che elimini o modifichi passa alle versioni. In Recupera scegli una data, trovi il file e lo rimetti al suo posto, senza sovrascrivere nulla.",
@@ -1112,6 +1110,18 @@
   "Usar esa carpeta": "Usa quella cartella",
   "Guardarla aparte": "Tienilo a parte",
   "Elegir otra carpeta…": "Scegli un'altra cartella…",
-  "Copiar aquí igualmente": "Copia qui comunque"
+  "Copiar aquí igualmente": "Copia qui comunque",
+  "Copia tus proyectos a un disco externo, a tu nube o a Google Drive: rápido, comprobado y con un historial para recuperar lo que borres.": "Fai il backup dei tuoi progetti su un disco esterno, sul tuo cloud di casa o su Google Drive: veloce, verificato e con una cronologia per recuperare ciò che elimini.",
+  "El origen es tu carpeta de proyectos o tu Google Drive; el destino, una carpeta del disco externo, de tu nube en casa o de Google Drive.": "L'origine è la tua cartella dei progetti o il tuo Google Drive; la destinazione, una cartella del disco esterno, del tuo cloud di casa o di Google Drive.",
+  "Programa tus copias": "Programma i tuoi backup",
+  "Elige qué días y a qué hora se hace sola, aunque la ventana esté cerrada. Si el equipo estaba apagado o el disco no estaba, se hace en cuanto se pueda.": "Scegli i giorni e l'ora in cui si fa da solo, anche a finestra chiusa. Se il computer era spento o il disco non c'era, si fa appena possibile.",
+  "Días y hora a tu medida": "Giorni e ora su misura",
+  "Recupera las que se pierden": "Recupera quelli persi",
+  "Con la ventana cerrada": "A finestra chiusa",
+  "Google Drive, en los dos sentidos": "Google Drive, nei due sensi",
+  "Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de tus carpetas. Con tu propia cuenta de Google, sin instalar nada más.": "Fai il backup del tuo Google Drive su un disco (poi, solo ciò che cambia) o salva su Drive i backup delle tue cartelle. Con il tuo account Google, senza installare altro.",
+  "De Drive a tu disco": "Da Drive al tuo disco",
+  "De tu disco a Drive": "Dal tuo disco a Drive",
+  "Con tu propio ID de Google": "Con il tuo ID Google"
  }
 }

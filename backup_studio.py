@@ -65,7 +65,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.7.3"
+APP_VERSION = "2.7.4"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -4449,7 +4449,7 @@ class UpdateDialog(QDialog):
 
 # ── guía rápida ──────────────────────────────────────────────────────────────
 
-TOUR_VERSION = 2  # al subirla, quien actualiza vuelve a ver la guía (una vez) con lo nuevo
+TOUR_VERSION = 3  # al subirla, quien actualiza vuelve a ver la guía (una vez) con lo nuevo
 TOUR_DIR = os.path.join(getattr(sys, "_MEIPASS", APP_DIR), "assets", "tour")
 
 
@@ -4459,13 +4459,13 @@ def tour_steps() -> list[dict]:
     return [
         {"image": "1-bienvenida", "glyph": G.SPARK, "eyebrow": _("Guía rápida"),
          "title": _("Tus proyectos, siempre a salvo"),
-         "text": _("Copia tu carpeta de proyectos a un disco externo o a tu nube: rápido, comprobado y con "
-                 "un historial para recuperar lo que borres."),
+         "text": _("Copia tus proyectos a un disco externo, a tu nube o a Google Drive: rápido, comprobado y "
+                   "con un historial para recuperar lo que borres."),
          "chips": [(G.SHIELD, _("Verificado con SHA-256")), (G.CLOCK, _("Versiones de lo que cambias")),
                    (G.NEXT, _("Detecta movidos"))]},
         {"image": "2-origen-destino", "glyph": G.FOLDER, "title": _("Elige origen y destino"),
-         "text": _("El origen es tu carpeta de proyectos; el destino, una carpeta del disco externo o de tu "
-                   "nube en casa."),
+         "text": _("El origen es tu carpeta de proyectos o tu Google Drive; el destino, una carpeta del disco "
+                   "externo, de tu nube en casa o de Google Drive."),
          "chips": [(G.FOLDER, _("Una carpeta o un disco entero")), (G.DRIVE, _("Lo reconoce aunque cambie de letra")),
                    (G.GLOBE, _("Tu nube, con un código"))]},
         {"image": "3-que-copiar", "glyph": G.FILTER, "title": _("Decide qué se copia"),
@@ -4476,12 +4476,22 @@ def tour_steps() -> list[dict]:
                    "comprueba y, si fuera a apartar media copia de golpe, se para a preguntarte."),
          "chips": [(G.SEARCH, _("Revisa antes de copiar")), (G.SHIELD, _("Cada archivo verificado")),
                    (G.WARN, _("Frena los borrados masivos"))]},
-        {"image": "5-recupera", "glyph": G.HISTORY, "title": _("Recupera lo que borraste"),
+        {"image": "5-programa", "glyph": G.CLOCK, "title": _("Programa tus copias"),
+         "text": _("Elige qué días y a qué hora se hace sola, aunque la ventana esté cerrada. Si el equipo estaba "
+                   "apagado o el disco no estaba, se hace en cuanto se pueda."),
+         "chips": [(G.CLOCK, _("Días y hora a tu medida")), (G.REFRESH, _("Recupera las que se pierden")),
+                   (G.SYNC, _("Con la ventana cerrada"))]},
+        {"image": "6-drive", "glyph": G.GLOBE, "title": _("Google Drive, en los dos sentidos"),
+         "text": _("Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de "
+                   "tus carpetas. Con tu propia cuenta de Google, sin instalar nada más."),
+         "chips": [(G.DOWNLOAD, _("De Drive a tu disco")), (G.COPY, _("De tu disco a Drive")),
+                   (G.SHIELD, _("Con tu propio ID de Google"))]},
+        {"image": "7-recupera", "glyph": G.HISTORY, "title": _("Recupera lo que borraste"),
          "text": _("Lo que borras o cambias pasa a versiones. En Recuperar eliges una fecha, buscas el archivo y "
                    "lo devuelves a su sitio, sin sobrescribir nada."),
          "chips": [(G.HISTORY, _("Línea de tiempo por fechas")), (G.RESTORE, _("Nunca sobrescribe")),
                    (G.CLOCK, _("7, 30 o 60 días"))]},
-        {"image": "6-conecta", "glyph": G.BELL, "title": _("Conecta el disco y listo"),
+        {"image": "8-conecta", "glyph": G.BELL, "title": _("Conecta el disco y listo"),
          "text": _("Desde {tray} vigila el disco y te recuerda copiar si llevas días con cambios sin guardar. "
                    "Al enchufarlo, sincronizas con un clic.").format(tray=tray),
          "chips": [(G.SYNC, _("Vigila en segundo plano")), (G.BELL, _("Te recuerda copiar")),
@@ -10805,7 +10815,7 @@ def selftest() -> int:
         tour.finished.connect(ended.append)
         tour.open()
         steps = len(tour.card.steps)
-        assert 4 <= steps <= 6 and tour.card.idx == 0
+        assert 4 <= steps <= 8 and tour.card.idx == 0
         for _i in range(steps - 1):
             tour.card.forward()
             tour.card.grab()
