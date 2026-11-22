@@ -316,3 +316,118 @@ class Guard:
             "last_beat": b.last_beat if b else 0.0, "beats": b.beats if b else 0,
             "disk_error": b.error if b else "",
         }
+
+
+# ── despertar el equipo para una copia programada (Windows) ──────────────────
+
+if IS_WIN:
+    _k32.CreateWaitableTimerW.restype = wintypes.HANDLE
+    _k32.CreateWaitableTimerW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    _k32.SetWaitableTimer.argtypes = [wintypes.HANDLE, ctypes.POINTER(ctypes.c_longlong), wintypes.LONG,
+                                      ctypes.c_void_p, ctypes.c_void_p, wintypes.BOOL]
+    _k32.CancelWaitableTimer.argtypes = [wintypes.HANDLE]
+
+    class _PowerStatus(ctypes.Structure):
+        _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
+                    ("BatteryLifePercent", ctypes.c_ubyte), ("SystemStatusFlag", ctypes.c_ubyte),
+                    ("BatteryLifeTime", wintypes.DWORD), ("BatteryFullLifeTime", wintypes.DWORD)]
+
+    _k32.GetSystemPowerStatus.argtypes = [ctypes.POINTER(_PowerStatus)]
+
+_EPOCH_1601 = 11644473600  # segundos entre 1601-01-01 (FILETIME) y 1970-01-01
+
+
+class WakeTimer:
+    """Temporizador de reactivación de Windows: saca al equipo del reposo (o de la hibernación) a
+    una hora, como «Despertar el equipo para ejecutar esta tarea» del Programador de tareas.
+    Basta con que la app tenga el temporizador abierto; no hace falta ningún hilo esperando.
+    Windows lo respeta si el plan de energía permite los temporizadores de reactivación (lo
+    normal enchufado; con batería, según el plan). En macOS y Linux no hace nada: despertar el
+    equipo allí necesita permisos de administrador."""
+
+    supported = IS_WIN
+
+    def __init__(self):
+        self._handle = None
+        self.when = None  # datetime programado o None
+
+    def set(self, when) -> bool:
+        """Despertar a la hora `when` (datetime local) o, con None, no despertar."""
+        if not IS_WIN:
+            return False
+        if when is None:
+            self.cancel()
+            return True
+        if self._handle is None:
+            handle = _k32.CreateWaitableTimerW(None, True, None)
+            if not handle:
+                return False
+            self._handle = handle
+        due = ctypes.c_longlong(int((when.timestamp() + _EPOCH_1601) * 10_000_000))  # FILETIME UTC, absoluto
+        if not _k32.SetWaitableTimer(self._handle, ctypes.byref(due), 0, None, None, True):
+            return False
+        self.when = when
+        return True
+
+    def cancel(self) -> None:
+        if IS_WIN and self._handle is not None:
+            _k32.CancelWaitableTimer(self._handle)
+        self.when = None
+
+    def close(self) -> None:
+        self.cancel()
+        if IS_WIN and self._handle is not None:
+            _k32.CloseHandle(self._handle)
+            self._handle = None
+
+
+# ── batería ──────────────────────────────────────────────────────────────────
+
+def _linux_supplies() -> list[tuple[str, str]]:
+    base = "/sys/class/power_supply"
+    out = []
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return out
+    for name in names:
+        try:
+            with open(os.path.join(base, name, "type"), encoding="ascii") as fh:
+                kind = fh.read().strip()
+            online = ""
+            path = os.path.join(base, name, "online")
+            if os.path.exists(path):
+                with open(path, encoding="ascii") as fh:
+                    online = fh.read().strip()
+            out.append((kind, online))
+        except OSError:
+            continue
+    return out
+
+
+def power_source() -> str:
+    """«ac» enchufado, «battery» con batería o «» si no se sabe (o el equipo no tiene batería)."""
+    try:
+        if IS_WIN:
+            st = _PowerStatus()
+            if not _k32.GetSystemPowerStatus(ctypes.byref(st)) or st.BatteryFlag in (128, 255):
+                return ""  # 128 = sin batería; 255 = desconocido
+            return {0: "battery", 1: "ac"}.get(st.ACLineStatus, "")
+        if IS_MAC:
+            out = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True, timeout=5).stdout
+            if "InternalBattery" not in out:
+                return ""
+            return "battery" if "'Battery Power'" in out else "ac" if "'AC Power'" in out else ""
+        if IS_LINUX:
+            supplies = _linux_supplies()
+            if not any(kind == "Battery" for kind, _o in supplies):
+                return ""
+            mains = [online for kind, online in supplies if kind in ("Mains", "USB", "USB_C") and online]
+            return "ac" if "1" in mains else "battery" if mains else ""
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return ""
+    return ""
+
+
+def has_battery() -> bool:
+    return power_source() != ""

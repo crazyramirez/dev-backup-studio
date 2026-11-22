@@ -101,6 +101,23 @@ Die Apps sind nicht mit einem Entwicklerzertifikat signiert, daher warnt das Sys
   fragt die App selbst (unter Linux verhindert `systemd-inhibit` den Ruhezustand). Geht der Computer
   trotzdem in den Ruhezustand oder wird das Laufwerk getrennt, wartet die Sicherung und setzt sich von
   selbst fort, ohne etwas als fehlgeschlagen zu werten. Abschaltbar unter *Energie*.
+- **Geplante Sicherungen.** Jede Sicherung (eine Quelle und ein Laufwerk oder Ordner) kann von selbst
+  laufen: täglich, an bestimmten Wochentagen oder an einem Tag im Monat, zu einer Uhrzeit oder mehrmals
+  am Tag (z. B. alle 2 Stunden von 9:00 bis 21:00). Geplant wird mit *Diese Sicherung planen…* unter
+  *Automatisch → Geplante Sicherungen* oder über das Menü einer regelmäßigen Sicherung.
+  - Die App startet mit der Anmeldung im Hintergrund (Infobereich oder Menüleiste) und sichert zur
+    geplanten Zeit, auch bei geschlossenem Fenster.
+  - War der Computer zu dieser Zeit aus oder das Laufwerk getrennt, wird die Sicherung so bald wie
+    möglich nachgeholt: beim Einschalten oder beim Anschließen des Laufwerks, nur einmal, auch wenn
+    mehrere ausgefallen sind. Sie kann stattdessen auch übersprungen werden.
+  - Unter Windows kann die App den Computer aus dem Energiesparmodus wecken (mit den
+    Reaktivierungszeitgebern des Systems). Auf einem Laptop kann sie warten, bis das Netzteil
+    angeschlossen ist.
+  - Jede geplante Sicherung lässt sich sofort ausführen, pausieren, einmal überspringen oder ändern
+    und zeigt, wann die nächste fällig ist und wie die letzte lief. Eine manuelle Synchronisierung
+    dieser Sicherung zählt als erledigt.
+  - Auch hier hält ein Massenlöschen an und fragt nach: Eine geplante Sicherung leert die Sicherung
+    nie wegen einer falsch verbundenen Quelle.
 - **Erinnert ans Sichern.** Die App merkt sich jede Sicherung (Quelle und Laufwerk) und meldet sich
   einmal pro Zeitraum, wenn die gewählte Anzahl Tage mit ungesicherten Änderungen vergangen ist:
   „Nicht gesicherte Änderungen in DEV · 37 Dateien seit Ihrer letzten Sicherung, vor 4 Tagen“. Sie
@@ -182,9 +199,39 @@ Google zu installieren**: Sie spricht direkt mit der offiziellen Google-Drive-AP
 Die Sicherungen, die Plesk von Servern in Google Drive ablegt (sein Ordner `My Plesk`), lassen sich so
 ebenfalls auf Ihr Laufwerk kopieren.
 
+### Sicherungen in Google Drive
+
+Google Drive kann auch das **Ziel** einer Sicherung sein, statt eines Laufwerks: In der Karte *Ziel*
+öffnet die Schaltfläche das Menü **Ordner oder Laufwerk… · Google Drive · Meine Cloud**. Nach der Wahl
+eines Google-Kontos funktioniert alles andere wie gewohnt: *Analysieren*, *Änderungen*, Fortschritt,
+Ausschlüsse, geplante Sicherungen, Erinnerungen und *Wiederherstellen*.
+
+- **Minimale Berechtigung.** Beim ersten Mal bittet Google um die Erlaubnis, dass die App Sicherungen
+  in Ihrem Drive speichert (`drive.file`): Sie sieht und ändert nur, was sie selbst erstellt. Den Rest
+  Ihres Drive sieht und berührt sie nicht.
+- **Wo.** In `Meine Ablage/DEV Backup Studio/<Computer>/<Quellordner>`, einem festen Ordner, den Sie
+  auch im Web von Drive sehen und herunterladen können (die Schaltfläche der Karte öffnet ihn). Jeder
+  Computer hat seinen eigenen.
+- **Nur Geändertes, geprüft.** Es wird nur Neues oder Geändertes hochgeladen, und jede Datei wird mit
+  der MD5 geprüft, die Google zurückgibt. Große Dateien werden in Teilen hochgeladen: Bricht die
+  Verbindung ab (oder schließen Sie die App), geht es dort weiter. Ohne Verbindung wartet die Sicherung
+  und läuft von selbst weiter.
+- **Verschieben und Umbenennen geht sofort**: Drive erledigt das auf dem Server, ohne erneutes
+  Hochladen.
+- **Versionen.** Was Sie löschen oder ändern, kommt nach `DEV Backup Studio/.versiones/<Datum>/…` in
+  Drive, mit denselben Fristen wie auf dem Laufwerk, und lässt sich im Tab *Wiederherstellen*
+  zurückholen (aus Drive heruntergeladen, ohne etwas zu überschreiben). Ist Drive voll, werden zuerst
+  die ältesten Versionen entfernt.
+- **Speicher und Grenzen.** Die Analyse vergleicht, was hochzuladen ist, mit dem freien Speicher in
+  Drive. Google erlaubt **750 GB pro Tag** und Konto: Ist die erste Sicherung größer, sagt die App das
+  und macht am nächsten Tag weiter. Mit vielen kleinen Dateien ist die erste Sicherung langsam (Google
+  erlaubt nur wenige Uploads pro Sekunde); danach wird nur Geändertes hochgeladen.
+- Die Dateien werden unverändert gespeichert, damit Sie sie in Drive öffnen können: Sie werden nicht
+  verschlüsselt.
+
 ### Die Google-Client-ID
 
-Um Ihr Drive zu lesen, verlangt Google, dass sich die App mit einer in Google Cloud registrierten
+Um Ihr Drive zu lesen oder Sicherungen darin zu speichern, verlangt Google, dass sich die App mit einer in Google Cloud registrierten
 **Client-ID** ausweist. DEV Backup Studio **bringt keine mit**: Jede Person verwendet ihre eigene, so
 hängt niemand vom Google-Projekt eines anderen und dessen Grenzen ab (nicht überprüfte Apps erlaubt
 Google höchstens 100 Nutzer). Sie wird einmalig und kostenlos in wenigen Minuten erstellt:
@@ -193,7 +240,8 @@ Google höchstens 100 Nutzer). Sie wird einmalig und kostenlos in wenigen Minute
 2. *APIs & Dienste → Bibliothek*: Suchen Sie **Google Drive API** und klicken Sie auf *Aktivieren*.
 3. *Google Auth Platform* (OAuth-Zustimmungsbildschirm): Typ **Extern** (oder *Intern*, wenn Sie sie
    nur mit Konten Ihres Google Workspace nutzen), App-Name und Ihre E-Mail. Fügen Sie unter
-   *Datenzugriff* die Berechtigung `.../auth/drive.readonly` hinzu. Klicken Sie unter *Zielgruppe* auf
+   *Datenzugriff* die Berechtigungen `.../auth/drive.readonly` (Ihr Drive auf das Laufwerk sichern) und
+   `.../auth/drive.file` (Sicherungen in Drive speichern) hinzu. Klicken Sie unter *Zielgruppe* auf
    **App veröffentlichen**: Im Modus *Test* entzieht Google die Berechtigung nach 7 Tagen. Ohne
    Überprüfung zeigt Google beim Verbinden, dass die App nicht überprüft ist (*Erweitert → Zu …
    wechseln*), und begrenzt sie auf 100 Nutzer: Für den eigenen Gebrauch genügt das.

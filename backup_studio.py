@@ -25,6 +25,7 @@ import threading
 import time
 import traceback
 import types
+import dataclasses
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -45,14 +46,17 @@ from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QAbstractScroll
                              QMessageBox, QStyle, QStyledItemDelegate,
                              QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
                              QSpinBox, QStackedWidget, QSystemTrayIcon, QTableView, QTableWidget,
-                             QTableWidgetItem, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
+                             QTableWidgetItem, QTextBrowser, QTimeEdit, QTreeWidget, QTreeWidgetItem,
+                             QVBoxLayout,
                              QWidget)
 
 import cloudlink
 import engine
 import gdrive
+import gdrive_up
 import i18n
 import keepawake
+import planner
 import reminders
 import updater
 import vault
@@ -60,7 +64,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.6.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -397,6 +401,7 @@ QLabel#tileSub { color: %(faint)s; font-size: 11px; }
 QFrame#footer { background: %(panel)s; border-top: 1px solid %(line)s; }
 QFrame#segbar { background: %(panel)s; border: 1px solid %(line)s; border-radius: 11px; }
 QFrame#hint { background: %(panel)s; border: 1px solid %(line)s; border-radius: 12px; }
+QFrame#cloudDest { background: %(panel)s; border: 1px solid %(line2)s; border-radius: 9px; }
 
 QFrame#banner { border-radius: 14px; border: 1px solid %(line2)s; background: %(card)s; }
 QFrame#banner[kind="info"] { border-color: rgba(45,212,238,70); background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 rgba(45,212,238,22), stop:1 rgba(124,108,255,10)); }
@@ -407,22 +412,24 @@ QFrame#banner[kind="err"] { border-color: rgba(248,113,113,100); background: qli
 QLabel#bannerTitle { font-family: "%(display)s"; font-size: 15px; font-weight: 700; }
 QLabel#bannerText { color: %(muted)s; font-size: 12px; }
 
-QLineEdit, QSpinBox, QComboBox {
+QLineEdit, QSpinBox, QTimeEdit, QComboBox {
     background: %(panel)s; border: 1px solid %(line2)s; border-radius: 9px;
     padding: 7px 10px; selection-background-color: %(accent)s; min-height: 20px;
 }
 QLineEdit#path { font-family: "%(mono)s"; font-size: 12px; }
-QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: 1px solid %(accent)s; }
-QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled { color: %(faint)s; border-color: %(line)s; }
+QLineEdit:focus, QSpinBox:focus, QTimeEdit:focus, QComboBox:focus { border: 1px solid %(accent)s; }
+QLineEdit:disabled, QSpinBox:disabled, QTimeEdit:disabled, QComboBox:disabled { color: %(faint)s; border-color: %(line)s; }
 QComboBox::drop-down { border: none; width: 28px; }
 QComboBox::down-arrow { image: url(%(a)s/down.svg); width: 12px; height: 12px; }
 QComboBox QAbstractItemView {
     background: %(card2)s; border: 1px solid %(line2)s; border-radius: 8px; padding: 4px;
     selection-background-color: %(accent_mid)s; selection-color: %(text)s; outline: none;
 }
-QSpinBox::up-button, QSpinBox::down-button { border: none; width: 20px; background: transparent; }
-QSpinBox::up-arrow { image: url(%(a)s/up.svg); width: 10px; height: 10px; }
-QSpinBox::down-arrow { image: url(%(a)s/down.svg); width: 10px; height: 10px; }
+QSpinBox::up-button, QSpinBox::down-button, QTimeEdit::up-button, QTimeEdit::down-button {
+    border: none; width: 20px; background: transparent;
+}
+QSpinBox::up-arrow, QTimeEdit::up-arrow { image: url(%(a)s/up.svg); width: 10px; height: 10px; }
+QSpinBox::down-arrow, QTimeEdit::down-arrow { image: url(%(a)s/down.svg); width: 10px; height: 10px; }
 
 QPushButton {
     background: %(card2)s; border: 1px solid %(line2)s; border-radius: 10px;
@@ -1637,6 +1644,37 @@ class PathCard(Card):
         self.btn.setFixedSize(38, 36)
         self.btn.setToolTip(_("Elegir carpeta…"))
         self.btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        # destino en Google Drive: en vez de la ruta, la cuenta y dónde van las copias
+        self.cloud_box = QFrame()
+        self.cloud_box.setObjectName("cloudDest")
+        cb = QHBoxLayout(self.cloud_box)
+        cb.setContentsMargins(10, 6, 6, 6)
+        cb.setSpacing(10)
+        self.cloud_logo = QLabel()
+        cb.addWidget(self.cloud_logo, 0, Qt.AlignmentFlag.AlignVCenter)
+        ccol = QVBoxLayout()
+        ccol.setSpacing(0)
+        self.cloud_title = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.cloud_title.setObjectName("rowTitle")
+        self.cloud_sub = ElideLabel("", Qt.TextElideMode.ElideMiddle)
+        self.cloud_sub.setObjectName("faint")
+        ccol.addWidget(self.cloud_title)
+        ccol.addWidget(self.cloud_sub)
+        cb.addLayout(ccol, 1)
+        self.cloud_open = QPushButton()
+        self.cloud_open.setObjectName("icon")
+        self.cloud_open.setIcon(glyph_icon(G.ARROW, C["accent2"], 13))
+        self.cloud_open.setFixedSize(30, 30)
+        self.cloud_open.setToolTip(_("Abrir en Google Drive"))
+        self.cloud_open.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cloud_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self.cloud_url)) if self.cloud_url else None)
+        cb.addWidget(self.cloud_open, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.cloud_box.hide()
+        self.cloud_url = ""
+        self.cloud_info = ""
+        self.cloud_used = 0
+        self.menu_provider = None  # destino: el botón abre el menú (carpeta, Google Drive, nube)
+        row.addWidget(self.cloud_box, 1)
         row.addWidget(self.edit, 1)
         row.addWidget(self.btn)
         self.body.addLayout(row)
@@ -1658,11 +1696,30 @@ class PathCard(Card):
         self.refresh()
 
     def _browse(self):
+        if self.menu_provider is not None:
+            menu = self.menu_provider()
+            if menu is not None:
+                menu.exec(self.btn.mapToGlobal(QPoint(0, self.btn.height() + 2)))
+                return
+        self.pick_folder()
+
+    def pick_folder(self):
         start = self.path() if os.path.isdir(self.path()) else ""
         chosen = QFileDialog.getExistingDirectory(self, self.dialog_title, start)
         if chosen:
             self.set_path(os.path.normpath(chosen))
             self.changed.emit()
+
+    def set_cloud(self, title: str, sub: str, url: str, info: str, used: float, logo: QPixmap) -> None:
+        """Cómo se enseña un destino en Google Drive (la ruta de verdad sigue en path())."""
+        self.cloud_title.setText(title)
+        self.cloud_sub.setText(sub)
+        self.cloud_box.setToolTip(f"{title}\n{sub}")
+        self.cloud_logo.setPixmap(logo)
+        self.cloud_url = url
+        self.cloud_info = info
+        self.cloud_used = used
+        self.refresh()
 
     def _edited(self):
         if self.path() != self._last:
@@ -1672,6 +1729,13 @@ class PathCard(Card):
 
     def refresh(self) -> None:
         path = self.path()
+        cloud = gdrive_up.is_dest(path)
+        self.cloud_box.setVisible(cloud)
+        self.edit.setVisible(not cloud)
+        if cloud:
+            self.info.setText(self.cloud_info or "Google Drive")
+            self.disk.setValue(int(max(0.0, min(1.0, self.cloud_used)) * 10000))
+            return
         if not path:
             self.info.setText(_("Sin carpeta"))
             self.disk.setValue(0)
@@ -2513,6 +2577,7 @@ class RecoverPage(QWidget):
     ALL = "\x00todo"
     ROLE = Qt.ItemDataRole.UserRole
     PREVIEW_MAX = 512 * 1024 * 1024
+    CLOUD_PREVIEW_MAX = 200 * 1024 * 1024
 
     def __init__(self, win: "MainWindow"):
         super().__init__()
@@ -2713,7 +2778,19 @@ class RecoverPage(QWidget):
         dst = self.win.dst_card.path()
         if not dst:
             return None
+        if gdrive_up.is_dest(dst):
+            return gdrive_up.index_path(DATA_DIR, dst), dst, self.win.src_card.path()
         return engine.volume_root(dst), os.path.normpath(dst), self.win.src_card.path()
+
+    def cloud(self) -> bool:
+        """¿Las versiones están en Google Drive? (se bajan al recuperarlas)"""
+        return self._key is not None and gdrive_up.is_dest(self._key[1])
+
+    def _writer(self) -> gdrive_up.Writer:
+        info = self.win._drive_dest(self._key[1] if self._key else None)
+        if info is None or info[3] is None:
+            raise gdrive.DriveError("auth")
+        return self.win.gdrive.writer_for(info[3])
 
     def show_page(self):
         if self.stale or self._key != self.target():
@@ -2753,6 +2830,16 @@ class RecoverPage(QWidget):
         def work():
             meta, dst, src = target
             try:
+                if gdrive_up.is_dest(dst):
+                    snaps = gdrive_up.load_snapshots(meta)  # del índice local: sin esperar a la red
+                    exists: dict[str, bool] = {}
+                    if src and os.path.isdir(src):
+                        for snap in snaps:
+                            for rel, _size, _m in snap.files:
+                                if rel not in exists:
+                                    exists[rel] = os.path.lexists(engine.lp(os.path.join(src, rel)))
+                    self.loaded.emit(gen, snaps, exists)
+                    return
                 if not engine.volume_present(dst):
                     self.loaded.emit(gen, None, None)
                     return
@@ -3059,6 +3146,9 @@ class RecoverPage(QWidget):
         if len(items) != 1 or items[0].data(0, self.ROLE)[0] != "file":
             return
         e = items[0].data(0, self.ROLE)[1]
+        if self.cloud():
+            self._open_cloud(e)
+            return
         path = self._version_file(e)
         if e[1] > self.PREVIEW_MAX:
             reveal_path(path)
@@ -3077,9 +3167,39 @@ class RecoverPage(QWidget):
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(target))
 
+    def _open_cloud(self, e: list):
+        """Ver una versión guardada en Drive: se baja a una carpeta temporal y se abre (de solo lectura)."""
+        if e[1] > self.CLOUD_PREVIEW_MAX:
+            QMessageBox.information(self, APP_NAME, _("Es grande para verla desde Google Drive ({size}): usa "
+                                                      "«Recuperar en…».").format(size=fmt_bytes(e[1])))
+            return
+        folder = os.path.join(self.preview_dir(), e[3].name)
+        target = os.path.join(folder, os.path.basename(e[0]))
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            os.makedirs(folder, exist_ok=True)
+            if os.path.exists(target):
+                os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+                os.remove(target)
+            gdrive_up.fetch(self._writer(), self._key[0], e[3].name, e[0], target)
+            os.chmod(target, stat.S_IREAD)
+        except (OSError, gdrive.DriveError) as exc:
+            QApplication.restoreOverrideCursor()
+            text = gdrive_up.error_text(exc) if isinstance(exc, gdrive.DriveError) else (exc.strerror or str(exc))
+            QMessageBox.warning(self, APP_NAME, _("No se pudo abrir la versión.\n\n{error}").format(error=text))
+            return
+        QApplication.restoreOverrideCursor()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(target))
+
     def _reveal(self):
         items = self.tree.selectedItems()
         if len(items) != 1:
+            return
+        if self.cloud():
+            kind, val = items[0].data(0, self.ROLE)
+            snap = val[3] if kind == "file" else next((e[3] for e in self._rows if e[0].startswith(val + os.sep)), None)
+            if snap is not None:
+                QDesktopServices.openUrl(QUrl(gdrive_up.folder_url(gdrive_up.stamp_folder(self._key[0], snap.name))))
             return
         kind, val = items[0].data(0, self.ROLE)
         if kind == "file":
@@ -3102,12 +3222,22 @@ class RecoverPage(QWidget):
             if not to_dir:
                 return
         items = []
+        cloud = self.cloud()
         for (rel, size, mtime, snap, _c), base in picked:
             if to_dir is None:
                 target = os.path.join(src, rel)
             else:
                 target = os.path.join(to_dir, os.path.relpath(rel, base) if base else rel)
-            items.append((os.path.join(snap.path, rel), target, size, mtime))
+            items.append((snap.name, rel, target, size, mtime) if cloud else
+                         (os.path.join(snap.path, rel), target, size, mtime))
+        writer = None
+        if cloud:
+            try:
+                writer = self._writer()
+            except gdrive.DriveError as exc:
+                QMessageBox.warning(self, APP_NAME, gdrive_up.error_text(exc))
+                return
+        ix_file = self._key[0] if cloud else ""
         self.busy = True
         self._cancel.clear()
         self.progress.setRange(0, max(1, len(items)))
@@ -3127,7 +3257,10 @@ class RecoverPage(QWidget):
                 if i % step == 0 or i == n:
                     self.restore_progress.emit(i, n)
             try:
-                res = versions.restore(items, cancel=self._cancel, progress=progress)
+                if writer is not None:
+                    res = gdrive_up.restore(writer, ix_file, items, cancel=self._cancel, progress=progress)
+                else:
+                    res = versions.restore(items, cancel=self._cancel, progress=progress)
             except Exception as exc:  # noqa: BLE001
                 res = versions.RestoreResult(failed=[("", str(exc))])
             self.restored.emit(res, to_origin)
@@ -3199,7 +3332,9 @@ class RecoverPage(QWidget):
         a_del = menu.addAction(glyph_icon(G.TRASH, C["err"], 14), _("Eliminar estas versiones…"))
         a_del.setEnabled(not self.busy and self.win._state not in RUNNING)
         chosen = menu.exec(self.timeline.viewport().mapToGlobal(pos))
-        if chosen is a_open:
+        if chosen is a_open and self.cloud():
+            QDesktopServices.openUrl(QUrl(gdrive_up.folder_url(gdrive_up.stamp_folder(self._key[0], snap.name))))
+        elif chosen is a_open:
             QDesktopServices.openUrl(QUrl.fromLocalFile(snap.path))
         elif chosen is a_del:
             self._delete_snapshot(snap)
@@ -3217,16 +3352,28 @@ class RecoverPage(QWidget):
         if box.exec() != QMessageBox.StandardButton.Yes:
             return
         meta = self._key[0] if self._key else engine.volume_root(self.win.dst_card.path())
+        writer = None
+        if self.cloud():
+            try:
+                writer = self._writer()
+            except gdrive.DriveError as exc:
+                QMessageBox.warning(self, APP_NAME, gdrive_up.error_text(exc))
+                return
         self.busy = True
         self.update_actions()
         self.stack.setCurrentWidget(self.loading)
 
         def work():
             try:
-                versions.delete_snapshot(snap, meta)
+                if writer is not None:
+                    gdrive_up.delete_snapshot(writer, meta, snap.name)
+                else:
+                    versions.delete_snapshot(snap, meta)
                 self.snapshot_removed.emit("")
             except OSError as exc:
                 self.snapshot_removed.emit(exc.strerror or str(exc))
+            except gdrive.DriveError as exc:
+                self.snapshot_removed.emit(gdrive_up.error_text(exc))
 
         threading.Thread(target=work, name="quitar-versiones", daemon=True).start()
 
@@ -3477,7 +3624,7 @@ def drive_error_text(exc: gdrive.DriveError | None) -> str:
 
 
 GCLOUD = "https://console.cloud.google.com"
-GDRIVE_SCOPE_URL = "https://www.googleapis.com/auth/drive.readonly"
+GDRIVE_SCOPE_URL = f"{gdrive.SCOPE}, {gdrive.SCOPE_FILE}"
 # pasos para crear el ID de cliente propio, con la página de Google Cloud de cada uno
 GDRIVE_STEPS = [
     (N_("Crea un proyecto en Google Cloud"),
@@ -3491,8 +3638,9 @@ GDRIVE_STEPS = [
      N_("Pulsa «Comenzar»: nombre de la app (por ejemplo, «DEV Backup Studio») y tu correo, público «Externo» y "
         "acepta. Si solo vas a usar cuentas de tu Google Workspace, elige «Interno»."),
      N_("Pantalla de permiso"), f"{GCLOUD}/auth/branding"),
-    (N_("Da permiso de lectura de Drive"),
-     N_("En «Acceso a los datos» → «Añadir o quitar permisos», pega este permiso y guarda:"),
+    (N_("Da los permisos de Drive"),
+     N_("En «Acceso a los datos» → «Añadir o quitar permisos», pega estos dos permisos (leer tu Drive para "
+        "copiarlo al disco, y guardar copias en una carpeta propia de la app) y guarda:"),
      N_("Acceso a los datos"), f"{GCLOUD}/auth/scopes"),
     (N_("Publica la app"),
      N_("En «Público», pulsa «Publicar la app» y confirma. Si se queda «En prueba», Google retira el permiso a los "
@@ -3552,7 +3700,7 @@ class GDriveSetup(QWidget):
         b.setObjectName("primary")
         b.setIcon(glyph_icon(G.ADD, "#FFFFFF", 14))
         b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.clicked.connect(page.connect_account)
+        b.clicked.connect(lambda: page.connect_account())
         rl.addWidget(b)
         self.b_steps = QPushButton(_("Ver la guía o cambiar el ID de cliente"))
         self.b_steps.setObjectName("link")
@@ -3715,11 +3863,14 @@ class GDriveConnectDialog(QDialog):
     connected = pyqtSignal(object, str)   # gdrive.Account, refresh token
     failed = pyqtSignal(str, str)
 
-    def __init__(self, page: "GDrivePage"):
+    def __init__(self, page: "GDrivePage", purpose: str = "copy", account: gdrive.Account | None = None):
         super().__init__(page.win)
         self.page = page
+        self.purpose = purpose          # copy: copiar el Drive al disco · dest: guardar copias en el Drive
+        self.upgrade = account          # una cuenta ya conectada a la que se pide otro permiso
         self.account: gdrive.Account | None = None
         self.token = ""
+        self.scopes: list[str] = []
         self._stop = threading.Event()
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(app_icon())
@@ -3732,12 +3883,19 @@ class GDriveConnectDialog(QDialog):
         logo = QLabel()
         logo.setPixmap(gdrive_pixmap(34))
         head.addWidget(logo)
-        title = QLabel(_("Conectar Google Drive"))
+        title = QLabel(_("Guardar copias en Google Drive") if purpose == "dest" else _("Conectar Google Drive"))
         title.setObjectName("h1")
         head.addWidget(title, 1)
         lay.addLayout(head)
-        intro = QLabel(_("Se abrirá el navegador: entra con tu cuenta de Google (de Gmail o de empresa) y da permiso "
-                         "de solo lectura. La app no ve tu contraseña y nunca cambia nada en tu Drive."))
+        if purpose == "dest":
+            intro = QLabel(_("Se abrirá el navegador: entra con tu cuenta de Google y da permiso para que la app guarde "
+                             "tus copias en tu Drive. Solo puede ver y cambiar lo que ella misma crea, en la carpeta "
+                             "«DEV Backup Studio»: el resto de tu Drive ni lo ve ni lo toca."))
+        else:
+            intro = QLabel(_("Se abrirá el navegador: entra con tu cuenta de Google (de Gmail o de empresa) y da "
+                             "permiso de solo lectura. La app no ve tu contraseña y nunca cambia nada en tu Drive."))
+        if account is not None:
+            intro.setText(intro.text() + "\n" + _("Cuenta: {email}").format(email=account.email))
         intro.setObjectName("muted")
         intro.setWordWrap(True)
         lay.addWidget(intro)
@@ -3819,8 +3977,10 @@ class GDriveConnectDialog(QDialog):
                    + "</p></body></html>")
         page_fail = ("<html><body style='font-family:sans-serif;text-align:center;margin-top:80px'><h2>"
                      + html.escape(_("No se ha conectado")) + "</h2></body></html>")
+        scopes = [gdrive.SCOPE_FILE] if self.purpose == "dest" else [gdrive.SCOPE]
         try:
-            auth = gdrive.Authorizer(cid, csecret, page_ok, page_fail)
+            auth = gdrive.Authorizer(cid, csecret, page_ok, page_fail, scopes=scopes,
+                                     login_hint=self.upgrade.email if self.upgrade else "")
             url = auth.start()
         except (gdrive.DriveError, OSError) as exc:
             self._on_failed(getattr(exc, "kind", "server"), str(exc))
@@ -3836,8 +3996,10 @@ class GDriveConnectDialog(QDialog):
                 tokens = auth.wait(stop=self._stop)
                 drive = gdrive.Drive(tokens["refresh_token"], cid, csecret)
                 user = drive.about().get("user") or {}
+                granted = sorted(set(str(tokens.get("scope") or " ".join(scopes)).split()))
                 acc = gdrive.Account(id=str(user.get("permissionId") or user.get("emailAddress")),
-                                     email=str(user.get("emailAddress") or ""), name=str(user.get("displayName") or ""))
+                                     email=str(user.get("emailAddress") or ""), name=str(user.get("displayName") or ""),
+                                     scopes=granted)
                 self.connected.emit(acc, tokens["refresh_token"])
             except gdrive.DriveError as exc:
                 self.failed.emit(exc.kind, exc.detail)
@@ -3924,6 +4086,18 @@ class GDrivePage(QWidget):
     def client_changed(self):
         self._drives.clear()
 
+    def writer_for(self, acc: gdrive.Account) -> gdrive_up.Writer:
+        """La API con escritura, para guardar copias en ese Drive (si la cuenta dio el permiso)."""
+        cid, csecret = self.client()
+        if not cid:
+            raise gdrive.DriveError("noclient")
+        token = self.secrets.get(gdrive.token_key(acc.id))
+        if not token:
+            raise gdrive.DriveError("auth")
+        if not acc.can_write:
+            raise gdrive.DriveError("denied", "scope")
+        return gdrive_up.Writer(token, cid, csecret)
+
     def drive_for(self, acc: gdrive.Account) -> gdrive.Drive:
         if acc.id not in self._drives:
             cid, csecret = self.client()
@@ -3937,7 +4111,7 @@ class GDrivePage(QWidget):
 
     def disk_root(self) -> str | None:
         dst = self.win.dst_card.path()
-        if not dst or not engine.volume_present(dst):
+        if not dst or gdrive_up.is_dest(dst) or not engine.volume_present(dst):
             return None
         root = engine.volume_root(dst)
         return root if os.path.isdir(root) else None
@@ -3975,7 +4149,7 @@ class GDrivePage(QWidget):
         self.b_add = QPushButton("  " + _("Conectar cuenta…"))
         self.b_add.setIcon(glyph_icon(G.ADD, C["text"], 14))
         self.b_add.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.b_add.clicked.connect(self.connect_account)
+        self.b_add.clicked.connect(lambda: self.connect_account())
         h.addWidget(self.b_add)
         v.addWidget(bar)
 
@@ -4176,7 +4350,12 @@ class GDrivePage(QWidget):
         self._gen += 1
         self.tree.blockSignals(True)
         self.tree.clear()
-        if acc is not None:
+        if acc is not None and not acc.can_read:
+            note = QTreeWidgetItem([_("Conectada solo para guardar copias en este Drive. Pulsa «Copiar ahora» para "
+                                      "darle permiso de lectura y copiar su Drive al disco.")])
+            note.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.tree.addTopLevelItem(note)
+        elif acc is not None:
             self._node_item(None, _(gdrive.MY_DRIVE), {"kind": "my", "id": "root", "drive": ""}, acc.my_drive)
             self._node_item(None, _(gdrive.SHARED_DRIVES), {"kind": "group", "id": "", "drive": ""}, True)
             self._node_item(None, _(gdrive.SHARED_WITH_ME), {"kind": "shared", "id": "", "drive": ""},
@@ -4310,27 +4489,34 @@ class GDrivePage(QWidget):
         self.tree.blockSignals(False)
 
     # ── conectar y desconectar ──
-    def connect_account(self):
-        if self.busy:
-            return
-        dlg = GDriveConnectDialog(self)
+    def connect_account(self, purpose: str = "copy", upgrade: gdrive.Account | None = None) -> gdrive.Account | None:
+        """Conecta una cuenta (o pide otro permiso a una ya conectada). Devuelve la cuenta o None."""
+        if self.busy and purpose == "copy":
+            return None
+        dlg = GDriveConnectDialog(self, purpose, upgrade)
         if dlg.exec() != QDialog.DialogCode.Accepted or dlg.account is None:
-            return
+            return None
         acc = dlg.account
         old = self.account(acc.id)
         if old is not None:   # la misma cuenta otra vez: llave nueva, se conserva lo elegido
             old.email, old.name = acc.email, acc.name
+            old.scopes = sorted(set(acc.scopes) | set(old.scopes))  # include_granted_scopes: suma lo de antes
             acc = old
         else:
+            if not acc.can_read:
+                acc.schedule = "manual"   # solo para guardar copias: no se copia su Drive al disco
             self.accounts.append(acc)
         self.secrets.set(gdrive.token_key(acc.id), dlg.token)
         self._drives.pop(acc.id, None)
         acc.last_error = ""
         self._save()
-        self._selected = acc.id
+        if purpose == "copy":
+            self._selected = acc.id
         self.refresh()
-        self._select(acc.id)
+        if purpose == "copy":
+            self._select(acc.id)
         self.win._log(_("Google Drive conectado: {email}").format(email=acc.email), C["ok"])
+        return acc
 
     def remove(self, acc: gdrive.Account | None):
         if acc is None:
@@ -4376,7 +4562,7 @@ class GDrivePage(QWidget):
         if acc is None:
             return
         menu = QMenu(self)
-        menu.addAction(glyph_icon(G.REFRESH, C["text"], 14), _("Volver a conectar…"), self.connect_account)
+        menu.addAction(glyph_icon(G.REFRESH, C["text"], 14), _("Volver a conectar…"), lambda: self.connect_account())
         menu.addSeparator()
         act = menu.addAction(glyph_icon(G.CLOSE, C["err"], 14), _("Desconectar…"), lambda: self.remove(acc))
         act.setEnabled(not (self.busy and self.job_account is acc))
@@ -4399,6 +4585,14 @@ class GDrivePage(QWidget):
     def start(self, aid: str, auto: bool = False, allow_mass_delete: bool = False) -> bool:
         acc = self.account(aid)
         if acc is None or self.busy:
+            return False
+        if not acc.can_read:
+            if not auto:
+                ans = QMessageBox.question(self.win, APP_NAME, _(
+                    "{email} está conectada solo para guardar copias en su Drive. ¿Darle también permiso de lectura "
+                    "para copiar su Drive al disco?").format(email=acc.email))
+                if ans == QMessageBox.StandardButton.Yes:
+                    self.connect_account("copy", acc)
             return False
         root = self.disk_root()
         if not root:
@@ -4559,7 +4753,7 @@ class GDrivePage(QWidget):
             err = job.error
             action = details if job.errors else None
             if err and err.kind in ("auth", "noclient"):
-                action = (_("Volver a conectar…"), self.connect_account)
+                action = (_("Volver a conectar…"), lambda: self.connect_account())
             self.banner.set("err", _("No se pudo copiar Google Drive"), drive_error_text(err), G.ERROR, action)
 
     def _show_details(self, job: gdrive.DriveSync):
@@ -4619,7 +4813,7 @@ class GDrivePage(QWidget):
     # ── automáticas ──
     def due(self, acc: gdrive.Account, now: datetime | None = None) -> bool:
         days = gdrive.SCHEDULE_DAYS.get(acc.schedule, 0)
-        if not days:
+        if not days or not acc.can_read:
             return False
         now = now or datetime.now()
         last = reminders.parse_time(acc.last_ok)
@@ -5727,9 +5921,361 @@ class ReminderBar(QFrame):
         self.setMaximumHeight(16777215)
 
 
+# ── copias programadas ───────────────────────────────────────────────────────
+
+PLAN_KINDS = {"daily": N_("Cada día"), "days": N_("Días concretos"), "monthly": N_("Una vez al mes")}
+PLAN_RESULT = {"ok": N_("hecha"), "warn": N_("hecha con incidencias"), "failed": N_("falló"),
+               "cancelled": N_("cancelada"), "held": N_("detenida: esperaba confirmación"),
+               "missed": N_("no se hizo a su hora")}
+
+
+def clock_text(t) -> str:
+    """«21:00» o «9:00 PM», como el sistema en el idioma de la app."""
+    return qlocale().toString(QTime(t.hour, t.minute), QLocale.FormatType.ShortFormat)
+
+
+def weekday_name(i: int, long: bool = False) -> str:
+    """0 = lunes. Abreviado («lun», «Mo.», «周一») o entero («lunes»)."""
+    return qlocale().dayName(i + 1, QLocale.FormatType.LongFormat if long else QLocale.FormatType.ShortFormat)
+
+
+def slot_text(when: datetime, now: datetime | None = None) -> str:
+    """«hoy 21:00», «mañana 7:30», «jueves 21:00» o «lun 7 dic 21:00»."""
+    now = now or datetime.now()
+    t = clock_text(when.time())
+    days = (when.date() - now.date()).days
+    if days == 0:
+        return _("hoy {time}").format(time=t)
+    if days == 1:
+        return _("mañana {time}").format(time=t)
+    if days == -1:
+        return _("ayer {time}").format(time=t)
+    if 1 < days < 7:
+        return f"{weekday_name(when.weekday(), long=True)} {t}"
+    return f"{short_day(when)} {t}"
+
+
+def plan_desc(p: planner.Plan) -> str:
+    """«Cada día a las 21:00», «De lunes a viernes, cada 2 h de 9:00 a 21:00», «El día 1 de cada mes…»."""
+    at = clock_text(planner.parse_hhmm(p.at))
+    if p.kind == "monthly":
+        if p.month_day == 0:
+            return _("El último día de cada mes a las {time}").format(time=at)
+        return _("El día {day} de cada mes a las {time}").format(day=p.month_day, time=at)
+    days = sorted(p.days)
+    if days == planner.WEEK:
+        what = _("Cada día")
+    elif days == planner.WORKDAYS:
+        what = _("De lunes a viernes")
+    elif days == planner.WEEKEND:
+        what = _("Sábados y domingos")
+    else:
+        what = ", ".join(weekday_name(d) for d in days)
+    if p.every and len(p.times()) > 1:
+        text = _("{days}, cada {n} h de {start} a {end}").format(days=what, n=p.every, start=at,
+                                                               end=clock_text(p.times()[-1]))
+    else:
+        text = _("{days} a las {time}").format(days=what, time=at)
+    return text[:1].upper() + text[1:]
+
+
+class ScheduleDialog(QDialog):
+    """Programar una copia: qué días, a qué hora, cuántas veces y qué hacer si no se puede a su hora.
+
+    Al aceptar, «plan» tiene el horario elegido; «removed» dice si se quitó la programación y
+    «background» si hay que activar el inicio con la sesión en segundo plano."""
+
+    def __init__(self, win: "MainWindow", plan: planner.Plan, existing: bool):
+        super().__init__(win)
+        self.win = win
+        self.base = plan
+        self.plan: planner.Plan | None = None
+        self.existing = existing
+        self.removed = False
+        self.background = False
+        self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(app_icon())
+        self.setMinimumWidth(640)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(26, 24, 26, 22)
+        lay.setSpacing(16)
+
+        head = QHBoxLayout()
+        head.setSpacing(16)
+        head.addWidget(glyph_label(G.CLOCK, C["accent2"], 32), 0, Qt.AlignmentFlag.AlignTop)
+        col = QVBoxLayout()
+        col.setSpacing(4)
+        t = QLabel(_("Cambiar la programación") if existing else _("Programar copia"))
+        t.setObjectName("h1")
+        dest = plan.label or reminders.short_name(plan.dst)
+        pair = ElideLabel(f"{reminders.short_name(plan.src)}  →  {dest}", Qt.TextElideMode.ElideRight)
+        pair.setObjectName("rowTitle")
+        where = ElideLabel(f"{plan.src}  →  {plan.dst}", Qt.TextElideMode.ElideMiddle)
+        where.setObjectName("faint")
+        col.addWidget(t)
+        col.addWidget(pair)
+        col.addWidget(where)
+        head.addLayout(col, 1)
+        lay.addLayout(head)
+
+        box = QFrame()
+        box.setObjectName("hint")
+        grid = QGridLayout(box)
+        grid.setContentsMargins(18, 16, 18, 16)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(12)
+        grid.setColumnStretch(1, 1)
+        self._rows: dict[str, tuple[QLabel, QWidget]] = {}
+
+        def row(key: str, label: str, widget: QWidget):
+            lbl = QLabel(label)
+            lbl.setObjectName("fieldLabel")
+            r = grid.rowCount()
+            grid.addWidget(lbl, r, 0, Qt.AlignmentFlag.AlignVCenter)
+            grid.addWidget(widget, r, 1)
+            self._rows[key] = (lbl, widget)
+
+        self.kind = QComboBox()
+        for key, text in PLAN_KINDS.items():
+            self.kind.addItem(_(text), key)
+        row("kind", _("Frecuencia"), self.kind)
+
+        days = QWidget()
+        dl = QHBoxLayout(days)
+        dl.setContentsMargins(0, 0, 0, 0)
+        dl.setSpacing(6)
+        self.day_btns: list[QPushButton] = []
+        for i in planner.WEEK:
+            b = QPushButton(weekday_name(i))
+            b.setObjectName("chip")
+            b.setCheckable(True)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setToolTip(weekday_name(i, long=True))
+            b.toggled.connect(self._update)
+            dl.addWidget(b)
+            self.day_btns.append(b)
+        dl.addStretch(1)
+        row("days", _("Días"), days)
+
+        self.mday = QComboBox()
+        for n in range(1, 32):
+            self.mday.addItem(_("Día {n}").format(n=n), n)
+        self.mday.addItem(_("Último día del mes"), 0)
+        self.mday.setToolTip(_("En los meses más cortos, el día 29, 30 o 31 pasa a ser el último del mes"))
+        row("mday", _("Día del mes"), self.mday)
+
+        self.at = QTimeEdit()
+        self.at.setLocale(qlocale())
+        self.at.setDisplayFormat(qlocale().timeFormat(QLocale.FormatType.ShortFormat))
+        self.at.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        self.at.setFixedWidth(150)
+        row("at", _("Hora"), self.at)
+
+        rep = QWidget()
+        rl = QHBoxLayout(rep)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(10)
+        self.every = QComboBox()
+        for n in planner.EVERY_OPTIONS:
+            self.every.addItem(_("Una vez al día") if not n else
+                               _n("Cada hora", "Cada {n} horas", n).format(n=n), n)
+        rl.addWidget(self.every)
+        self.until_lbl = QLabel(_("hasta las"))
+        self.until_lbl.setObjectName("muted")
+        rl.addWidget(self.until_lbl)
+        self.until = QTimeEdit()
+        self.until.setLocale(qlocale())
+        self.until.setDisplayFormat(self.at.displayFormat())
+        self.until.setFixedWidth(150)
+        rl.addWidget(self.until)
+        rl.addStretch(1)
+        row("every", _("Repetir"), rep)
+        lay.addWidget(box)
+
+        self.catch = Toggle()
+        lay.addWidget(SettingRow(
+            _("Si no se puede a su hora, hacerla en cuanto se pueda"),
+            _("Con el equipo apagado o el disco desconectado: se hace una sola vez al volver, aunque se hayan "
+              "pasado varias"), self.catch))
+        self.active = Toggle()
+        self.active_row = SettingRow(_("Activa"), _("En pausa no se hace, pero se conserva el horario"), self.active)
+        self.active_row.setVisible(existing)
+        lay.addWidget(self.active_row)
+        self.bg = Toggle()
+        where_txt = _("con Windows") if IS_WIN else _("al iniciar sesión")
+        bg_title = _("Iniciarla {where} en segundo plano").format(where=where_txt)
+        self.bg_row = SettingRow(bg_title[:1].upper() + bg_title[1:],
+                                 _("Las copias programadas solo se hacen con la app abierta o en segundo plano"),
+                                 self.bg)
+        self.bg_row.setVisible(not win.watch_box.isChecked())
+        lay.addWidget(self.bg_row)
+
+        self.preview = QLabel("")
+        self.preview.setWordWrap(True)
+        self.preview.setObjectName("muted")
+        lay.addWidget(self.preview)
+
+        buttons = QHBoxLayout()
+        buttons.setSpacing(10)
+        self.b_remove = QPushButton("  " + _("Quitar la programación"))
+        self.b_remove.setObjectName("danger")
+        self.b_remove.setIcon(glyph_icon(G.TRASH, C["text"], 14))
+        self.b_remove.setVisible(existing)
+        self.b_cancel = QPushButton(_("Cancelar"))
+        self.b_save = QPushButton("  " + _("Guardar"))
+        self.b_save.setObjectName("primary")
+        self.b_save.setIcon(glyph_icon(G.CHECK, "#FFFFFF", 14))
+        buttons.addWidget(self.b_remove)
+        buttons.addStretch(1)
+        buttons.addWidget(self.b_cancel)
+        buttons.addWidget(self.b_save)
+        for b in (self.b_remove, self.b_cancel, self.b_save):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setAutoDefault(False)
+        self.b_save.setDefault(True)
+        lay.addLayout(buttons)
+        self.b_remove.clicked.connect(self._remove)
+        self.b_cancel.clicked.connect(self.reject)
+        self.b_save.clicked.connect(self._save)
+
+        # lo guardado
+        if plan.kind == "monthly":
+            kind = "monthly"
+        else:
+            kind = "daily" if sorted(plan.days) == planner.WEEK else "days"
+        self.kind.setCurrentIndex(max(0, self.kind.findData(kind)))
+        for i, b in enumerate(self.day_btns):
+            b.blockSignals(True)
+            b.setChecked(i in plan.days or kind == "daily")
+            b.blockSignals(False)
+        self.mday.setCurrentIndex(max(0, self.mday.findData(plan.month_day)))
+        at = planner.parse_hhmm(plan.at)
+        self.at.setTime(QTime(at.hour, at.minute))
+        self.every.setCurrentIndex(max(0, self.every.findData(plan.every)))
+        until = planner.parse_hhmm(plan.until, planner.time(23, 0))
+        self.until.setTime(QTime(until.hour, until.minute))
+        self.catch.setChecked(plan.catch_up)
+        self.active.setChecked(plan.enabled)
+        self.bg.setChecked(True)
+        for w in (self.kind, self.mday, self.every):
+            w.currentIndexChanged.connect(self._update)
+        for w in (self.at, self.until):
+            w.timeChanged.connect(self._update)
+        for w in (self.catch, self.active):
+            w.toggled.connect(self._update)
+        self._update()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        set_dark_titlebar(self)
+
+    def _show_row(self, key: str, on: bool):
+        for w in self._rows[key]:
+            w.setVisible(on)
+
+    def collect(self) -> tuple[planner.Plan | None, str]:
+        """El horario de la pantalla, o (None, motivo) si no vale."""
+        kind = self.kind.currentData()
+        p = dataclasses.replace(self.base, days=list(self.base.days))
+        p.kind = "monthly" if kind == "monthly" else "weekly"
+        if kind == "daily":
+            p.days = list(planner.WEEK)
+        elif kind == "days":
+            p.days = [i for i, b in enumerate(self.day_btns) if b.isChecked()]
+        p.month_day = int(self.mday.currentData())
+        t = self.at.time()
+        p.at = planner.hhmm(planner.time(t.hour(), t.minute()))
+        p.every = int(self.every.currentData()) if kind != "monthly" else 0
+        u = self.until.time()
+        p.until = planner.hhmm(planner.time(u.hour(), u.minute()))
+        p.catch_up = self.catch.isChecked()
+        p.enabled = self.active.isChecked() if self.existing else True
+        if p.kind == "weekly" and not p.days:
+            return None, _("Elige al menos un día.")
+        if p.every and (u.hour() * 60 + u.minute()) <= (t.hour() * 60 + t.minute()):
+            return None, _("La hora «hasta» tiene que ser posterior a la primera copia del día.")
+        return p, ""
+
+    def _update(self, *_a):
+        kind = self.kind.currentData()
+        self._show_row("days", kind == "days")
+        self._show_row("mday", kind == "monthly")
+        self._show_row("every", kind != "monthly")
+        repeat = kind != "monthly" and bool(self.every.currentData())
+        self.until_lbl.setVisible(repeat)
+        self.until.setVisible(repeat)
+        self._rows["at"][0].setText(_("Primera copia") if repeat else _("Hora"))
+        p, problem = self.collect()
+        self.b_save.setEnabled(p is not None)
+        if p is None:
+            self.preview.setStyleSheet(f"color: {C['warn']};")
+            self.preview.setText(problem)
+            return
+        self.preview.setStyleSheet("")
+        now = datetime.now()
+        soon = p.upcoming(now, 3)
+        text = plan_desc(p)
+        if soon:
+            text += "\n" + _("Próximas: {when}").format(when="  ·  ".join(slot_text(w, now) for w in soon))
+        self.preview.setText(text)
+        self.adjustSize()
+
+    def _save(self):
+        p, _problem = self.collect()
+        if p is None:
+            return
+        self.plan = p
+        self.background = self.bg_row.isVisibleTo(self) and self.bg.isChecked()
+        self.accept()
+
+    def _remove(self):
+        self.removed = True
+        self.accept()
+
+
+class PlanRow(QFrame):
+    """Una copia programada en la barra lateral: origen → disco, horario o estado, y menú."""
+    menu_requested = pyqtSignal(str, QPoint)
+
+    def __init__(self, pid: str, title: str, status: str, color: str, tip: str, glyph: str):
+        super().__init__()
+        self.pid = pid
+        self.setObjectName("remRow")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(12, 9, 6, 9)
+        lay.setSpacing(10)
+        lay.addWidget(glyph_label(glyph, color, 15), 0, Qt.AlignmentFlag.AlignVCenter)
+        col = QVBoxLayout()
+        col.setSpacing(1)
+        name = ElideLabel(title, Qt.TextElideMode.ElideRight)
+        name.setObjectName("remTitle")
+        sub = ElideLabel(status, Qt.TextElideMode.ElideRight)
+        sub.setObjectName("remSub")
+        sub.setStyleSheet(f"color: {color};")
+        col.addWidget(name)
+        col.addWidget(sub)
+        lay.addLayout(col, 1)
+        self.more = QPushButton()
+        self.more.setObjectName("remMore")
+        self.more.setIcon(glyph_icon(G.MORE, C["muted"], 16))
+        self.more.setFixedSize(30, 30)
+        self.more.setToolTip(_("Opciones de esta copia programada"))
+        self.more.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.more.clicked.connect(
+            lambda: self.menu_requested.emit(self.pid, self.more.mapToGlobal(QPoint(0, self.more.height()))))
+        lay.addWidget(self.more, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.setToolTip(tip)
+
+    def mousePressEvent(self, e):  # noqa: N802
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.menu_requested.emit(self.pid, e.globalPosition().toPoint())
+
+
 class MainWindow(QMainWindow):
     # comprobación de la nube en segundo plano: (servidor, destino corregido o "", ok | down | none)
     cloud_checked = pyqtSignal(str, str, str)
+    drive_quota = pyqtSignal(str, object, object)  # cuenta, límite (None = sin límite), usado
 
     def __init__(self, tray_mode: bool = False, updated: bool = False):
         super().__init__()
@@ -5772,6 +6318,11 @@ class MainWindow(QMainWindow):
         self._tour_pending = True
         self.registry = reminders.Registry()
         self._bar_target: str | None = None
+        self.plans = planner.Plans()
+        self._drive_quota: dict[str, tuple] = {}
+        self._plan_running: str | None = None  # la copia programada que está en marcha
+        self._plan_sig: tuple = ()
+        self.waker = keepawake.WakeTimer()
 
         self._load_settings()
         self.vault = vault.Secrets(os.path.join(DATA_DIR, "secretos.json"))
@@ -5805,6 +6356,16 @@ class MainWindow(QMainWindow):
         self.watcher.arrived.connect(lambda _root: QTimer.singleShot(3000, self._refresh_reminders))
         self._refresh_reminders()
 
+        # copias programadas: cada 20 s se mira si alguna tiene la hora vencida
+        self._plan_hold_until = time.monotonic() + (90 if tray_mode else 8)  # al iniciar sesión, sin prisa
+        self._plan_timer = QTimer(self)
+        self._plan_timer.setInterval(20_000)
+        self._plan_timer.timeout.connect(self._plan_tick)
+        self._plan_timer.start()
+        QTimer.singleShot(9000, self._plan_tick)
+        self.watcher.arrived.connect(lambda _root: QTimer.singleShot(6000, self._plan_tick))
+        self._refresh_plans()
+
         # apagar, reiniciar o cerrar sesión con una copia en marcha
         app = QApplication.instance()
         app.commitDataRequest.connect(self._on_session_end_query)
@@ -5819,6 +6380,7 @@ class MainWindow(QMainWindow):
         # al arrancar con la sesión la ventana no debe abrirse sola aunque la app pase a primer plano
         self.tray_only_start = tray_mode
         self.cloud_checked.connect(self._on_cloud_checked)
+        self.drive_quota.connect(self._on_drive_quota)
         QTimer.singleShot(1500, self._check_cloud)
         if tray_mode:
             QTimer.singleShot(3000, lambda: setattr(self, "tray_only_start", False))
@@ -6021,6 +6583,8 @@ class MainWindow(QMainWindow):
         self.dst_card = PathCard(_("Destino"), G.DRIVE, _("Carpeta de destino"), frameless=True)
         self.src_card.changed.connect(self._on_src_changed)
         self.dst_card.changed.connect(self._on_dst_changed)
+        self.dst_card.menu_provider = self._dst_menu
+        self.dst_card.btn.setToolTip(_("Elegir destino: carpeta o disco, Google Drive o tu nube"))
         pair.body.addWidget(self.src_card)
         pair.body.addWidget(FlowConnector())
         pair.body.addWidget(self.dst_card)
@@ -6123,6 +6687,58 @@ class MainWindow(QMainWindow):
 
         # ── automático ──
         group(_("Automático"))
+        plans = section("programadas", _("Copias programadas"), G.CLOCK)
+        self.plans_box = Toggle()
+        self.plans_box.toggled.connect(self._on_plans_toggled)
+        plans.body.addWidget(SettingRow(_("Hacer las copias programadas"),
+                                        _("A su hora, con la ventana cerrada o en segundo plano"), self.plans_box))
+        where = _("con Windows") if IS_WIN else _("al iniciar sesión")
+        link_text = html.escape(_("Iniciarla {where} en segundo plano").format(where=where))
+        link = f'<a href="#" style="color:{C["accent2"]}; text-decoration:none">{link_text}</a>'
+        self.plan_bg_hint = QLabel(html.escape(_("Con la app cerrada no se hacen.")) + " " + link)
+        self.plan_bg_hint.setObjectName("faint")
+        self.plan_bg_hint.setWordWrap(True)
+        self.plan_bg_hint.setStyleSheet(f"color: {C['warn']};")
+        self.plan_bg_hint.linkActivated.connect(lambda _l: self.watch_box.setChecked(True))
+        plans.body.addWidget(self.plan_bg_hint)
+        rows = QWidget()
+        self.plan_rows_box = rows
+        self.plan_rows = QVBoxLayout(rows)
+        self.plan_rows.setContentsMargins(0, 0, 0, 0)
+        self.plan_rows.setSpacing(6)
+        plans.body.addWidget(rows)
+        self.plan_empty = QLabel(_("Ninguna todavía. Programa la copia del origen y el destino elegidos arriba: qué "
+                                   "días y a qué hora se hace sola."))
+        self.plan_empty.setObjectName("faint")
+        self.plan_empty.setWordWrap(True)
+        plans.body.addWidget(self.plan_empty)
+        self.btn_plan_add = QPushButton("  " + _("Programar esta copia…"))
+        self.btn_plan_add.setObjectName("link")
+        self.btn_plan_add.setIcon(glyph_icon(G.ADD, C["accent2"], 14))
+        self.btn_plan_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_plan_add.setToolTip(_("Elige qué días y a qué hora se copia el origen en el destino de arriba"))
+        self.btn_plan_add.clicked.connect(self._plan_current)
+        pr = QHBoxLayout()
+        pr.addWidget(self.btn_plan_add)
+        pr.addStretch(1)
+        plans.body.addLayout(pr)
+        self.plan_wake_box = Toggle()
+        wake_row = SettingRow(_("Despertar el equipo"), _("Si está en reposo a la hora de una copia"),
+                              self.plan_wake_box,
+                              _("Usa los temporizadores de reactivación de Windows (el plan de energía tiene que "
+                                "permitirlos; con batería, Windows puede no hacerlo). Con el equipo apagado del "
+                                "todo no es posible: la copia se hace al encenderlo."))
+        wake_row.setVisible(keepawake.WakeTimer.supported)
+        self.plan_wake_box.toggled.connect(lambda _on: (self._save_settings(), self._refresh_plans()))
+        plans.body.addWidget(wake_row)
+        self.plan_ac_box = Toggle()
+        ac_row = SettingRow(_("Esperar al cargador"), _("En un portátil con batería, la copia espera a que lo enchufes"),
+                            self.plan_ac_box)
+        ac_row.setVisible(keepawake.has_battery())
+        self.plan_ac_box.toggled.connect(lambda _on: (self._save_settings(), QTimer.singleShot(500, self._plan_tick)))
+        plans.body.addWidget(ac_row)
+        self.card_plans = plans
+
         disk = section("disco", _("Disco de copia"), G.SYNC)
         self.disk_status = QLabel("")
         self.disk_status.setObjectName("faint")
@@ -6379,8 +6995,11 @@ class MainWindow(QMainWindow):
             self.mode_combo.currentData(), self.mode_combo.currentText())
         sec["modo"].set_summary(_("{mode}  ·  versiones {lower}  ·  {value} hilos").format(mode=mode, lower=mid(self.keep_combo.currentText()), value=self.threads_spin.value()))
         scrub = self.scrub_combo.currentData()
-        sec["integridad"].set_summary(
-            (_("SHA-256 en cada copia") if self.verify_box.isChecked() else _("Sin verificar al copiar")) + "  ·  "
+        if gdrive_up.is_dest(self.dst_card.path()):
+            sec["integridad"].set_summary(_("Google Drive: MD5 de Google en cada archivo subido"))
+        else:
+            sec["integridad"].set_summary(
+                (_("SHA-256 en cada copia") if self.verify_box.isChecked() else _("Sin verificar al copiar")) + "  ·  "
             + (_("revisión {period}").format(period=self.scrub_combo.currentText()) if scrub else _("sin revisión")))
         sec["disco"].set_summary((_("Vigilando") if self.watch_box.isChecked() else _("Sin vigilar"))
                                  + "  ·  " + mid(self.connect_combo.currentText()))
@@ -6394,6 +7013,18 @@ class MainWindow(QMainWindow):
             sec["recordatorios"].set_summary(text)
         else:
             sec["recordatorios"].set_summary(_("Desactivados"))
+        if "programadas" in sec and hasattr(self, "plans_box"):
+            n = len(self.plans.items)
+            count = _n("{n} programada", "{n} programadas", n).format(n=n)
+            if not n:
+                sec["programadas"].set_summary(_("Ninguna"))
+            elif not self.plans_box.isChecked():
+                sec["programadas"].set_summary(_("Desactivadas") + "  ·  " + count)
+            else:
+                now = self._now()
+                nxt = self.plans.next_run(now)
+                sec["programadas"].set_summary(count + ("  ·  " + _("próxima {when}").format(when=slot_text(nxt[1], now))
+                                                        if nxt else ""))
         sec["energia"].set_summary(_("Sin suspensión mientras copia") if self.awake_box.isChecked() else _("Desactivado"))
         choice = self.lang_combo.currentData()
         name = i18n.LANGS[i18n.resolve(choice)]
@@ -6786,6 +7417,9 @@ class MainWindow(QMainWindow):
             "awake": st.value("awake", "true") == "true",
             "remind": st.value("remind", "true") == "true",
             "remind_days": int(st.value("remind_days", 3)),
+            "plans_on": st.value("plans_on", "true") == "true",
+            "plan_wake": st.value("plan_wake", "false") == "true",
+            "plan_ac": st.value("plan_ac", "false") == "true",
             "folded": js("folded", None),
         }
         self.disk_id = st.value("disk_id", "") or ""
@@ -6802,13 +7436,14 @@ class MainWindow(QMainWindow):
         geo = st.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)
+        self.plans = planner.Plans(js("programadas", []))
         if st.contains("copias"):
             self.registry = reminders.Registry(js("copias", []))
         else:
             self.registry = self._seed_registry()  # copias hechas antes de existir los recordatorios
             st.setValue("copias", json.dumps(self.registry.to_list(), ensure_ascii=False))
         # copias apuntadas solo por ruta en la letra del disco registrado: pasan a llevar su marca
-        if self.disk_id and self._cfg["dst"] and self.registry.adopt_disk(
+        if self.disk_id and self._cfg["dst"] and not gdrive_up.is_dest(self._cfg["dst"]) and self.registry.adopt_disk(
                 self.disk_id, engine.volume_root(self._cfg["dst"]), engine.rel_to_volume):
             st.setValue("copias", json.dumps(self.registry.to_list(), ensure_ascii=False))
 
@@ -6837,6 +7472,9 @@ class MainWindow(QMainWindow):
         st.setValue("awake", "true" if self.awake_box.isChecked() else "false")
         st.setValue("remind", "true" if self.remind_box.isChecked() else "false")
         st.setValue("remind_days", self.remind_combo.currentData())
+        st.setValue("plans_on", "true" if self.plans_box.isChecked() else "false")
+        st.setValue("plan_wake", "true" if self.plan_wake_box.isChecked() else "false")
+        st.setValue("plan_ac", "true" if self.plan_ac_box.isChecked() else "false")
         st.setValue("update_skip", self.update_skip)
         st.setValue("update_checked", self.update_checked)
         st.setValue("disk_id", self.disk_id)
@@ -6873,6 +7511,10 @@ class MainWindow(QMainWindow):
         self.remind_combo.setCurrentIndex(max(0, self.remind_combo.findData(self._cfg["remind_days"])))
         for w in (self.remind_box, self.remind_combo):
             w.blockSignals(False)
+        for w, key in ((self.plans_box, "plans_on"), (self.plan_wake_box, "plan_wake"), (self.plan_ac_box, "plan_ac")):
+            w.blockSignals(True)
+            w.setChecked(self._cfg[key])
+            w.blockSignals(False)
         self._refresh_summaries()
         self._rebuild_chips()
         self._load_tree()
@@ -6882,6 +7524,13 @@ class MainWindow(QMainWindow):
     def _adopt_disk(self):
         """Registra como disco de copia el del destino (si ya existe la carpeta)."""
         dst = self.dst_card.path()
+        if gdrive_up.is_dest(dst):
+            # las copias van a Google Drive: no hay disco que vigilar (al volver a un disco, se vuelve a leer)
+            self.disk_id, self.dst_rel = "", ""
+            self._refresh_dst_card()
+            self._fetch_drive_quota()
+            self._refresh_disk_status()
+            return
         if dst and os.path.isdir(dst):
             found = engine.read_disk_id(engine.volume_root(dst))
             if found:
@@ -6892,6 +7541,8 @@ class MainWindow(QMainWindow):
         self._refresh_disk_status()
 
     def _register_disk(self, dst: str) -> str | None:
+        if gdrive_up.is_dest(dst):
+            return None
         root = engine.volume_root(dst)
         try:
             self.disk_id = engine.ensure_disk_id(root)
@@ -6905,6 +7556,13 @@ class MainWindow(QMainWindow):
     def _refresh_disk_status(self):
         self.dst_card.refresh()
         dst = self.dst_card.path()
+        drive = gdrive_up.is_dest(dst)
+        self.btn_scrub.setEnabled(not drive)
+        if drive:
+            self.disk_status.setText(_("Las copias van a Google Drive: no hay disco de copia que vigilar."))
+            self.integ_status.setText(_("En Google Drive cada archivo subido se comprueba con su MD5 y Google cuida de "
+                                        "la integridad: no hace falta revisar ningún disco."))
+            return
         root = engine.volume_root(dst) if dst else ""
         present = (bool(root) and engine.volume_present(dst) and self.disk_id
                    and engine.read_disk_id(root) == self.disk_id)
@@ -6925,6 +7583,8 @@ class MainWindow(QMainWindow):
         return os.path.join(DATA_DIR, "estado", f"{self.disk_id}.db") if self.disk_id else None
 
     def scrub_seconds(self) -> int:
+        if gdrive_up.is_dest(self.dst_card.path()):
+            return 0
         return int(self.scrub_combo.currentData())
 
     def integrity_text(self, long: bool = False) -> str:
@@ -6959,6 +7619,7 @@ class MainWindow(QMainWindow):
             self.tray.hide()
         self._save_settings()
         self._refresh_reminders()
+        self._refresh_plans()
         self._refresh_summaries()
 
     def _ensure_tray(self):
@@ -6967,6 +7628,12 @@ class MainWindow(QMainWindow):
             menu = QMenu()
             menu.addAction(glyph_icon(G.OPEN, C["text"], 14), _("Abrir"), self._show_window)
             menu.addAction(glyph_icon(G.PLAY, C["text"], 14), _("Sincronizar ahora"), self._tray_sync)
+            menu.addSeparator()
+            self._tray_plan_info = menu.addAction(glyph_icon(G.CLOCK, C["muted"], 14), "")
+            self._tray_plan_info.setEnabled(False)
+            self._tray_plan_pause = menu.addAction(glyph_icon(G.PAUSE, C["text"], 14), "",
+                                                   lambda: self.plans_box.toggle())
+            menu.addSeparator()
             menu.addAction(glyph_icon(G.HELP, C["text"], 14), _("Guía rápida"), lambda: self.show_tour())
             menu.addSeparator()
             menu.addAction(glyph_icon(G.CLOSE, C["text"], 14), _("Salir"), self._quit)
@@ -6976,6 +7643,7 @@ class MainWindow(QMainWindow):
             self.tray.messageClicked.connect(self._show_window)
         self.tray.setToolTip(_("{app_name} · vigilando el disco de copia").format(app_name=APP_NAME))
         self.tray.show()
+        self._refresh_tray_plans()
 
     def _on_tray_activated(self, reason):
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
@@ -7046,6 +7714,9 @@ class MainWindow(QMainWindow):
         self._refresh_disk_status()
         self.gdrive.refresh()
         QTimer.singleShot(30_000, self.gdrive.check_due)  # copias de Drive pendientes, sin pisar el aviso del disco
+        if self._plan_due_on(root):
+            QTimer.singleShot(1500, self._plan_tick)  # la copia programada que esperaba a este disco
+            return
         if self._state in RUNNING or (self.dialog and self.dialog.isVisible()):
             return
         action = self.connect_combo.currentData()
@@ -7130,6 +7801,13 @@ class MainWindow(QMainWindow):
         self._on_tree_changed()
 
     def _on_src_changed(self):
+        info = self._drive_dest()
+        if info and self._state not in RUNNING:
+            # en Drive, la carpeta de la copia se llama como el origen
+            new = self._drive_dest_for(info[0], self.src_card.path())
+            if os.path.normcase(new) != os.path.normcase(self.dst_card.path()):
+                self.dst_card.set_path(new)
+                self._on_dst_changed()
         self._load_tree()
         self._invalidate_plan()
         if hasattr(self, "recover"):
@@ -7138,6 +7816,9 @@ class MainWindow(QMainWindow):
     def _on_dst_changed(self):
         self._adopt_disk()
         self._invalidate_plan()
+        if self._state == "idle":
+            self._show_idle_banner()
+        self._refresh_summaries()
         if hasattr(self, "recover"):
             self.recover.mark_stale()
         if hasattr(self, "gdrive"):
@@ -7162,6 +7843,10 @@ class MainWindow(QMainWindow):
     def _check_cloud(self):
         """¿El destino es una carpeta de Personal Cloud Storage? ¿Responde? Todo fuera de la ventana."""
         dst = self.dst_card.path()
+        if gdrive_up.is_dest(dst):
+            self._cloud_seq = getattr(self, "_cloud_seq", 0) + 1
+            self._on_cloud_checked("", "", "none")
+            return
         saved = str(self.settings.value("nube_host", "") or "")
         self._cloud_seq = getattr(self, "_cloud_seq", 0) + 1
         seq = self._cloud_seq
@@ -7206,6 +7891,7 @@ class MainWindow(QMainWindow):
         else:
             self.cloud_state.hide()
             self.cloud_btn.setText("  " + _("Conectar con mi nube…"))
+        self.cloud_btn.setVisible(not gdrive_up.is_dest(self.dst_card.path()))  # con Drive: en el menú de destino
 
     def _on_tree_changed(self):
         n = len(self.tree.excluded)
@@ -7333,7 +8019,7 @@ class MainWindow(QMainWindow):
                 self._refresh_remind_bar()
 
     def _show_idle_banner(self):
-        dst = self.dst_card.path() or _("el destino")
+        dst = self._dst_text(self.dst_card.path()) if self.dst_card.path() else _("el destino")
         self.banner.set("info", _("Listo para sincronizar"),
                         _("«Analizar» enseña qué ha cambiado sin tocar nada. «Sincronizar» deja {dst} igual que el "
                           "origen: copia lo nuevo y lo modificado, mueve lo renombrado y guarda en versiones lo que "
@@ -7345,6 +8031,18 @@ class MainWindow(QMainWindow):
             return _("La carpeta de origen no existe.")
         if not dst:
             return _("Elige una carpeta de destino.")
+        if gdrive_up.is_dest(dst):
+            info = self._drive_dest(dst)
+            if info is None:
+                return _("El destino de Google Drive no es válido: elígelo de nuevo.")
+            if info[3] is None:
+                return _("La cuenta de Google Drive de este destino ya no está conectada: elige el destino de nuevo.")
+            if not self.gdrive.client()[0]:
+                return _("Falta tu ID de cliente de Google (Ajustes → Google Drive).")
+            if not info[3].can_write:
+                return _("Falta el permiso para guardar copias en Google Drive: elige el destino de nuevo y da el "
+                         "permiso.")
+            return None
         ns, nd = os.path.normcase(os.path.abspath(src)), os.path.normcase(os.path.abspath(dst))
         if ns == nd:
             return _("El origen y el destino son la misma carpeta.")
@@ -7365,16 +8063,30 @@ class MainWindow(QMainWindow):
             return False
         self.excl_map[self._excl_key()] = self.tree.excluded
         self.rem_checker.cancel()
-        if not self.disk_id or engine.read_disk_id(engine.volume_root(dst)) != self.disk_id:
-            self._register_disk(dst)
-        job = engine.BackupJob(src, dst, self._active_rules(), self.tree.excluded,
-                               self.mode_combo.currentData(), self.threads_spin.value(),
-                               index_path=self._index_path(), force_full=self.full_box.isChecked(),
-                               keep_days=self.keep_combo.currentData(), verify=self.verify_box.isChecked(),
-                               scrub_seconds=-1 if scrub_all else self.scrub_seconds())
+        drive = self._drive_dest(dst)
+        if drive:
+            try:
+                writer = self.gdrive.writer_for(drive[3])
+            except gdrive.DriveError as exc:
+                QMessageBox.warning(self, APP_NAME, gdrive_up.error_text(exc))
+                return False
+            job = gdrive_up.DriveBackupJob(src, dst, self._active_rules(), self.tree.excluded, writer, DATA_DIR,
+                                           self.mode_combo.currentData(), self.threads_spin.value(),
+                                           keep_days=self.keep_combo.currentData(),
+                                           force_full=self.full_box.isChecked())
+        else:
+            if not self.disk_id or engine.read_disk_id(engine.volume_root(dst)) != self.disk_id:
+                self._register_disk(dst)
+            job = engine.BackupJob(src, dst, self._active_rules(), self.tree.excluded,
+                                   self.mode_combo.currentData(), self.threads_spin.value(),
+                                   index_path=self._index_path(), force_full=self.full_box.isChecked(),
+                                   keep_days=self.keep_combo.currentData(), verify=self.verify_box.isChecked(),
+                                   scrub_seconds=-1 if scrub_all else self.scrub_seconds())
         reuse = (copy and self.job is not None and self.job.phase == "ready"
                  and self.job.signature() == job.signature())
         if reuse:
+            if drive:
+                job.discard()  # se sigue con el análisis de antes: este no se usa
             if not self.job.stats.has_changes and not job.scrub_seconds:
                 self.seg_buttons[PAGE_PROGRESS].click()
                 return True
@@ -7389,7 +8101,7 @@ class MainWindow(QMainWindow):
             self._reset_progress()
             self._op_start = time.perf_counter()
             self._op_wall = datetime.now()
-            self._log(_("Análisis iniciado  ·  {src}  →  {dst}").format(src=src, dst=dst), C["accent2"])
+            self._log(_("Análisis iniciado  ·  {src}  →  {dst}").format(src=src, dst=self._dst_text(dst)), C["accent2"])
             self._log(_("Modo: {lower}  ·  reglas: {v}  ·  excluidas a mano: {excluded}").format(lower=mid(_(engine.MODES[job.mode])), v=', '.join(job.patterns) or _("ninguna"), excluded=len(job.excluded)))
         self.job = job
         self._finalized = False
@@ -7485,6 +8197,10 @@ class MainWindow(QMainWindow):
 
     def _open_dest(self):
         dst = self.dst_card.path()
+        if gdrive_up.is_dest(dst):
+            QDesktopServices.openUrl(QUrl(gdrive_up.folder_url(
+                gdrive_up.dest_folder_id(gdrive_up.index_path(DATA_DIR, dst)))))
+            return
         if dst and os.path.isdir(dst):
             QDesktopServices.openUrl(QUrl.fromLocalFile(dst))
 
@@ -7562,7 +8278,7 @@ class MainWindow(QMainWindow):
                     "copiar").format(threads=job.threads, ops_total=fmt_int(s.ops_total), plan_bytes=fmt_bytes(s.plan_bytes)), C["accent"])
         self._set_active_rows(job.threads)
         self.ring.set_busy(False)
-        self.banner.set("run", _("Sincronizando  {src}  →  {dst}").format(src=job.src, dst=job.dst),
+        self.banner.set("run", _("Sincronizando  {src}  →  {dst}").format(src=job.src, dst=self._dst_text(job.dst)),
                         self._plan_text(s) + ("  ·  " + _("análisis en {scan_end}").format(scan_end=fmt_clock(s.scan_end - s.scan_start, ms=True))),
                         G.SYNC)
 
@@ -7718,7 +8434,7 @@ class MainWindow(QMainWindow):
         for i, row in enumerate(self.active_rows):
             row.show_slot(slots[i] if i < len(slots) and not final else None, job.src)
         if final:
-            self.cur_label.setText(job.dst)
+            self.cur_label.setText(self._dst_text(job.dst))
         elif slots and s.step != "verificando":
             self.cur_label.setText(slots[0][0] or "")
         elif self._step_text(s):
@@ -7821,17 +8537,26 @@ class MainWindow(QMainWindow):
         if self._pending_release is not None and phase != "ready":
             # había una versión nueva esperando a que terminara la copia
             QTimer.singleShot(2500, self._offer_update)
+        if isinstance(job, gdrive_up.DriveBackupJob) and phase != "ready":
+            self._refresh_dst_card()
+            self._fetch_drive_quota()
+        self._plan_after(job, phase)
 
     def _finish_scan(self, job: engine.BackupJob):
         s = job.stats
         self._log_scan_summary(job)
         scan = s.scan_end - s.scan_start
-        try:
-            free = shutil.disk_usage(engine.volume_root(job.dst)).free
-        except OSError:
-            free = 0
+        if isinstance(job, gdrive_up.DriveBackupJob):
+            free = job.dest_free or 0
+            free_text = fmt_bytes(free) if job.dest_free is not None else _("sin límite")
+        else:
+            try:
+                free = shutil.disk_usage(engine.volume_root(job.dst)).free
+            except OSError:
+                free = 0
+            free_text = fmt_bytes(free)
         detail = ((_("{files_found} archivos en origen ({bytes_found})  ·").format(files_found=fmt_int(s.files_found), bytes_found=fmt_bytes(s.bytes_found)) + "  ") + self._plan_text(s)
-                  + ("  ·  " + _("libre en destino {free}\n{index_note}").format(free=fmt_bytes(free), index_note=job.index_note)))
+                  + ("  ·  " + _("libre en destino {free}\n{index_note}").format(free=free_text, index_note=job.index_note)))
         if not s.has_changes:
             self.ring.set_value(1)
             self.ring.set_text(_("Al día"), _("no hay nada que copiar"), _("ANÁLISIS"))
@@ -7855,7 +8580,7 @@ class MainWindow(QMainWindow):
                                             "confirmación.") + "\n" + detail, G.WARN,
                             (_("Ver la lista"), self._show_mass_list))
         self.t_elapsed.set(fmt_clock(scan), _("duración del análisis"))
-        eta = estimate_seconds(engine.volume_root(job.dst), s)
+        eta = estimate_seconds(job.meta_root, s)
         self.t_left.set(fmt_clock(eta) if eta is not None else "—",
                         _("previsto según la última copia") if eta is not None else _("se mide al copiar"))
         self.t_speed.set("—", "")
@@ -7937,7 +8662,7 @@ class MainWindow(QMainWindow):
         if s.errors:
             parts.append(issues)
         action = (_("Ver registro"), self._open_log) if self._last_log else None
-        brief = _("{src}  →  {dst}  ·  {bytes_done} copiados  ·  media {avg}").format(src=job.src, dst=job.dst, bytes_done=fmt_bytes(s.bytes_done), avg=fmt_speed(avg))
+        brief = _("{src}  →  {dst}  ·  {bytes_done} copiados  ·  media {avg}").format(src=job.src, dst=self._dst_text(job.dst), bytes_done=fmt_bytes(s.bytes_done), avg=fmt_speed(avg))
         if phase == "cancelled":
             self.banner.set("warn", _("Sincronización cancelada tras {total}").format(total=fmt_clock(total, ms=True)),
                             brief + ("  ·  " + _("lo copiado se conserva; vuelve a pulsar Sincronizar para continuar")),
@@ -8024,7 +8749,7 @@ class MainWindow(QMainWindow):
             row(_("Fin"), f"{datetime.now():%Y-%m-%d %H:%M:%S}"),
             row(_("Resultado"), PILL[phase][0]),
             row(_("Origen"), job.src),
-            row(_("Destino"), job.dst),
+            row(_("Destino"), self._dst_text(job.dst)),
             row(_("Reglas"), rules),
             row(_("Modo"), _(engine.MODES[job.mode])),
             row(_("Análisis"), job.index_note),
@@ -8114,6 +8839,138 @@ class MainWindow(QMainWindow):
         if self.tour is not None and self.tour.active:
             self.tour.setGeometry(self.rect())
 
+    # ── destino en Google Drive ──────────────────────────────────────────
+    def _drive_dest(self, dst: str | None = None):
+        """(cuenta, equipo, carpeta, Account o None) si el destino es Google Drive; si no, None."""
+        dst = self.dst_card.path() if dst is None else dst
+        parsed = gdrive_up.parse_dest(dst)
+        if parsed is None:
+            return None
+        acc = self.gdrive.account(parsed[0]) if hasattr(self, "gdrive") else None
+        return parsed + (acc,)
+
+    def _dst_text(self, dst: str) -> str:
+        """El destino para enseñarlo: la ruta, o «Google Drive · correo › DEV Backup Studio › PC › DEV»."""
+        info = self._drive_dest(dst)
+        if info is None:
+            return dst
+        who = info[3].email if info[3] is not None else _("cuenta desconectada")
+        return f"Google Drive · {who} › {gdrive_up.ROOT_NAME} › {info[1]} › {info[2]}"
+
+    def _drive_dest_for(self, account_id: str, src: str) -> str:
+        """El destino en Drive para ese origen: la carpeta se llama como él; si otra copia de este equipo ya
+        usa ese nombre con otro origen, «DEV (2)»."""
+        machine = gdrive_up.machine_name()
+        base = gdrive_up.folder_for(src) if src else "Copia"
+        nsrc = os.path.normcase(os.path.normpath(src)) if src else ""
+        others = [(it.get("src", ""), it.get("dst", "")) for it in self.registry.items.values()]
+        others += [(p.src, p.dst) for p in self.plans.items.values()]
+        for n in range(1, 100):
+            folder = base if n == 1 else f"{base} ({n})"
+            dst = gdrive_up.make_dest(account_id, machine, folder)
+            used = {os.path.normcase(os.path.normpath(s)) for s, d in others
+                    if d and os.path.normcase(os.path.normpath(d)) == os.path.normcase(dst)}
+            if not used or nsrc in used:
+                return dst
+        return gdrive_up.make_dest(account_id, machine, base)
+
+    def _dst_menu(self) -> QMenu:
+        """Elegir destino: una carpeta o un disco, una cuenta de Google Drive o la nube de casa."""
+        menu = QMenu(self)
+        cur = self._drive_dest()
+        a = menu.addAction(glyph_icon(G.FOLDER, C["text"], 14), _("Carpeta o disco…"))
+        a.triggered.connect(self.dst_card.pick_folder)
+        menu.addSeparator()
+        for acc in self.gdrive.accounts:
+            a = menu.addAction(gdrive_icon(14), _("Google Drive · {email}").format(email=acc.email))
+            a.setCheckable(True)
+            a.setChecked(bool(cur and cur[0] == acc.id))
+            a.triggered.connect(lambda _c=False, aid=acc.id: self._choose_drive_dest(aid))
+        a = menu.addAction(gdrive_icon(14), _("Google Drive · otra cuenta…") if self.gdrive.accounts
+                           else _("Google Drive…"))
+        a.triggered.connect(lambda _c=False: self._choose_drive_dest(None))
+        menu.addSeparator()
+        a = menu.addAction(glyph_icon(G.GLOBE, C["text"], 14), _("Mi nube (Personal Cloud Storage)…"))
+        a.triggered.connect(self._pair_cloud)
+        return menu
+
+    def _choose_drive_dest(self, account_id: str | None):
+        if self._state in RUNNING:
+            QMessageBox.information(self, APP_NAME, _("Espera a que termine la copia en curso."))
+            return
+        page = self.gdrive
+        if not page.client()[0]:
+            QMessageBox.information(self, APP_NAME, _(
+                "Para guardar copias en Google Drive hace falta tu propio ID de cliente de Google (se crea gratis, "
+                "una sola vez). La pestaña Google Drive tiene la guía paso a paso."))
+            self.seg_buttons[PAGE_GDRIVE].click()
+            return
+        acc = page.account(account_id) if account_id else None
+        if acc is None or not acc.can_write:
+            acc = page.connect_account("dest", acc)
+            if acc is None:
+                return
+            if not acc.can_write:
+                QMessageBox.warning(self, APP_NAME, _("Google no ha dado el permiso para guardar copias. Vuelve a "
+                                                      "intentarlo y deja marcada la casilla de Google Drive."))
+                return
+        dst = self._drive_dest_for(acc.id, self.src_card.path())
+        self.dst_card.set_path(dst)
+        self._on_dst_changed()
+        self._save_settings()
+        self._log(_("Destino: {dst}").format(dst=self._dst_text(dst)), C["accent2"])
+
+    def _refresh_dst_card(self):
+        info = self._drive_dest()
+        if info is None:
+            return
+        aid, machine, folder, acc = info
+        title = _("Google Drive · {email}").format(email=acc.email if acc else _("cuenta desconectada"))
+        sub = "  ›  ".join([gdrive_up.ROOT_NAME, machine, folder])
+        q = self._drive_quota.get(aid)
+        used = 0.0
+        if acc is None:
+            info_text = _("Vuelve a elegir el destino para conectar la cuenta")
+        elif not acc.can_write:
+            info_text = _("Falta el permiso para guardar copias: vuelve a elegir el destino")
+        elif q is None:
+            info_text = "Google Drive"
+        elif q[0]:
+            info_text = _("{free} libres de {total} en Google Drive").format(free=fmt_bytes(max(0, q[0] - q[1])),
+                                                                            total=fmt_bytes(q[0]))
+            used = q[1] / q[0]
+        else:
+            info_text = _("Google Drive sin límite de espacio  ·  {used} usados").format(used=fmt_bytes(q[1]))
+        url = gdrive_up.folder_url(gdrive_up.dest_folder_id(gdrive_up.index_path(DATA_DIR, self.dst_card.path())))
+        self.dst_card.set_cloud(title, sub, url, info_text, used, gdrive_pixmap(26))
+
+    def _fetch_drive_quota(self):
+        """El espacio libre en Drive de la cuenta del destino, fuera de la ventana."""
+        info = self._drive_dest()
+        if info is None or info[3] is None or not info[3].can_write:
+            return
+        try:
+            writer = self.gdrive.writer_for(info[3])
+        except gdrive.DriveError:
+            return
+        aid = info[0]
+
+        def work():
+            try:
+                limit, usage = writer.quota()
+            except Exception:  # noqa: BLE001 - sin red: se queda sin cifra
+                return
+            try:
+                self.drive_quota.emit(aid, limit, usage)
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=work, name="drive-espacio", daemon=True).start()
+
+    def _on_drive_quota(self, aid: str, limit, usage):
+        self._drive_quota[aid] = (limit, usage)
+        self._refresh_dst_card()
+
     # ── recordatorios de copia ───────────────────────────────────────────
     def _remind_days(self) -> int:
         return int(self.remind_combo.currentData() or 3) if self.remind_box.isChecked() else 0
@@ -8128,6 +8985,8 @@ class MainWindow(QMainWindow):
         cfg_dst = os.path.normcase(os.path.normpath(self._cfg["dst"])) if self._cfg["dst"] else ""
 
         def resolve(dst: str) -> tuple[str, str, str]:
+            if gdrive_up.is_dest(dst):
+                return "", "", ""
             root = engine.volume_root(dst)
             found = engine.read_disk_id(root) if engine.volume_present(dst) else None
             if found:
@@ -8164,6 +9023,9 @@ class MainWindow(QMainWindow):
 
     def _pair_dest(self, it: dict, roots: dict | None = None) -> str | None:
         """Dónde está ahora el destino de una copia, o None si su disco no está conectado."""
+        if gdrive_up.is_dest(it.get("dst")):
+            info = self._drive_dest(it["dst"])
+            return it["dst"] if info and info[3] is not None and info[3].can_write else None
         if it.get("disk_id"):
             root = (self._disk_roots() if roots is None else roots).get(it["disk_id"])
             if root is None:
@@ -8181,6 +9043,8 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _pair_label(it: dict) -> str:
+        if gdrive_up.is_dest(it.get("dst")):
+            return "Google Drive"
         return it.get("label") or reminders.short_name(it.get("dst", ""))
 
     def _nb_label(self, it: dict) -> str:
@@ -8188,9 +9052,12 @@ class MainWindow(QMainWindow):
 
     def _record_pair(self, job: engine.BackupJob, copied: bool):
         """Copia completa (o análisis que encontró el destino al día): ya no hay nada pendiente."""
-        root = engine.volume_root(job.dst)
-        disk_id = engine.read_disk_id(root) or ""
-        label = engine.volume_info(root)[0] or engine.vol_name(root)
+        if gdrive_up.is_dest(job.dst):
+            disk_id, label = "", "Google Drive"
+        else:
+            root = engine.volume_root(job.dst)
+            disk_id = engine.read_disk_id(root) or ""
+            label = engine.volume_info(root)[0] or engine.vol_name(root)
         self.registry.record(job.src, job.dst, disk_id, engine.rel_to_volume(job.dst) if disk_id else "", label,
                              job.scan_started_at or datetime.now(), job.patterns, job.excluded, copied=copied,
                              only_existing=not copied)
@@ -8399,6 +9266,8 @@ class MainWindow(QMainWindow):
             a_use.setEnabled(not busy)
         a_check = menu.addAction(glyph_icon(G.SEARCH, C["text"], 14), _("Comprobar cambios ahora"))
         a_check.setEnabled(not busy and not self.rem_checker.busy)
+        a_plan = menu.addAction(glyph_icon(G.CLOCK, C["text"], 14),
+                                _("Cambiar la programación…") if pid in self.plans.items else _("Programar…"))
         menu.addSeparator()
         a_remind = menu.addAction(glyph_icon(G.BELL, C["text"], 14), _("Avisarme de esta copia"))
         a_remind.setCheckable(True)
@@ -8415,6 +9284,12 @@ class MainWindow(QMainWindow):
         elif chosen is a_check:
             if self.rem_checker.check([it], manual=True):
                 self._refresh_reminders()
+        elif chosen is a_plan:
+            existing = self.plans.get(pid)
+            plan = dataclasses.replace(existing) if existing else planner.Plan(
+                id=pid, src=it["src"], dst=it.get("dst", ""), disk_id=it.get("disk_id", ""),
+                dst_rel=it.get("dst_rel", ""), label=it.get("label", ""))
+            self._edit_plan(plan, existing is not None)
         elif chosen is a_remind:
             self.registry.set_remind(pid, a_remind.isChecked())
             self._save_registry()
@@ -8423,6 +9298,441 @@ class MainWindow(QMainWindow):
             self.registry.remove(pid)
             self._save_registry()
             self._refresh_reminders()
+
+    # ── copias programadas ───────────────────────────────────────────────
+    def _now(self) -> datetime:
+        return datetime.now()
+
+    def _save_plans(self):
+        self.settings.setValue("programadas", json.dumps(self.plans.to_list(), ensure_ascii=False))
+        self.settings.sync()
+
+    def _plan_dest(self, p: planner.Plan, roots: dict | None = None) -> str | None:
+        return self._pair_dest({"disk_id": p.disk_id, "dst_rel": p.dst_rel, "dst": p.dst}, roots)
+
+    @staticmethod
+    def _plan_title(p: planner.Plan) -> str:
+        return f"{reminders.short_name(p.src)}  →  {p.label or reminders.short_name(p.dst)}"
+
+    def _plan_status(self, p: planner.Plan, now: datetime) -> tuple[str, str, str]:
+        """(texto, color, icono) de la fila de una copia programada."""
+        if self._plan_running == p.id and self._state in RUNNING:
+            return _("Copiando ahora…"), C["accent2"], G.SYNC
+        desc = plan_desc(p)
+        if not p.enabled:
+            return _("En pausa  ·  {desc}").format(desc=desc), C["faint"], G.PAUSE
+        if not self.plans_box.isChecked():
+            return _("Desactivadas  ·  {desc}").format(desc=desc), C["faint"], G.CLOCK
+        waiting = planner.parse_time(p.waiting)
+        if waiting:
+            why = {"disk": _("conecta {disk}").format(disk=p.label or reminders.short_name(p.dst)),
+                   "src": _("falta el origen {src}").format(src=reminders.short_name(p.src)),
+                   "power": _("esperando al cargador"),
+                   "net": _("sin conexión a internet")}.get(p.waiting_for, "")
+            return _("Tocaba {when}  ·  {why}").format(when=slot_text(waiting, now), why=why), C["warn"], G.WARN
+        st, when = p.state(now)
+        nxt = (_("toca ahora") if st == "due" else
+               _("próxima {when}").format(when=slot_text(when, now)) if when else "")
+        if p.last_result in ("failed", "warn", "held", "missed", "cancelled") and p.last_end:
+            last = _("Última {ago}: {result}").format(ago=fmt_ago(p.last_end), result=_(PLAN_RESULT[p.last_result]))
+            color = C["err"] if p.last_result == "failed" else C["warn"]
+            return f"{last}  ·  {nxt}" if nxt else last, color, G.ERROR if p.last_result == "failed" else G.WARN
+        text = f"{desc}  ·  {nxt}" if nxt else desc
+        return text, C["ok"] if p.last_result == "ok" else C["accent2"], G.CLOCK
+
+    def _plan_tip(self, p: planner.Plan) -> str:
+        lines = [plan_desc(p), f"{p.src}  →  {p.dst}"]
+        if p.last_end and p.last_result:
+            line = _("Última: {when}, {result}").format(when=short_stamp(planner.parse_time(p.last_end)),
+                                                       result=_(PLAN_RESULT.get(p.last_result, p.last_result)))
+            if p.last_detail:
+                line += f" ({p.last_detail})"
+            lines.append(line)
+        if p.runs:
+            lines.append(_n("{n} copia programada hecha", "{n} copias programadas hechas", p.runs).format(n=p.runs))
+        if not p.catch_up:
+            lines.append(_("Si no se puede a su hora, se salta"))
+        return "\n".join(lines)
+
+    def _current_plan_key(self) -> tuple[str, str, str, str, str]:
+        """(origen, destino, marca del disco, ruta en el disco, nombre) de la copia elegida arriba."""
+        src, dst = self.src_card.path(), self.dst_card.path()
+        disk_id, rel, label = "", "", ""
+        if gdrive_up.is_dest(dst):
+            return src, dst, "", "", "Google Drive"
+        if dst and engine.volume_present(dst):
+            root = engine.volume_root(dst)
+            found = engine.read_disk_id(root)
+            if found:
+                disk_id, rel = found, engine.rel_to_volume(dst)
+            label = engine.volume_info(root)[0] or engine.vol_name(root)
+        elif dst and self.disk_id:
+            disk_id, rel = self.disk_id, self.dst_rel
+        return src, dst, disk_id, rel, label
+
+    def _current_plan_id(self) -> str:
+        src, dst, disk_id, rel, _label = self._current_plan_key()
+        return reminders.pair_id(src, disk_id, rel, dst) if src and dst else ""
+
+    def _refresh_plans(self, now: datetime | None = None):
+        if not hasattr(self, "plan_rows"):
+            return
+        now = now or self._now()
+        while self.plan_rows.count():
+            w = self.plan_rows.takeAt(0).widget()
+            if w is not None:
+                w.hide()
+                w.deleteLater()
+        sig = []
+        for p in self.plans.ordered(now):
+            status, color, glyph = self._plan_status(p, now)
+            sig.append(status)
+            row = PlanRow(p.id, self._plan_title(p), status, color, self._plan_tip(p), glyph)
+            row.menu_requested.connect(self._plan_menu)
+            self.plan_rows.addWidget(row)
+        self._plan_sig = tuple(sig)
+        has = bool(self.plans.items)
+        self.plan_empty.setVisible(not has)
+        self.plan_rows_box.setVisible(has)
+        self.btn_plan_add.setText("  " + (_("Cambiar la programación de esta copia…")
+                                          if self._current_plan_id() in self.plans.items
+                                          else _("Programar esta copia…")))
+        enabled = any(p.enabled for p in self.plans.items.values())
+        self.plan_bg_hint.setVisible(enabled and self.plans_box.isChecked() and not self.watch_box.isChecked())
+        self._arm_wake(now)
+        self._refresh_tray_plans(now)
+        self._refresh_summaries()
+
+    def _refresh_tray_plans(self, now: datetime | None = None):
+        if not self.tray or not hasattr(self, "_tray_plan_info"):
+            return
+        has = bool(self.plans.items)
+        self._tray_plan_info.setVisible(has)
+        self._tray_plan_pause.setVisible(has)
+        if not has:
+            return
+        on = self.plans_box.isChecked()
+        self._tray_plan_pause.setText(_("Pausar las copias programadas") if on else _("Reanudar las copias programadas"))
+        self._tray_plan_pause.setIcon(glyph_icon(G.PAUSE if on else G.PLAY, C["text"], 14))
+        now = now or self._now()
+        nxt = self.plans.next_run(now) if on else None
+        if self._plan_running and self._state in RUNNING:
+            text = _("Copia programada en marcha")
+        elif nxt:
+            text = _("Próxima copia: {when}  ·  {src}").format(when=slot_text(nxt[1], now),
+                                                               src=reminders.short_name(nxt[0].src))
+        else:
+            text = _("Copias programadas en pausa") if not on else _("Sin copias programadas pendientes")
+        self._tray_plan_info.setText(text)
+
+    def _arm_wake(self, now: datetime):
+        """Windows: despertar el equipo un par de minutos antes de la próxima copia programada."""
+        if not keepawake.WakeTimer.supported:
+            return
+        when = None
+        if self.plan_wake_box.isChecked() and self.plans_box.isChecked():
+            when = self.plans.wake_at(now)
+            if when is not None:
+                when = max(when - timedelta(minutes=2), now + timedelta(seconds=30))
+        if when != self.waker.when and not self.waker.set(when):
+            self.waker.when = None
+
+    def _on_plans_toggled(self, on: bool):
+        self._save_settings()
+        self._log(_("Copias programadas activadas") if on else _("Copias programadas en pausa"),
+                  C["accent2"] if on else C["muted"])
+        self._refresh_plans()
+        if on:
+            QTimer.singleShot(1500, self._plan_tick)
+
+    def _plan_current(self):
+        """«Programar esta copia…»: el origen y el destino elegidos arriba."""
+        src, dst = self.src_card.path(), self.dst_card.path()
+        if not src or not os.path.isdir(src):
+            QMessageBox.information(self, APP_NAME, _("Elige primero una carpeta de origen que exista."))
+            return
+        if not dst:
+            QMessageBox.information(self, APP_NAME, _("Elige una carpeta de destino."))
+            return
+        problem = self._validate(src, dst)
+        if problem and (gdrive_up.is_dest(dst) or engine.volume_present(dst)):
+            QMessageBox.warning(self, APP_NAME, problem)
+            return
+        if not gdrive_up.is_dest(dst) and engine.volume_present(dst) and not engine.read_disk_id(engine.volume_root(dst)):
+            # el disco se registra ya (como en la primera copia): así se reconoce aunque cambie de letra
+            self._register_disk(dst)
+        src, dst, disk_id, rel, label = self._current_plan_key()
+        pid = reminders.pair_id(src, disk_id, rel, dst)
+        existing = self.plans.get(pid)
+        plan = dataclasses.replace(existing) if existing else planner.Plan(
+            id=pid, src=os.path.normpath(src), dst=os.path.normpath(dst), disk_id=disk_id, dst_rel=rel, label=label)
+        self._edit_plan(plan, existing is not None)
+
+    def _edit_plan(self, plan: planner.Plan, existing: bool):
+        dlg = ScheduleDialog(self, plan, existing)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        if dlg.removed:
+            self.plans.remove(plan.id)
+            self._log(_("Programación quitada: {pair}").format(pair=self._plan_title(plan)), C["muted"])
+        elif dlg.plan is not None:
+            p = self.plans.put(dlg.plan, self._now())
+            self._log(_("Copia programada: {pair}  ·  {desc}").format(pair=self._plan_title(p), desc=plan_desc(p)),
+                      C["accent2"])
+            if not self.plans_box.isChecked():
+                self.plans_box.setChecked(True)
+            if dlg.background and not self.watch_box.isChecked():
+                self.watch_box.setChecked(True)  # se inicia con la sesión, en la bandeja
+        self._save_plans()
+        self._refresh_plans()
+        QTimer.singleShot(1000, self._plan_tick)
+
+    def _plan_menu(self, pid: str, pos: QPoint):
+        p = self.plans.get(pid)
+        if p is None:
+            return
+        now = self._now()
+        busy = self._state in RUNNING
+        dest = self._plan_dest(p)
+        menu = QMenu(self)
+        a_run = menu.addAction(glyph_icon(G.PLAY, C["text"], 14),
+                               _("Hacerla ahora") if dest else _("Hacerla ahora  (conecta {disk})").format(
+                                   disk=p.label or reminders.short_name(p.dst)))
+        a_run.setEnabled(dest is not None and not busy)
+        a_edit = menu.addAction(glyph_icon(G.GEAR, C["text"], 14), _("Cambiar el horario…"))
+        a_pause = menu.addAction(glyph_icon(G.PAUSE if p.enabled else G.PLAY, C["text"], 14),
+                                 _("Pausar") if p.enabled else _("Reanudar"))
+        st, when = p.state(now)
+        target = when if st in ("due", "idle") else None
+        a_skip = menu.addAction(glyph_icon(G.NEXT, C["text"], 14),
+                                _("Saltar la próxima ({when})").format(when=slot_text(target, now)) if target
+                                else _("Saltar la próxima"))
+        a_skip.setEnabled(target is not None and p.enabled and self._plan_running != pid)
+        a_log = None
+        if p.last_log and os.path.exists(p.last_log):
+            a_log = menu.addAction(glyph_icon(G.DOC, C["text"], 14), _("Ver el registro de la última"))
+        menu.addSeparator()
+        a_del = menu.addAction(glyph_icon(G.TRASH, C["text"], 14), _("Quitar la programación"))
+        chosen = menu.exec(pos)
+        if chosen is None:
+            return
+        if chosen is a_run:
+            self._run_plan(p, None, manual=True)
+        elif chosen is a_edit:
+            self._edit_plan(dataclasses.replace(p), True)
+            return
+        elif chosen is a_pause:
+            p.enabled = not p.enabled
+            if p.enabled:  # al reanudar no se recupera lo que tocaba mientras estaba en pausa
+                p.last_slot, p.waiting, p.waiting_for = planner.stamp(now), "", ""
+            self._log((_("Reanudada: {pair}") if p.enabled else _("En pausa: {pair}")).format(pair=self._plan_title(p)))
+        elif chosen is a_skip:
+            skipped = self.plans.skip_next(pid, now)
+            if skipped:
+                self._log(_("Se salta la copia programada de {when}: {pair}").format(
+                    when=slot_text(skipped, now), pair=self._plan_title(p)), C["muted"])
+        elif chosen is a_log:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(p.last_log))
+            return
+        elif chosen is a_del:
+            ans = QMessageBox.question(self, APP_NAME, _("¿Quitar la programación de {pair}?\n\nLa copia ya hecha no "
+                                                         "se toca.").format(pair=self._plan_title(p)))
+            if ans != QMessageBox.StandardButton.Yes:
+                return
+            self.plans.remove(pid)
+            self._log(_("Programación quitada: {pair}").format(pair=self._plan_title(p)), C["muted"])
+        self._save_plans()
+        self._refresh_plans()
+
+    def _plan_due_on(self, root: str) -> bool:
+        """¿Hay una copia programada vencida que va a este disco?"""
+        if not self.plans_box.isChecked() or not self.plans.items:
+            return False
+        now = self._now()
+        found = engine.read_disk_id(root)
+        for p in self.plans.items.values():
+            if p.state(now)[0] != "due":
+                continue
+            if p.disk_id and p.disk_id == found:
+                return True
+            if not p.disk_id and reminders._under(p.dst, root):
+                return True
+        return False
+
+    def _plan_busy(self) -> bool:
+        return (self._state in RUNNING or self._plan_running is not None
+                or QApplication.activeModalWidget() is not None
+                or (self.dialog is not None and self.dialog.isVisible())
+                or (self.tour is not None and self.tour.active))
+
+    def _plan_tick(self):
+        """Cada 20 s (y al volver del reposo o conectar un disco): ¿toca alguna copia programada?"""
+        if not hasattr(self, "plan_rows"):
+            return
+        now = self._now()
+        changed = False
+        if self.plans_box.isChecked() and self.plans.items and time.monotonic() >= self._plan_hold_until \
+                and not self._plan_busy():
+            changed = self._plan_check(now)
+        if changed:
+            self._save_plans()
+        sig = tuple(self._plan_status(p, now)[0] for p in self.plans.ordered(now))
+        if changed or sig != self._plan_sig:
+            self._refresh_plans(now)
+        elif self.waker.when is None or self.waker.when < now:
+            self._arm_wake(now)
+
+    def _plan_check(self, now: datetime) -> bool:
+        """Atiende la primera copia vencida que se pueda hacer. True si algo cambió."""
+        changed, roots, power = False, None, None
+        for p in self.plans.ordered(now):
+            st, slot = p.state(now)
+            if st == "missed":
+                self.plans.miss(p.id, slot, now)
+                self._log(_("Copia programada sin hacer: {pair} (tocaba {when}; el equipo estaba apagado o el disco "
+                            "desconectado)").format(pair=self._plan_title(p), when=slot_text(slot, now)), C["warn"])
+                self._notify(_("Copia programada sin hacer"),
+                             _("{pair}: tocaba {when}. Se hará en la próxima hora programada.").format(
+                                 pair=self._plan_title(p), when=slot_text(slot, now)))
+                changed = True
+                continue
+            if st != "due":
+                continue
+            if not os.path.isdir(p.src):
+                if self.plans.wait(p.id, slot, "src"):
+                    changed = True
+                    self._log(_("Copia programada en espera: no se encuentra el origen {src}").format(src=p.src),
+                              C["warn"])
+                    self._notify(_("Copia programada en espera"),
+                                 _("No se encuentra {src}. Se hará en cuanto esté disponible.").format(
+                                     src=reminders.short_name(p.src)))
+                continue
+            if gdrive_up.is_dest(p.dst) and self._plan_dest(p) and not gdrive_up.online():
+                if self.plans.wait(p.id, slot, "net"):
+                    changed = True
+                    self._log(_("Copia programada en espera: sin conexión con Google Drive"), C["warn"])
+                continue
+            roots = self._disk_roots() if roots is None else roots
+            dest = self._plan_dest(p, roots)
+            if dest is None:
+                if self.plans.wait(p.id, slot, "disk"):
+                    changed = True
+                    disk = p.label or reminders.short_name(p.dst)
+                    self._log(_("Copia programada en espera: {pair} · conecta {disk}").format(
+                        pair=self._plan_title(p), disk=disk), C["warn"])
+                    self._notify(_("Toca la copia de {src}").format(src=reminders.short_name(p.src)),
+                                 _("Conecta {disk} y se hace sola.").format(disk=disk) if p.catch_up else
+                                 _("Conecta {disk} en los próximos minutos o se saltará.").format(disk=disk))
+                continue
+            if self.plan_ac_box.isChecked():
+                power = keepawake.power_source() if power is None else power
+                if power == "battery":
+                    if self.plans.wait(p.id, slot, "power"):
+                        changed = True
+                        self._log(_("Copia programada en espera: el equipo va con batería"), C["warn"])
+                        self._notify(_("Copia programada en espera"),
+                                     _("Enchufa el cargador y la copia de {src} se hace sola.").format(
+                                         src=reminders.short_name(p.src)))
+                    continue
+            self._run_plan(p, slot, dest)
+            return True
+        return changed
+
+    def _run_plan(self, p: planner.Plan, slot: datetime | None, dest: str | None = None,
+                  manual: bool = False) -> bool:
+        """Pone la copia programada como origen y destino actuales y la sincroniza."""
+        if self._state in RUNNING:
+            return False
+        dest = dest or self._plan_dest(p)
+        if dest is None:
+            QMessageBox.information(self, APP_NAME, _("Conecta {disk} para hacer esta copia.").format(
+                disk=p.label or reminders.short_name(p.dst)))
+            return False
+        now = self._now()
+        if slot is not None:
+            self.plans.start(p.id, slot, now)
+        else:
+            p.last_run = planner.stamp(now)
+        self._save_plans()
+        self.excl_map[self._excl_key()] = self.tree.excluded
+        if os.path.normcase(self.src_card.path()) != os.path.normcase(p.src):
+            self.src_card.set_path(p.src)
+            self._on_src_changed()
+        if os.path.normcase(self.dst_card.path()) != os.path.normcase(dest):
+            self.dst_card.set_path(dest)
+            self._on_dst_changed()
+        self._save_settings()
+        problem = self._validate(p.src, dest)
+        if problem:
+            self.plans.finish(p.id, "failed", now, problem)
+            self._save_plans()
+            self._log(_("La copia programada no pudo empezar: {problem}").format(problem=problem), C["err"])
+            self._notify(_("La copia programada no pudo empezar"), f"{self._plan_title(p)}: {problem}")
+            self._refresh_plans()
+            return False
+        self._plan_running = p.id
+        self._log((_("Copia programada a mano") if manual else _("Copia programada  ·  {desc}").format(
+            desc=plan_desc(p))) + f"  ·  {self._plan_title(p)}", C["accent2"])
+        watching = self.isVisible() and not self.isMinimized() and self.isActiveWindow()
+        if not watching and not manual:
+            self._notify(_("Copia programada en marcha"), self._plan_title(p))
+        started = self._start(copy=True, show_progress=manual or not watching)
+        if not started:
+            self._plan_running = None
+            self.plans.finish(p.id, "failed", now, _("no pudo empezar"))
+            self._save_plans()
+        elif self._state not in RUNNING:
+            self._plan_finish("ok", "")  # el análisis de hace un momento ya decía que estaba al día
+        self._refresh_plans()
+        return started
+
+    def _plan_after(self, job: engine.BackupJob, phase: str):
+        """Al terminar una operación: el resultado de la copia programada (o una a mano que la cumple)."""
+        if self._plan_running is None:
+            if phase == "done" and self.plans.items:
+                self._plan_satisfied(job)
+            return
+        if phase == "ready" and job.held:
+            self._plan_finish("held", _("iba a apartar muchos archivos de la copia"))
+        elif phase == "ready":
+            return  # solo analizaba: la copia sigue
+        elif phase == "done":
+            errors = job.stats.errors
+            self._plan_finish("warn" if errors else "ok",
+                              _n("{n} incidencia", "{n} incidencias", errors).format(n=fmt_int(errors)) if errors else "")
+        elif phase == "cancelled":
+            self._plan_finish("cancelled", "")
+        else:
+            self._plan_finish("failed", job.fatal or _("Error desconocido"))
+
+    def _plan_finish(self, result: str, detail: str):
+        pid, self._plan_running = self._plan_running, None
+        if pid is None:
+            return
+        self.plans.finish(pid, result, self._now(), detail, self._last_log if result in ("ok", "warn") else "")
+        self._save_plans()
+        p = self.plans.get(pid)
+        if p is not None and result == "failed":
+            self._notify(_("La copia programada falló"), f"{self._plan_title(p)}: {detail}")
+        self._refresh_plans()
+        QTimer.singleShot(4000, self._plan_tick)  # la siguiente, si había otra esperando
+
+    def _plan_satisfied(self, job: engine.BackupJob):
+        """Una sincronización a mano de una copia programada vencida (o en espera) cuenta como hecha."""
+        now = self._now()
+        changed = False
+        for p in self.plans.items.values():
+            st, slot = p.state(now)
+            if st != "due" or os.path.normcase(os.path.normpath(p.src)) != os.path.normcase(os.path.normpath(job.src)):
+                continue
+            dest = self._plan_dest(p)
+            if dest and os.path.normcase(os.path.normpath(dest)) == os.path.normcase(os.path.normpath(job.dst)):
+                self.plans.start(p.id, slot, now)
+                self.plans.finish(p.id, "warn" if job.stats.errors else "ok", now, "", self._last_log)
+                changed = True
+        if changed:
+            self._save_plans()
+            self._refresh_plans()
 
     # ── guía rápida ──────────────────────────────────────────────────────
     def show_tour(self, animate: bool | None = None):
@@ -8499,6 +9809,7 @@ class MainWindow(QMainWindow):
                 return
         self.gdrive.stop_and_wait()
         self._guard_stop()
+        self.waker.close()
         if self.tray:
             self.tray.hide()
         event.accept()
@@ -8507,7 +9818,8 @@ class MainWindow(QMainWindow):
 
     # ── energía: equipo y disco despiertos, apagado retenido ─────────────
     def _guard_wanted(self, job: engine.BackupJob) -> bool:
-        if not self.awake_box.isChecked() or job.phase not in ("scanning", "copying") or job.cancelled:
+        wanted = self.awake_box.isChecked() or self._plan_running is not None  # programada: quizá se despertó para ella
+        if not wanted or job.phase not in ("scanning", "copying") or job.cancelled:
             return False
         # en una pausa larga se deja que el equipo se suspenda; al reanudar se vuelve a pedir
         return not (job.paused and self._pause_at is not None
@@ -8537,11 +9849,11 @@ class MainWindow(QMainWindow):
 
         # el latido mantiene despierto un disco USB; a una carpeta de red no le hace falta
         root = job.meta_root if not job.network and engine.volume_present(job.dst) else None
-        self.guard.start(_("{app_name}: copia de seguridad en curso ({src} → {dst})").format(app_name=APP_NAME, src=job.src, dst=job.dst), root, activity)
+        self.guard.start(_("{app_name}: copia de seguridad en curso ({src} → {dst})").format(app_name=APP_NAME, src=job.src, dst=self._dst_text(job.dst)), root, activity)
         if IS_WIN:
             keepawake.block_shutdown(int(self.winId()),
                                      _("Copia de seguridad en curso ({src} → {dst}). Si apagas ahora se interrumpe; lo ya copiado "
-                                       "se conserva.").format(src=job.src, dst=job.dst))
+                                       "se conserva.").format(src=job.src, dst=self._dst_text(job.dst)))
         if not self._guard_logged:
             self._guard_logged = True
             parts = [_("el equipo no se suspende ({v})").format(v=_(self.guard.method) if self.guard.method else _("no disponible"))]
@@ -8607,15 +9919,25 @@ class MainWindow(QMainWindow):
     def _watch_disk(self, job: engine.BackupJob):
         """Avisa cuando el disco de copia desaparece a mitad y cuando vuelve."""
         s = job.stats
+        cloud = isinstance(job, gdrive_up.DriveBackupJob)
         if s.disk_lost_at and not self._disk_lost_seen:
             self._disk_lost_seen = True
-            self._log(_("El disco de copia no responde o se ha desconectado ({dst}). La copia espera a que vuelva "
-                        "y repite el archivo que estaba a medias: no se pierde nada.").format(dst=job.dst), C["warn"])
-            self._notify(APP_NAME, _("El disco de copia se ha desconectado. Vuelve a conectarlo y la copia seguirá."))
+            if cloud:
+                self._log(_("Sin conexión con Google Drive. La copia espera a que vuelva y sigue donde iba: no se pierde "
+                            "nada."), C["warn"])
+                self._notify(APP_NAME, _("Sin conexión con Google Drive: la copia seguirá sola al volver la conexión."))
+            else:
+                self._log(_("El disco de copia no responde o se ha desconectado ({dst}). La copia espera a que vuelva "
+                            "y repite el archivo que estaba a medias: no se pierde nada.").format(dst=self._dst_text(job.dst)), C["warn"])
+                self._notify(APP_NAME, _("El disco de copia se ha desconectado. Vuelve a conectarlo y la copia seguirá."))
             self._refresh_awake()
         elif not s.disk_lost_at and self._disk_lost_seen:
             self._disk_lost_seen = False
-            self._log(_("Disco de nuevo disponible: sigue la copia (en total {disk_wait_s} esperando).").format(disk_wait_s=fmt_human(s.disk_wait_s)), C["ok"])
+            if cloud:
+                self._log(_("Conexión con Google Drive recuperada: sigue la copia (en total {disk_wait_s} "
+                            "esperando).").format(disk_wait_s=fmt_human(s.disk_wait_s)), C["ok"])
+            else:
+                self._log(_("Disco de nuevo disponible: sigue la copia (en total {disk_wait_s} esperando).").format(disk_wait_s=fmt_human(s.disk_wait_s)), C["ok"])
             self._refresh_awake()
 
     def _on_session_end_query(self, manager):
@@ -8670,6 +9992,8 @@ class MainWindow(QMainWindow):
         self._log(_("El equipo se va a suspender: copia en pausa. Seguirá sola al volver."), C["warn"])
 
     def _on_system_resume(self):
+        # al volver del reposo (quizá despertado para una copia programada): discos y red tardan un poco
+        QTimer.singleShot(15_000, self._plan_tick)
         if not self._sleeping:
             return
         self._sleeping = False
@@ -8684,7 +10008,7 @@ class MainWindow(QMainWindow):
         if not self._sleep_paused or not job or self._state not in RUNNING:
             self._sleep_paused = False
             return
-        if not engine.volume_present(job.dst) and time.monotonic() < deadline:
+        if not gdrive_up.is_dest(job.dst) and not engine.volume_present(job.dst) and time.monotonic() < deadline:
             # el disco USB tarda unos segundos en volver tras la suspensión
             QTimer.singleShot(1000, lambda: self._resume_after_sleep(deadline))
             return
@@ -8848,6 +10172,230 @@ def selftest_gdrive(win: "MainWindow", say) -> None:
             "desmarcada, cambios a versiones, GOOGLE DRIVE y PLESK a salvo de la sincronización")
     finally:
         server.shutdown()
+
+
+def selftest_gdrive_up(win: "MainWindow", say) -> None:
+    """Copias a Google Drive contra una imitación de su API (gdrive_fake): subida con un corte de red a
+    mitad, sin cambios, movidos y versiones en el servidor, revisión completa, Drive lleno y recuperar;
+    y desde la ventana: el destino en Drive, sincronizar y la pestaña Recuperar."""
+    import gdrive_fake
+    app = QApplication.instance()
+    fake = gdrive_fake.FakeDrive()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            data = os.path.join(tmp, "datos")
+            src = os.path.join(tmp, "DEV")
+            content = {"a.txt": b"hola", os.path.join("proyecto", "main.py"): b"print(1)\n" * 40,
+                       os.path.join("proyecto", "lib", "util.py"): b"x = 1\n" * 90,
+                       os.path.join("grande", "video.bin"): os.urandom(gdrive_up.CHUNK + 700_000)}
+            for rel, raw in content.items():
+                os.makedirs(os.path.dirname(os.path.join(src, rel)), exist_ok=True)
+                with open(os.path.join(src, rel), "wb") as fh:
+                    fh.write(raw)
+            dst = gdrive_up.make_dest("p1", "PC", gdrive_up.folder_for(src))
+
+            def writer():
+                return gdrive_up.Writer("rt", "cid", "sec", api=fake.base + "/drive/v3", token_url=fake.base + "/token")
+
+            def run(**kw):
+                time.sleep(1.05)  # cada sincronización con su fecha de versiones
+                job = gdrive_up.DriveBackupJob(src, dst, [], [], writer(), data, **kw)
+                job.run()
+                assert job.phase in ("done", "failed"), job.phase
+                return job
+
+            def in_drive() -> dict:
+                return {fake.path_of(f): x["data"] for f, x in fake.files.items() if x["mimeType"] != gdrive.FOLDER}
+
+            base = "DEV Backup Studio/PC/DEV/"
+            fake.cut_session_once = True
+            j = run()
+            assert j.phase == "done" and j.stats.files_done == 4, f"Drive: {j.phase} {j.fatal} {j.errors[:2]}"
+            assert all(in_drive().get(base + rel.replace(os.sep, "/")) == raw for rel, raw in content.items()), \
+                "Drive: lo subido no es igual"
+            assert j.stats.verified_copies == 4 and not fake.sessions, "Drive: MD5 o subida a medias"
+            assert run().stats.files_done == 0, "Drive: volvió a subir lo que no cambió"
+            with open(os.path.join(src, "a.txt"), "wb") as fh:
+                fh.write(b"adios")
+            os.rename(os.path.join(src, "proyecto"), os.path.join(src, "proyecto2"))
+            j = run()
+            assert j.stats.moves_done == 2 and j.stats.files_done == 1 and j.stats.versions_saved == 1, \
+                f"Drive: movidos {j.stats.moves_done}, subidos {j.stats.files_done}, versiones {j.stats.versions_saved}"
+            assert in_drive().get(base + "proyecto2/lib/util.py") == content[os.path.join("proyecto", "lib", "util.py")]
+            assert not run(force_full=True).stats.has_changes, "Drive: la revisión completa no cuadra"
+            ixf = gdrive_up.index_path(data, dst)
+            snap = gdrive_up.load_snapshots(ixf)[0]
+            rel, size, mtime = snap.files[0]
+            out = os.path.join(tmp, "rec", "a.txt")
+            res = gdrive_up.restore(writer(), ixf, [(snap.name, rel, out, size, mtime)])
+            assert res.restored == 1 and open(out, "rb").read() == b"hola", "Drive: no se recuperó la versión"
+            with open(os.path.join(src, "nuevo.bin"), "wb") as fh:
+                fh.write(os.urandom(100_000))
+            fake.limit = fake.usage() + 10_000
+            j = run()
+            assert j.phase == "failed" and j.fatal == gdrive_up.error_text(gdrive.DriveError("space")), j.fatal
+            fake.limit = 10**12
+
+            # desde la ventana: destino en Drive, sincronizar y Recuperar
+            saved = dict(src=win.src_card.path(), dst=win.dst_card.path(), disk_id=win.disk_id, dst_rel=win.dst_rel,
+                         copias=win.registry.to_list(), accounts=list(win.gdrive.accounts),
+                         client=win.settings.value("gdrive_client_id", ""))
+            acc = gdrive.Account(id="p1", email="prueba@example.com", scopes=[gdrive.SCOPE_FILE])
+            win.gdrive.accounts.append(acc)
+            win.gdrive.writer_for = lambda _a: writer()
+            win.settings.setValue("gdrive_client_id", "x.apps.googleusercontent.com")
+            try:
+                win.src_card.set_path(src)
+                win._on_src_changed()
+                win.dst_card.set_path(gdrive_up.make_dest("p1", gdrive_up.machine_name(), "DEV"))
+                win._on_dst_changed()
+                assert win.dst_card.cloud_box.isVisibleTo(win.dst_card), "Drive: la tarjeta no enseña la cuenta"
+                assert win._validate(src, win.dst_card.path()) is None
+                with open(os.path.join(src, "b.txt"), "wb") as fh:
+                    fh.write(b"b")
+                assert win._start(copy=True), "Drive: la ventana no empezó"
+                deadline = time.monotonic() + 60
+                while time.monotonic() < deadline and win._state in RUNNING:
+                    app.processEvents()
+                    time.sleep(0.03)
+                assert win.job.phase == "done" and win.job.stats.files_done == 6, \
+                    f"Drive desde la ventana: {win.job.phase} {win.job.fatal}"
+                os.remove(os.path.join(src, "b.txt"))
+                time.sleep(1.05)
+                assert win._start(copy=True)
+                deadline = time.monotonic() + 60
+                while time.monotonic() < deadline and win._state in RUNNING:
+                    app.processEvents()
+                    time.sleep(0.03)
+                win.recover.reload(force=True)
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline and not win.recover.snaps:
+                    app.processEvents()
+                    time.sleep(0.05)
+                assert win.recover.cloud() and win.recover.snaps, "Drive: Recuperar no enseña las versiones"
+            finally:
+                win.gdrive.accounts[:] = saved["accounts"]
+                win.gdrive.writer_for = types.MethodType(GDrivePage.writer_for, win.gdrive)
+                win.settings.setValue("gdrive_client_id", saved["client"])
+                win.src_card.set_path(saved["src"])
+                win.dst_card.set_path(saved["dst"])
+                win.disk_id, win.dst_rel = saved["disk_id"], saved["dst_rel"]
+                win.registry = reminders.Registry(saved["copias"])
+                win._save_registry()
+                win._save_settings()
+                win.recover.mark_stale()
+        say("  Google Drive de destino: subida con corte a mitad y MD5, sin cambios, movidos y versiones en el "
+            "servidor, revisión completa, Drive lleno, recuperar; destino y Recuperar desde la ventana")
+    finally:
+        fake.stop()
+
+
+def selftest_plans(win: "MainWindow", say) -> None:
+    """Copias programadas desde la ventana: a su hora, esperando al disco y al conectarlo.
+
+    El «disco» es una carpeta temporal que hace de unidad; el reloj de la ventana se adelanta a
+    mano. Al terminar, los ajustes de la ventana quedan como estaban."""
+    app = QApplication.instance()
+    saved = dict(src=win.src_card.path(), dst=win.dst_card.path(), plans=win.plans, on=win.plans_box.isChecked(),
+                 disk_id=win.disk_id, dst_rel=win.dst_rel, copias=win.registry.to_list())
+    real = (engine.volume_root, engine.volume_present, engine.mounted_volumes)
+    with tempfile.TemporaryDirectory() as tmp:
+        vol = os.path.join(tmp, "USB")
+        off = vol + "-fuera"
+        vroot = vol + os.sep
+        os.makedirs(vol)
+
+        def under(p: str) -> bool:
+            p = os.path.normcase(os.path.abspath(p))
+            return p == os.path.normcase(vol) or p.startswith(os.path.normcase(vroot))
+
+        engine.volume_root = lambda p: vroot if under(p) else real[0](p)
+        engine.volume_present = lambda p: os.path.isdir(vol) if under(p) else real[1](p)
+        engine.mounted_volumes = lambda network=True, extra=(): (
+            real[2](network, extra) | ({vroot} if os.path.isdir(vol) else set()))
+        temp_disk = ""
+        try:
+            src = os.path.join(tmp, "src")
+            for i in range(12):
+                os.makedirs(os.path.join(src, "p"), exist_ok=True)
+                with open(os.path.join(src, "p", f"f{i}.txt"), "w") as fh:
+                    fh.write("x" * (50 + i))
+            dst = os.path.join(vol, "Copias")
+            win._notify = lambda _t, _x: None
+            win.plans = planner.Plans()
+            clock = [datetime(2030, 1, 7, 20, 59)]  # lunes
+            win._now = lambda: clock[0]
+            win.src_card.set_path(src)
+            win._on_src_changed()
+            win.dst_card.set_path(dst)
+            win._on_dst_changed()
+            temp_disk = engine.ensure_disk_id(vroot)
+            pid = reminders.pair_id(src, temp_disk, "Copias", dst)
+            win.plans.put(planner.Plan(id=pid, src=src, dst=dst, disk_id=temp_disk, dst_rel="Copias", label="USB",
+                                       at="21:00"), clock[0])
+            win.plans_box.blockSignals(True)
+            win.plans_box.setChecked(True)
+            win.plans_box.blockSignals(False)
+            win._plan_hold_until = 0
+
+            def until_idle():
+                deadline = time.monotonic() + 90
+                while time.monotonic() < deadline and (win._state in RUNNING or win._plan_running):
+                    app.processEvents()
+                    time.sleep(0.03)
+                assert win._plan_running is None, f"la copia programada no terminó ({win._state})"
+
+            win._plan_tick()
+            assert win._plan_running is None, "la copia programada empezó antes de hora"
+            clock[0] = datetime(2030, 1, 7, 21, 0, 30)
+            win._plan_tick()
+            assert win._plan_running == pid, "la copia programada no empezó a su hora"
+            until_idle()
+            p = win.plans.get(pid)
+            assert p.last_result == "ok" and p.runs == 1, (p.last_result, p.last_detail)
+            assert os.path.exists(os.path.join(dst, "p", "f11.txt")), "la copia programada no copió"
+            win._plan_tick()
+            assert win._plan_running is None, "repitió la misma hora"
+            with open(os.path.join(src, "p", "nuevo.txt"), "w") as fh:
+                fh.write("nuevo")
+            os.rename(vol, off)
+            clock[0] = datetime(2030, 1, 8, 21, 0, 10)
+            win._plan_tick()
+            assert p.waiting_for == "disk" and win._plan_running is None, "sin disco no esperó"
+            clock[0] = datetime(2030, 1, 10, 8, 0)  # dos días después
+            os.rename(off, vol)
+            win._plan_tick()
+            assert win._plan_running == pid, "al volver el disco no hizo la copia pendiente"
+            until_idle()
+            assert p.runs == 2 and p.last_slot.startswith("2030-01-09T21:00"), (p.runs, p.last_slot)
+            assert os.path.exists(os.path.join(dst, "p", "nuevo.txt"))
+            dlg = ScheduleDialog(win, dataclasses.replace(p), True)
+            got, _why = dlg.collect()
+            assert got is not None and got.at == "21:00" and got.days == planner.WEEK, "el diálogo no devuelve el horario"
+            dlg.reject()
+            assert plan_desc(p) and slot_text(clock[0]) and win._plan_status(p, clock[0])[0]
+        finally:
+            engine.volume_root, engine.volume_present, engine.mounted_volumes = real
+            win._now = types.MethodType(MainWindow._now, win)
+            win._notify = types.MethodType(MainWindow._notify, win)
+            win.plans = saved["plans"]
+            win.plans_box.blockSignals(True)
+            win.plans_box.setChecked(saved["on"])
+            win.plans_box.blockSignals(False)
+            win.src_card.set_path(saved["src"])
+            win.dst_card.set_path(saved["dst"])
+            if temp_disk:
+                try:
+                    os.remove(os.path.join(DATA_DIR, "estado", f"{temp_disk}.db"))
+                except OSError:
+                    pass
+            win.disk_id, win.dst_rel = saved["disk_id"], saved["dst_rel"]
+            win.registry = reminders.Registry(saved["copias"])
+            win._save_registry()
+            win._save_plans()
+            win._save_settings()
+            win._refresh_plans()
+    say("  copias programadas: a su hora, una sola vez, esperando al disco y al conectarlo")
 
 
 def selftest() -> int:
@@ -9149,6 +10697,8 @@ def selftest() -> int:
         assert pair.result() == QDialog.DialogCode.Accepted, "el diálogo «Conectar con mi nube» no se cierra"
         say("  conectar con la nube: el diálogo abre y se cierra")
         selftest_gdrive(win, say)
+        selftest_plans(win, say)
+        selftest_gdrive_up(win, say)
         if IS_LINUX:
             # montaje con GVFS: un «gio» de mentira con las mismas preguntas que el de verdad
             with tempfile.TemporaryDirectory() as fake:

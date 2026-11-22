@@ -1,5 +1,41 @@
 # Novedades
 
+## 2.6.0
+
+- **Copias a Google Drive.** Google Drive puede ser el destino de una copia, como un disco: en la
+  tarjeta *Destino*, el botón abre el menú *Carpeta o disco… · Google Drive · Mi nube*. Todo lo demás
+  funciona igual: analizar, cambios, exclusiones, copias programadas, recordatorios y *Recuperar*.
+  - Va a `Mi unidad/DEV Backup Studio/<equipo>/<carpeta de origen>`, visible en la web de Drive. La
+    app solo puede ver y cambiar lo que ella misma crea (permiso `drive.file`).
+  - Solo se sube lo nuevo o cambiado, comprobado con el MD5 de Google. Los archivos grandes se suben en
+    trozos que siguen donde iban si se corta la conexión o se cierra la app; sin conexión, la copia
+    espera y sigue sola.
+  - Mover y renombrar se hace en el servidor, sin volver a subir. Lo borrado o cambiado va a
+    `.versiones` en Drive y se recupera desde *Recuperar*; si Drive se llena, se quitan antes las
+    versiones más antiguas.
+  - El análisis tiene en cuenta el espacio libre en Drive, y la app avisa del límite de Google de
+    750 GB al día.
+  - En tu proyecto de Google Cloud hay que añadir el permiso `.../auth/drive.file` (*Acceso a los
+    datos*): la guía de la pestaña Google Drive lo incluye.
+- **Copias programadas.** Cada copia (un origen y su disco o carpeta) se puede programar para que se
+  haga sola: cada día, ciertos días de la semana o un día del mes (o el último), a una hora o varias
+  veces al día, por ejemplo cada 2 horas de 9:00 a 21:00. Está en *Automático → Copias programadas*
+  (*Programar esta copia…*) y en el menú de cada copia habitual.
+  - La app se inicia con la sesión en segundo plano y la hace a su hora con la ventana cerrada. Al
+    programar la primera copia, ofrece activar el inicio con Windows (o con la sesión en macOS y Linux).
+  - Si el equipo estaba apagado o el disco desconectado, la copia se hace en cuanto se pueda: al
+    encender, al volver del reposo o al conectar el disco, una sola vez aunque se hayan pasado varias
+    horas programadas. También se puede elegir que se salte, y entonces avisa de que no se hizo.
+  - **Windows: despierta el equipo** si está en reposo, con un temporizador de reactivación, un par de
+    minutos antes de la copia. Mientras copia, el equipo no se suspende.
+  - **Portátiles: puede esperar al cargador** para no gastar batería.
+  - Cada programación se puede hacer ahora, pausar, saltar la próxima o cambiar, y enseña cuándo toca
+    la próxima y cómo fue la última (con su registro). Si sincronizas a mano esa copia cuando tocaba,
+    cuenta como hecha. Con varias pendientes, se hacen una detrás de otra.
+  - El icono de la bandeja enseña la próxima copia y permite pausarlas todas.
+  - Si una copia programada fuera a apartar gran parte de la copia (origen vacío o mal conectado), se
+    detiene y pide confirmación, igual que a mano.
+
 ## 2.5.0
 
 - **Copia de Google Drive, sin la app de Google.** Nueva pestaña *Google Drive*: conecta tu cuenta de

@@ -95,6 +95,21 @@ primera vez:
   para no suspender). Si el equipo se suspende igualmente
   o el disco se desconecta, la copia espera y sigue sola sin dar nada por fallido. Se desactiva en
   *Energía*.
+- **Copias programadas.** Cada copia (un origen y un disco o carpeta) puede hacerse sola: cada día,
+  ciertos días de la semana o un día del mes, a una hora o varias veces al día (cada 2 h de 9:00 a
+  21:00, por ejemplo). Se programa con *Programar esta copia…* en *Automático → Copias programadas* o
+  desde el menú de una copia habitual.
+  - La app se inicia con la sesión en segundo plano (bandeja o barra de menús) y hace la copia a su
+    hora con la ventana cerrada.
+  - Si a esa hora el equipo estaba apagado o el disco desconectado, la copia se hace en cuanto se
+    pueda: al encender el equipo o al conectar el disco, una sola vez aunque se hayan pasado varias.
+    También se puede elegir que se salte.
+  - En Windows puede despertar el equipo si está en reposo, con los temporizadores de reactivación del
+    sistema. En un portátil puede esperar a que conectes el cargador.
+  - Cada programación se puede hacer ahora, pausar, saltar la próxima o cambiar, y enseña cuándo toca
+    la próxima y cómo fue la última. Una sincronización a mano de esa copia cuenta como hecha.
+  - Un borrado masivo también se detiene aquí y pide confirmación: una copia programada nunca vacía la
+    copia por un origen mal conectado.
 - **Te recuerda copiar.** Apunta cada copia que haces (origen y disco) y, si pasan los días que elijas
   con cambios sin copiar, te avisa una vez por periodo: «Tienes cambios sin copiar en DEV · 37 archivos
   desde tu última copia, hace 4 días». Comprueba sin abrir archivos; si no has tocado nada, no avisa.
@@ -168,9 +183,35 @@ Google**: habla directamente con la API oficial de Google Drive.
 Las copias de servidores Plesk que hace Plesk en Google Drive (su carpeta `My Plesk`) se pueden copiar
 así también a tu disco.
 
+### Copias a Google Drive
+
+Google Drive también puede ser el **destino** de una copia, en lugar de un disco: en la tarjeta
+*Destino*, el botón abre el menú **Carpeta o disco… · Google Drive · Mi nube**. Al elegir una cuenta de
+Google, todo lo demás funciona igual: *Analizar*, *Cambios*, el progreso, las exclusiones, las copias
+programadas, los recordatorios y *Recuperar*.
+
+- **Permiso mínimo.** La primera vez, Google pide permiso para que la app guarde copias en tu Drive
+  (`drive.file`): solo puede ver y cambiar lo que ella misma crea. El resto de tu Drive ni lo ve ni lo
+  toca.
+- **Dónde.** En `Mi unidad/DEV Backup Studio/<equipo>/<carpeta de origen>`, una carpeta fija que se ve y
+  se descarga también desde la web de Drive (el botón de la tarjeta la abre). Si copias desde varios
+  equipos, cada uno tiene la suya.
+- **Solo lo cambiado, comprobado.** Se sube solo lo nuevo o modificado, y cada archivo se comprueba con
+  el MD5 que devuelve Google. Los archivos grandes se suben en trozos: si se corta la conexión (o cierras
+  la app), siguen donde iban. Sin conexión, la copia espera y sigue sola.
+- **Mover y renombrar es instantáneo**: Drive lo hace en el servidor, sin volver a subir nada.
+- **Versiones.** Lo que borras o cambias pasa a `DEV Backup Studio/.versiones/<fecha>/…` en Drive,
+  con los mismos plazos que en disco, y se recupera desde la pestaña *Recuperar* (se baja de Drive sin
+  sobrescribir nada). Si Drive se llena, primero se quitan las versiones más antiguas.
+- **Espacio y límites.** El análisis compara lo que hay que subir con el espacio libre en Drive. Google
+  permite subir **750 GB al día** por cuenta: si la primera copia es mayor, lo dice y sigue al día
+  siguiente. Con muchos archivos pequeños la primera copia es lenta (Google admite unas pocas subidas
+  por segundo); las siguientes solo suben lo cambiado.
+- Los archivos se guardan tal cual, para poder abrirlos en Drive: no se cifran.
+
 ### El ID de cliente de Google
 
-Para leer tu Drive, Google exige que la app se identifique con un **ID de cliente** registrado en
+Para leer tu Drive o guardar copias en él, Google exige que la app se identifique con un **ID de cliente** registrado en
 Google Cloud. DEV Backup Studio **no trae ninguno**: cada persona usa el suyo, así nadie depende del
 proyecto de Google de otro ni de sus límites (Google deja a las apps sin verificar un máximo de 100
 usuarios). Se crea gratis, una sola vez, en unos minutos:
@@ -179,7 +220,8 @@ usuarios). Se crea gratis, una sola vez, en unos minutos:
 2. *APIs y servicios → Biblioteca*: busca **Google Drive API** y pulsa *Habilitar*.
 3. *Google Auth Platform* (pantalla de consentimiento de OAuth): tipo **Externo** (o *Interno* si solo
    lo vas a usar con cuentas de tu Google Workspace), nombre de la app y tu correo. En *Acceso a los
-   datos* añade el permiso `.../auth/drive.readonly`. En *Público*, pulsa **Publicar la app**: en modo
+   datos* añade los permisos `.../auth/drive.readonly` (copiar tu Drive al disco) y `.../auth/drive.file`
+   (guardar copias en Drive). En *Público*, pulsa **Publicar la app**: en modo
    *Prueba* Google retira el permiso a los 7 días. Sin verificarla, Google enseña al conectar que la
    app no está verificada (*Configuración avanzada → Ir a…*) y la limita a 100 usuarios: para uso
    propio no hace falta más.

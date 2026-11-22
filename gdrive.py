@@ -51,6 +51,9 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 API = "https://www.googleapis.com/drive/v3"
 SCOPE = "https://www.googleapis.com/auth/drive.readonly"
+# guardar copias en Drive: solo los archivos y carpetas que crea la propia app (permiso no sensible)
+SCOPE_FILE = "https://www.googleapis.com/auth/drive.file"
+WRITE_SCOPES = {SCOPE_FILE, "https://www.googleapis.com/auth/drive"}
 ROOT_DIR = "GOOGLE DRIVE"          # carpeta en la raíz del disco de copia (engine no la sincroniza)
 ASSETS = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))), "assets", "gdrive")
 USER_AGENT = "DEV-Backup-Studio"
@@ -115,10 +118,15 @@ class Authorizer:
     wait() espera a que Google redirija a 127.0.0.1 y devuelve los tokens."""
 
     def __init__(self, client_id: str, client_secret: str, page_ok: str, page_fail: str,
-                 auth_url: str = AUTH_URL, token_url: str = TOKEN_URL):
+                 auth_url: str = AUTH_URL, token_url: str = TOKEN_URL, scopes: list[str] | None = None,
+                 login_hint: str = ""):
         if not client_id:
             raise DriveError("noclient")
         self.client_id, self.client_secret = client_id, client_secret
+        # se piden solo los permisos que hacen falta; los que la cuenta ya dio se conservan
+        # (include_granted_scopes), así la llave nueva sirve para todo lo de antes
+        self.scopes = list(scopes or [SCOPE])
+        self.login_hint = login_hint
         self.auth_url, self.token_url = auth_url, token_url
         self.page_ok, self.page_fail = page_ok, page_fail
         self.state = _secrets.token_urlsafe(24)
@@ -153,11 +161,14 @@ class Authorizer:
         self.redirect_uri = f"http://127.0.0.1:{self.server.server_address[1]}"
         threading.Thread(target=self.server.serve_forever, name="google-oauth", daemon=True).start()
         challenge = base64.urlsafe_b64encode(hashlib.sha256(self.verifier.encode()).digest()).rstrip(b"=").decode()
-        return self.auth_url + "?" + urllib.parse.urlencode({
+        params = {
             "client_id": self.client_id, "redirect_uri": self.redirect_uri, "response_type": "code",
-            "scope": SCOPE, "access_type": "offline", "prompt": "consent", "state": self.state,
-            "code_challenge": challenge, "code_challenge_method": "S256",
-        })
+            "scope": " ".join(self.scopes), "access_type": "offline", "prompt": "consent", "state": self.state,
+            "code_challenge": challenge, "code_challenge_method": "S256", "include_granted_scopes": "true",
+        }
+        if self.login_hint:
+            params["login_hint"] = self.login_hint
+        return self.auth_url + "?" + urllib.parse.urlencode(params)
 
     def wait(self, timeout: float = 600.0, stop: threading.Event | None = None) -> dict:
         deadline = time.monotonic() + timeout
@@ -181,6 +192,11 @@ class Authorizer:
         })
         if not data.get("refresh_token"):
             raise DriveError("auth", "no refresh_token")
+        granted = set(str(data.get("scope") or "").split())
+        full = "https://www.googleapis.com/auth/drive" in granted
+        if granted and not full and any(sc not in granted for sc in self.scopes):
+            # en la pantalla de Google se pueden desmarcar permisos: sin el que se pidió no sirve
+            raise DriveError("denied", "scope")
         return data
 
     def close(self) -> None:
@@ -354,6 +370,7 @@ class Account:
     drives: dict = field(default_factory=dict)   # id de unidad compartida → ¿se copia? (las nuevas sí)
     excluded: list = field(default_factory=list)  # ids de carpetas o archivos desmarcados
     schedule: str = "weekly"
+    scopes: list = field(default_factory=lambda: [SCOPE])  # permisos dados (las de antes: solo lectura)
     last_ok: str = ""
     last_size: int = 0
     last_files: int = 0
@@ -366,6 +383,16 @@ class Account:
 
     def drive_selected(self, drive_id: str) -> bool:
         return bool(self.drives.get(drive_id, True))
+
+    @property
+    def can_read(self) -> bool:
+        """¿Se puede copiar este Drive al disco? (permiso de lectura)"""
+        return SCOPE in self.scopes or "https://www.googleapis.com/auth/drive" in self.scopes
+
+    @property
+    def can_write(self) -> bool:
+        """¿Se pueden guardar copias en este Drive? (permiso para sus propios archivos)"""
+        return bool(WRITE_SCOPES & set(self.scopes))
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -380,6 +407,7 @@ class Account:
             acc.schedule = "weekly"
         acc.drives = dict(acc.drives or {})
         acc.excluded = list(acc.excluded or [])
+        acc.scopes = sorted({str(x) for x in (acc.scopes or [SCOPE])})
         return acc
 
 
