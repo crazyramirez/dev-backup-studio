@@ -18,6 +18,7 @@ FOLDER = "application/vnd.google-apps.folder"
 class FakeDrive:
     def __init__(self):
         self.files: dict[str, dict] = {}
+        self.drives: list[tuple[str, str]] = []   # unidades compartidas: (id, nombre)
         self.sessions: dict[str, dict] = {}
         self.lock = threading.RLock()
         self.ids = itertools.count(1)
@@ -44,15 +45,15 @@ class FakeDrive:
         out = {"id": fid, "name": f["name"], "mimeType": f["mimeType"], "parents": list(f["parents"]),
                "modifiedTime": f["modifiedTime"], "createdTime": f["createdTime"], "trashed": f["trashed"],
                "appProperties": dict(f["appProperties"])}
-        if f["mimeType"] != FOLDER:
+        if f["mimeType"] != FOLDER and not f["mimeType"].startswith("application/vnd.google-apps."):
             out["size"] = str(len(f["data"]))
             out["md5Checksum"] = hashlib.md5(f["data"]).hexdigest()
         return out
 
-    def add(self, name, parents, mime=FOLDER, data=b"", props=None, mtime="2026-01-01T00:00:00.000Z"):
+    def add(self, name, parents, mime=FOLDER, data=b"", props=None, mtime="2026-01-01T00:00:00.000Z", shared=False):
         fid = self.new_id()
         self.files[fid] = {"name": name, "parents": list(parents), "mimeType": mime, "data": data,
-                           "appProperties": dict(props or {}), "modifiedTime": mtime,
+                           "appProperties": dict(props or {}), "modifiedTime": mtime, "shared": shared,
                            "createdTime": f"2026-01-01T00:00:{len(self.files) % 60:02d}.{fid[1:]}Z", "trashed": False}
         return fid
 
@@ -85,6 +86,20 @@ class FakeDrive:
             m = re.fullmatch(r"'(.+?)' in parents", term)
             if m:
                 if m.group(1) not in f["parents"]:
+                    return False
+                continue
+            if term == "sharedWithMe = true":
+                if not f.get("shared"):
+                    return False
+                continue
+            m = re.fullmatch(r"modifiedTime > '(.+?)'", term)
+            if m:
+                if f["modifiedTime"][:19] <= m.group(1)[:19]:
+                    return False
+                continue
+            m = re.fullmatch(r"mimeType != '(.+?)'", term)
+            if m:
+                if f["mimeType"] == m.group(1):
                     return False
                 continue
             if term == "trashed = false":
@@ -243,6 +258,18 @@ class FakeDrive:
                         return self._send(200, {"user": {"emailAddress": "prueba@example.com", "permissionId": "p1"},
                                                 "storageQuota": {"limit": str(fake.limit),
                                                                  "usage": str(fake.usage())}})
+                    if u.path == "/drive/v3/drives":
+                        return self._send(200, {"drives": [{"id": i, "name": n} for i, n in fake.drives]})
+                    if u.path.endswith("/export"):
+                        fid = u.path.split("/")[-2]
+                        if fid not in fake.files:
+                            return self._err(404, "notFound")
+                        data = b"EXPORT " + q.get("mimeType", "").encode() + b" " + fake.files[fid]["data"]
+                        self.send_response(200)
+                        self.send_header("Content-Length", str(len(data)))
+                        self.end_headers()
+                        self.wfile.write(data)
+                        return
                     if u.path == "/drive/v3/files":
                         found = [fake.meta(fid) for fid in sorted(fake.files) if fake.match(q["q"], fid)]
                         start = int(q.get("pageToken") or 0)

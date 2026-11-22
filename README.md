@@ -162,28 +162,37 @@ cuanto vuelve, igual que al conectar un disco.
 
 ## Google Drive
 
-En la pestaña **Google Drive** la app copia tu Drive en el disco de copia **sin instalar la app de
-Google**: habla directamente con la API oficial de Google Drive.
+Google Drive funciona como **origen** (copiar tu Drive a un disco) y como **destino** (guardar tus copias
+en Drive), **sin instalar la app de Google**: la app habla directamente con la API oficial de Google
+Drive. No hay pantallas aparte: se elige en las tarjetas *Origen* y *Destino*, y todo lo demás es lo de
+siempre.
 
-- **Conectar**: *Conectar cuenta…*. Se abre el navegador, entras con tu cuenta de Google (de Gmail o
-  de empresa) y das permiso **de solo lectura**: la app no ve tu contraseña y nunca cambia nada en tu
-  Drive. Puedes conectar varias cuentas.
-- **Elegir qué copiar**: un árbol con casillas de *Mi unidad*, cada *unidad compartida* y *Compartido
-  conmigo*, hasta la última carpeta o archivo. Se cambia en cualquier momento y se aplica a la
-  siguiente copia.
-- **Copiar**: *Copiar ahora*, o automática cada día o cada semana con la app abierta (o en la bandeja)
-  y el disco conectado. Solo se descarga lo nuevo o cambiado; cada archivo se comprueba con el MD5 de
-  Google y, si la descarga se corta, sigue donde iba. Los Documentos, Hojas y Presentaciones de Google
-  se guardan como `.docx`, `.xlsx` y `.pptx` (los formularios, sitios y mapas no tienen archivo).
-- **Dónde**: `GOOGLE DRIVE/<cuenta>/` en la **raíz del disco de copia**, en una carpeta con el icono de
-  Drive. Lo que borras o cambias en Drive se aparta a `.devbackup/versiones`, con los mismos plazos que
-  la sincronización; lo que desmarcas se queda en el disco sin tocar. Si de golpe desaparece mucho de
-  Drive (un permiso retirado, una unidad que ya no ves), no se aparta nada sin confirmarlo.
+### Copiar tu Google Drive a un disco
+
+- **Elegir el origen**: el botón de la tarjeta *Origen* abre el menú **Carpeta o disco… · Google Drive ·
+  tu cuenta · Google Drive · otra cuenta…**. La primera vez se abre el navegador: entras con tu cuenta
+  de Google (de Gmail o de empresa) y das permiso **de solo lectura**. La app no ve tu contraseña y
+  nunca cambia nada en tu Drive. Puedes conectar varias cuentas.
+- **Elegir qué copiar**: en la pestaña *Carpetas*, el árbol enseña *Mi unidad*, *Unidades compartidas*
+  (cada una) y *Compartido conmigo* con sus carpetas, que se cargan al desplegarlas. Se marca y desmarca
+  como con cualquier carpeta; las reglas (`node_modules`…) también valen. *Compartido conmigo* empieza
+  desmarcado.
+- **Dónde**: `GOOGLE DRIVE/<cuenta>/` en el disco de copia, en una carpeta con el icono de Drive (se
+  puede cambiar en *Destino*). Cada origen recuerda su destino: al volver de Drive a una carpeta, vuelve
+  el destino de esa carpeta.
+- **Copiar**: *Analizar* enseña qué ha cambiado en Drive; *Sincronizar* baja solo lo nuevo o cambiado,
+  comprobado con el MD5 de Google. Los Documentos, Hojas y Presentaciones de Google se guardan como
+  `.docx`, `.xlsx` y `.pptx` (los formularios, sitios y mapas no tienen archivo). Lo que borras o cambias
+  en Drive se aparta a versiones y se recupera en *Recuperar* (*Recuperar en…*); un borrado masivo pide
+  confirmación; la revisión de integridad vuelve a bajar lo que se dañe en el disco. Sin conexión, la
+  copia espera y sigue sola.
+- **Automático**: con *Copias programadas* (qué días y a qué hora) y los recordatorios, como cualquier
+  copia.
 
 Las copias de servidores Plesk que hace Plesk en Google Drive (su carpeta `My Plesk`) se pueden copiar
 así también a tu disco.
 
-### Copias a Google Drive
+### Guardar tus copias en Google Drive
 
 Google Drive también puede ser el **destino** de una copia, en lugar de un disco: en la tarjeta
 *Destino*, el botón abre el menú **Carpeta o disco… · Google Drive · Mi nube**. Al elegir una cuenta de

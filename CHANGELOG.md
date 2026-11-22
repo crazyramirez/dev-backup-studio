@@ -1,5 +1,22 @@
 # Novedades
 
+## 2.7.0
+
+- **Google Drive, también como origen.** La pestaña *Google Drive* desaparece: tu Drive se elige en la
+  tarjeta *Origen* (*Carpeta o disco… · Google Drive · tu cuenta · otra cuenta…*), igual que ya se
+  elegía como destino. Todo lo demás es lo de siempre: *Analizar* enseña qué cambió en Drive,
+  *Cambios*, el progreso, versiones, *Recuperar*, copias programadas y recordatorios.
+  - En la pestaña *Carpetas*, el árbol enseña *Mi unidad*, cada *unidad compartida* y *Compartido
+    conmigo* (desmarcado al empezar) con sus carpetas, que se cargan al desplegarlas.
+  - La copia va a `GOOGLE DRIVE/<cuenta>` en el disco de copia. Cada origen recuerda su destino: al
+    volver de Drive a una carpeta, vuelve el destino de esa carpeta.
+  - Lo ya copiado por versiones anteriores se reconoce y no se vuelve a bajar. Lo elegido en la
+    pestaña antigua pasa al árbol, y sus copias automáticas pasan a *Copias programadas* (cada día o
+    los domingos, a las 21:00; se cambian ahí).
+  - La revisión de integridad vuelve a bajar de Drive lo que se dañe en el disco.
+- **Ajustes → Google Drive** enseña las cuentas conectadas (para qué sirve cada una), con *Desconectar*,
+  *Conectar cuenta…* y la *Guía paso a paso* para el ID de cliente.
+
 ## 2.6.0
 
 - **Copias a Google Drive.** Google Drive puede ser el destino de una copia, como un disco: en la

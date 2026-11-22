@@ -53,6 +53,7 @@ from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QAbstractScroll
 import cloudlink
 import engine
 import gdrive
+import gdrive_src
 import gdrive_up
 import i18n
 import keepawake
@@ -64,7 +65,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.7.0"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -797,6 +798,21 @@ class ElideLabel(QLabel):
         super().setText(self.fontMetrics().elidedText(self._full, self._mode, max(20, self.width())))
 
 
+class FitLabel(QLabel):
+    """Texto partido en líneas que nunca se corta: pide el alto que necesita con su ancho de verdad
+    (dentro de una fila con botones, Qt a veces le da el de menos líneas)."""
+
+    def __init__(self, text: str = ""):
+        super().__init__(text)
+        self.setWordWrap(True)
+
+    def resizeEvent(self, e):  # noqa: N802
+        super().resizeEvent(e)
+        need = self.heightForWidth(self.width()) if self.width() > 0 else -1
+        if need > 0 and self.minimumHeight() != need:
+            self.setMinimumHeight(need)
+
+
 class Card(QFrame):
     def __init__(self, title: str | None = None, glyph: int | None = None, right: QWidget | None = None,
                  margins=(18, 16, 18, 18)):
@@ -1187,10 +1203,13 @@ class ActiveRow(QWidget):
 
 
 class FolderTree(QTreeWidget):
-    """Árbol de carpetas del origen con casillas; carga perezosa al expandir."""
+    """Árbol de carpetas del origen con casillas; carga perezosa al expandir. Con Google Drive de origen
+    («source»), cada carpeta se pide a Google en segundo plano al desplegarla."""
     changed = pyqtSignal()
+    remote_loaded = pyqtSignal(object, int, object)  # elemento, generación, nombres o un error
     REL = Qt.ItemDataRole.UserRole
     LOADED = Qt.ItemDataRole.UserRole + 1
+    LOADING = Qt.ItemDataRole.UserRole + 2
 
     def __init__(self):
         super().__init__()
@@ -1209,14 +1228,19 @@ class FolderTree(QTreeWidget):
         self.root = ""
         self.excluded: set[str] = set()
         self.patterns: list[str] = []
+        self.source = None   # gdrive_src.DriveSource con Google Drive de origen
+        self._gen = 0
         self._busy = False
+        self.remote_loaded.connect(self._on_remote)
         self._icon_on = glyph_icon(G.FOLDER, C["folder"], 16)
         self._icon_off = glyph_icon(G.FOLDER, C["faint"], 16)
         self.itemExpanded.connect(self._on_expand)
         self.itemChanged.connect(self._on_changed)
 
-    def load(self, root: str, excluded: set[str], patterns: list[str]) -> int:
+    def load(self, root: str, excluded: set[str], patterns: list[str], source=None) -> int:
         self.root, self.excluded, self.patterns = root, excluded, patterns
+        self.source = source
+        self._gen += 1
         self.clear()
         count = self._populate(self.invisibleRootItem(), "")
         self.refresh()
@@ -1284,6 +1308,8 @@ class FolderTree(QTreeWidget):
         self.changed.emit()
 
     def _subdirs(self, rel: str) -> list[str]:
+        if self.source is not None:
+            return list(gdrive_src.ROOTS) if not rel else []  # lo de dentro llega de Google al desplegar
         path = os.path.join(self.root, rel) if rel else self.root
         try:
             with os.scandir(engine.lp(path)) as it:
@@ -1292,12 +1318,14 @@ class FolderTree(QTreeWidget):
             return []
         return sorted(names, key=str.lower)
 
-    def _populate(self, parent: QTreeWidgetItem, rel: str) -> int:
-        names = self._subdirs(rel)
+    def _populate(self, parent: QTreeWidgetItem, rel: str, names: list[str] | None = None) -> int:
+        names = self._subdirs(rel) if names is None else names
         self._busy = True
         try:
             for name in names:
-                item = QTreeWidgetItem(parent, [name, ""])
+                # Google Drive: las tres partes, con su nombre traducido (la ruta sigue siendo la del disco)
+                shown = _(name) if self.source is not None and not rel else name
+                item = QTreeWidgetItem(parent, [shown, ""])
                 item.setData(0, self.REL, os.path.join(rel, name) if rel else name)
                 item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
             parent.setData(0, self.LOADED, True)
@@ -1306,15 +1334,70 @@ class FolderTree(QTreeWidget):
         return len(names)
 
     def _on_expand(self, item: QTreeWidgetItem) -> None:
-        if item.data(0, self.LOADED):
+        if item.data(0, self.LOADED) or item.data(0, self.REL) is None:
+            return
+        if self.source is not None:
+            self._expand_remote(item)
             return
         if self._populate(item, item.data(0, self.REL)) == 0:
             item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.DontShowIndicatorWhenChildless)
         for i in range(item.childCount()):
             self._apply(item.child(i))
 
+    def _expand_remote(self, item: QTreeWidgetItem) -> None:
+        if item.data(0, self.LOADING):
+            return
+        item.setData(0, self.LOADING, True)
+        wait = QTreeWidgetItem([_("Cargando…"), ""])
+        wait.setFlags(Qt.ItemFlag.NoItemFlags)
+        wait.setForeground(0, QColor(C["faint"]))
+        self._busy = True
+        item.addChild(wait)
+        self._busy = False
+        rel, gen, source = item.data(0, self.REL), self._gen, self.source
+
+        def work():
+            try:
+                result = source.subdirs(rel)
+            except gdrive.DriveError as exc:
+                result = exc
+            except Exception as exc:  # noqa: BLE001 - el árbol no se puede quedar cargando
+                result = gdrive.DriveError("server", str(exc))
+            try:
+                self.remote_loaded.emit(item, gen, result)
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=work, name="drive-carpetas", daemon=True).start()
+
+    def _on_remote(self, item: QTreeWidgetItem, gen: int, result) -> None:
+        if gen != self._gen:
+            return  # el árbol se volvió a cargar entretanto
+        try:
+            item.setData(0, self.LOADING, False)
+        except RuntimeError:
+            return
+        self._busy = True
+        item.takeChildren()
+        self._busy = False
+        if isinstance(result, gdrive.DriveError):
+            err = QTreeWidgetItem([gdrive_src.error_text(result), ""])
+            err.setFlags(Qt.ItemFlag.NoItemFlags)
+            err.setForeground(0, QColor(C["warn"]))
+            self._busy = True
+            item.addChild(err)
+            self._busy = False
+            item.setData(0, self.LOADED, False)  # al plegar y desplegar se vuelve a intentar
+            return
+        if self._populate(item, item.data(0, self.REL), result) == 0:
+            item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.DontShowIndicatorWhenChildless)
+        for i in range(item.childCount()):
+            self._apply(item.child(i))
+
     def _apply(self, item: QTreeWidgetItem) -> None:
         rel = item.data(0, self.REL)
+        if rel is None:
+            return  # «Cargando…» o un aviso
         rule = engine.match_rule(item.text(0), self.patterns)
         manual = engine.norm_rel(rel) in self.excluded
         base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
@@ -1329,7 +1412,10 @@ class FolderTree(QTreeWidget):
                 item.setCheckState(0, Qt.CheckState.Unchecked if manual else Qt.CheckState.Checked)
                 status, color = (_("Excluida"), C["err"]) if manual else ("", C["text"])
             off = bool(rule or manual)
-            item.setIcon(0, self._icon_off if off else self._icon_on)
+            if self.source is not None and item.parent() is None:
+                item.setIcon(0, gdrive_icon(16))  # Mi unidad, Unidades compartidas, Compartido conmigo
+            else:
+                item.setIcon(0, self._icon_off if off else self._icon_on)
             item.setForeground(0, QColor(C["faint"] if off else C["text"]))
             item.setText(1, status)
             item.setForeground(1, QColor(color))
@@ -1338,6 +1424,8 @@ class FolderTree(QTreeWidget):
                 item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.DontShowIndicator)
             elif not item.data(0, self.LOADED) or item.childCount():
                 item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
+            if self.source is not None and off and item.parent() is None:
+                item.setForeground(0, QColor(C["faint"]))
         finally:
             self._busy = False
         if not (rule or manual):
@@ -1763,7 +1851,7 @@ PILL = {
     "cancelled": (_("Cancelado"), C["warn"]), "failed": (_("Error"), C["err"]),
 }
 RUNNING = ("scanning", "copying", "paused")
-PAGE_TREE, PAGE_CHANGES, PAGE_PROGRESS, PAGE_ISSUES, PAGE_RECOVER, PAGE_GDRIVE = range(6)
+PAGE_TREE, PAGE_CHANGES, PAGE_PROGRESS, PAGE_ISSUES, PAGE_RECOVER = range(5)
 
 # Las versiones ocupan sitio en el disco de copia: se guardan un plazo y luego se quitan solas
 # (y antes, si falta espacio para copiar). 30 días por defecto; 60 como mucho.
@@ -2863,11 +2951,13 @@ class RecoverPage(QWidget):
                 except OSError:
                     pass
                 exists: dict[str, bool] = {}
-                if src and os.path.isdir(src):
+                # con Google Drive de origen se mira la copia (es lo que hay en Drive desde la última vez)
+                here = dst if gdrive_src.is_src(src) else src
+                if here and os.path.isdir(here):
                     for snap in snaps:
                         for rel, _size, _m in snap.files:
                             if rel not in exists:
-                                exists[rel] = os.path.lexists(engine.lp(os.path.join(src, rel)))
+                                exists[rel] = os.path.lexists(engine.lp(os.path.join(here, rel)))
                 self.loaded.emit(gen, snaps, exists)
             except Exception:  # noqa: BLE001 - la página no se puede quedar cargando
                 self.loaded.emit(gen, [], {})
@@ -3133,6 +3223,8 @@ class RecoverPage(QWidget):
         self.b_restore.setEnabled(bool(n) and src_ok and not running and not self.busy)
         if running:
             self.b_restore.setToolTip(_("Espera a que termine la sincronización"))
+        elif gdrive_src.is_src(src):
+            self.b_restore.setToolTip(_("El origen es Google Drive: recupera en una carpeta con «Recuperar en…»"))
         elif not src_ok:
             self.b_restore.setToolTip(_("La carpeta de origen no está disponible: usa «Recuperar en…»"))
         else:
@@ -3569,7 +3661,6 @@ class PairDialog(QDialog):
 
 # ── Google Drive ─────────────────────────────────────────────────────────────
 
-GDRIVE_SCHEDULES = {"manual": N_("Solo a mano"), "daily": N_("Cada día"), "weekly": N_("Cada semana")}
 GDRIVE_GUIDE_URL = f"https://github.com/{updater.REPO}#el-id-de-cliente-de-google"
 # las tres partes de Drive (gdrive.MY_DRIVE…): en el disco van en español; aquí, para traducirlas
 GDRIVE_PARTS = (N_("Mi unidad"), N_("Unidades compartidas"), N_("Compartido conmigo"))
@@ -3657,7 +3748,7 @@ class GDriveSetup(QWidget):
     """Sin cuentas conectadas: la guía para crear el ID de cliente propio (con enlaces directos a cada
     página de Google Cloud) y los campos para pegarlo; con el ID ya puesto, el botón de conectar."""
 
-    def __init__(self, page: "GDrivePage"):
+    def __init__(self, page: "GDriveAccounts", on_ready=None):
         super().__init__()
         self.page = page
         self._show_steps = False
@@ -3700,7 +3791,7 @@ class GDriveSetup(QWidget):
         b.setObjectName("primary")
         b.setIcon(glyph_icon(G.ADD, "#FFFFFF", 14))
         b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.clicked.connect(lambda: page.connect_account())
+        b.clicked.connect(on_ready or (lambda: page.connect_account()))
         rl.addWidget(b)
         self.b_steps = QPushButton(_("Ver la guía o cambiar el ID de cliente"))
         self.b_steps.setObjectName("link")
@@ -3826,8 +3917,8 @@ class GDriveSetup(QWidget):
         has_id = bool(self.page.client()[0])
         if has_id:
             self.title.setText(_("Conecta tu cuenta de Google"))
-            self.text.setText(_("Tu ID de cliente ya está puesto. Se abrirá el navegador: entra con tu cuenta de Google "
-                                "(de Gmail o de empresa) y da permiso de solo lectura. Luego eliges qué copiar."))
+            self.text.setText(_("Tu ID de cliente ya está puesto. Al conectar se abre el navegador: entras con tu cuenta "
+                                "de Google (de Gmail o de empresa) y das el permiso que pide la app."))
         else:
             self.title.setText(_("Prepara tu acceso a Google Drive"))
             self.text.setText(_("Para leer tu Drive sin la app de Google, Google pide que cada persona cree su propio "
@@ -3856,6 +3947,7 @@ class GDriveSetup(QWidget):
         self._show_steps = False
         self.refresh()
         win._log(_("Google Drive: ID de cliente guardado"), C["ok"])
+        win._refresh_gdrive_accounts()
 
 
 class GDriveConnectDialog(QDialog):
@@ -3863,7 +3955,7 @@ class GDriveConnectDialog(QDialog):
     connected = pyqtSignal(object, str)   # gdrive.Account, refresh token
     failed = pyqtSignal(str, str)
 
-    def __init__(self, page: "GDrivePage", purpose: str = "copy", account: gdrive.Account | None = None):
+    def __init__(self, page: "GDriveAccounts", purpose: str = "copy", account: gdrive.Account | None = None):
         super().__init__(page.win)
         self.page = page
         self.purpose = purpose          # copy: copiar el Drive al disco · dest: guardar copias en el Drive
@@ -4023,47 +4115,47 @@ class GDriveConnectDialog(QDialog):
         self.accept()
 
 
-class GDrivePage(QWidget):
-    """«Google Drive»: copia de cuentas de Google Drive al disco de copia, sin la app de Google.
+class GDriveSetupDialog(QDialog):
+    """La guía para crear el ID de cliente propio de Google (y pegarlo), en su ventana."""
 
-    Una copia a la vez, en un hilo; la página la lee con un temporizador. El árbol «Qué copiar» se carga
-    al desplegarlo (cada carpeta es una consulta a Google) y lo que se marca o desmarca se guarda al
-    momento. Las copias automáticas se miran cada 10 minutos y al conectar el disco de copia.
-    """
-    listed = pyqtSignal(int, object, object)   # generación, nodo, hijos (o un DriveError)
+    def __init__(self, accounts: "GDriveAccounts"):
+        super().__init__(accounts.win)
+        self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(app_icon())
+        self.setMinimumSize(780, 640)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(18, 18, 18, 14)
+        self.setup = GDriveSetup(accounts, on_ready=self.accept)
+        self.setup._show_steps = True  # abierta a propósito: con los pasos a la vista
+        self.setup.refresh()
+        lay.addWidget(self.setup, 1)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        close = QPushButton(_("Cerrar"))
+        close.setCursor(Qt.CursorShape.PointingHandCursor)
+        close.clicked.connect(self.reject)
+        row.addWidget(close)
+        lay.addLayout(row)
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        set_dark_titlebar(self)
+
+
+class GDriveAccounts(QObject):
+    """Las cuentas de Google conectadas, para copiar su Drive (origen) o guardar copias en él (destino),
+    y sus llaves. No tiene ventana propia: se eligen en Origen y Destino y se ven en Ajustes → Google Drive."""
     revoked = pyqtSignal(str, str)
-    ROLE = Qt.ItemDataRole.UserRole
-    NODE = Qt.ItemDataRole.UserRole + 1
 
     def __init__(self, win: "MainWindow"):
-        super().__init__()
+        super().__init__(win)
         self.win = win
         self.secrets = win.vault
         self.accounts: list[gdrive.Account] = []
-        self.job: gdrive.DriveSync | None = None
-        self.job_account: gdrive.Account | None = None
-        self.thread: threading.Thread | None = None
-        self.guard = keepawake.Guard()
-        self._finalized = True
-        self._samples: deque = deque(maxlen=40)
-        self._selected = ""
-        self._gen = 0
         self._drives: dict[str, gdrive.Drive] = {}
         self._load()
-        self._build()
-        self.listed.connect(self._on_listed)
         self.revoked.connect(self._on_revoked)
-        self.timer = QTimer(self)
-        self.timer.setInterval(400)
-        self.timer.timeout.connect(self._tick)
-        self.due_timer = QTimer(self)
-        self.due_timer.setInterval(10 * 60 * 1000)
-        self.due_timer.timeout.connect(self.check_due)
-        self.due_timer.start()
-        QTimer.singleShot(120_000, self.check_due)
-        self.refresh()
 
-    # ── datos ──
     def _load(self):
         try:
             data = json.loads(self.win.settings.value("gdrive_accounts", "") or "[]")
@@ -4086,6 +4178,18 @@ class GDrivePage(QWidget):
     def client_changed(self):
         self._drives.clear()
 
+    def drive_for(self, acc: gdrive.Account) -> gdrive.Drive:
+        """La API para leer (y para el espacio libre) de esa cuenta."""
+        if acc.id not in self._drives:
+            cid, csecret = self.client()
+            if not cid:
+                raise gdrive.DriveError("noclient")
+            token = self.secrets.get(gdrive.token_key(acc.id))
+            if not token:
+                raise gdrive.DriveError("auth")
+            self._drives[acc.id] = gdrive.Drive(token, cid, csecret)
+        return self._drives[acc.id]
+
     def writer_for(self, acc: gdrive.Account) -> gdrive_up.Writer:
         """La API con escritura, para guardar copias en ese Drive (si la cuenta dio el permiso)."""
         cid, csecret = self.client()
@@ -4098,437 +4202,51 @@ class GDrivePage(QWidget):
             raise gdrive.DriveError("denied", "scope")
         return gdrive_up.Writer(token, cid, csecret)
 
-    def drive_for(self, acc: gdrive.Account) -> gdrive.Drive:
-        if acc.id not in self._drives:
-            cid, csecret = self.client()
-            if not cid:
-                raise gdrive.DriveError("noclient")
-            token = self.secrets.get(gdrive.token_key(acc.id))
-            if not token:
-                raise gdrive.DriveError("auth")
-            self._drives[acc.id] = gdrive.Drive(token, cid, csecret)
-        return self._drives[acc.id]
+    def setup(self) -> bool:
+        """Sin ID de cliente: la guía para crearlo. True si al terminar ya lo hay."""
+        if self.client()[0]:
+            return True
+        GDriveSetupDialog(self).exec()
+        return bool(self.client()[0])
 
-    def disk_root(self) -> str | None:
-        dst = self.win.dst_card.path()
-        if not dst or gdrive_up.is_dest(dst) or not engine.volume_present(dst):
-            return None
-        root = engine.volume_root(dst)
-        return root if os.path.isdir(root) else None
-
-    def folder_of(self, acc: gdrive.Account) -> str | None:
-        root = self.disk_root()
-        return os.path.join(gdrive.gdrive_root(root), acc.folder_name) if root else None
-
-    def index_path(self, acc: gdrive.Account) -> str:
-        return os.path.join(DATA_DIR, "estado", f"gdrive-{vault.safe_name(acc.id)}.json")
-
-    @property
-    def busy(self) -> bool:
-        return self.job is not None and self.job.running
-
-    # ── construcción ──
-    def _build(self):
-        v = QVBoxLayout(self)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(12)
-        bar = QFrame()
-        bar.setObjectName("hint")
-        h = QHBoxLayout(bar)
-        h.setContentsMargins(16, 10, 10, 10)
-        h.setSpacing(10)
-        logo = QLabel()
-        logo.setPixmap(gdrive_pixmap(18))
-        h.addWidget(logo)
-        msg = QLabel(_("Copia de tu Google Drive en el disco de copia, sin instalar la app de Google: solo lo nuevo o "
-                       "cambiado, con versiones de lo que borras o cambias. Los Documentos de Google se guardan en "
-                       "formato Office."))
-        msg.setObjectName("muted")
-        msg.setWordWrap(True)
-        h.addWidget(msg, 1)
-        self.b_add = QPushButton("  " + _("Conectar cuenta…"))
-        self.b_add.setIcon(glyph_icon(G.ADD, C["text"], 14))
-        self.b_add.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.b_add.clicked.connect(lambda: self.connect_account())
-        h.addWidget(self.b_add)
-        v.addWidget(bar)
-
-        self.pages = QStackedWidget()
-        self.setup = GDriveSetup(self)
-        self.pages.addWidget(self.setup)
-
-        main = QWidget()
-        body = QHBoxLayout(main)
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(14)
-        left = Card(_("Cuentas"), G.GLOBE, margins=(8, 14, 8, 8))
-        left.setFixedWidth(278)
-        self.list = QListWidget()
-        self.list.setObjectName("timeline")
-        self.list.setIconSize(QSize(24, 24))
-        self.list.setSpacing(2)
-        self.list.currentItemChanged.connect(lambda cur, _p: self._select(cur.data(self.ROLE) if cur else ""))
-        self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.list.customContextMenuRequested.connect(self._list_menu)
-        left.body.addWidget(self.list, 1)
-        self.disk_note = QLabel("")
-        self.disk_note.setObjectName("faint")
-        self.disk_note.setWordWrap(True)
-        self.disk_note.setContentsMargins(10, 4, 10, 2)
-        left.body.addWidget(self.disk_note)
-        body.addWidget(left)
-
-        right = QVBoxLayout()
-        right.setSpacing(10)
-        head = QHBoxLayout()
-        head.setSpacing(10)
-        head.setContentsMargins(4, 2, 0, 0)
-        names = QVBoxLayout()
-        names.setSpacing(2)
-        self.title = ElideLabel("", Qt.TextElideMode.ElideRight)
-        self.title.setObjectName("bannerTitle")
-        self.sub = ElideLabel("", Qt.TextElideMode.ElideRight)
-        self.sub.setObjectName("faint")
-        names.addWidget(self.title)
-        names.addWidget(self.sub)
-        head.addLayout(names, 1)
-        self.b_disconnect = QPushButton("  " + _("Desconectar…"))
-        self.b_disconnect.setObjectName("danger")
-        self.b_disconnect.setIcon(glyph_icon(G.CLOSE, C["muted"], 13))
-        self.b_disconnect.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.b_disconnect.setToolTip(_("La app deja de tener acceso a esa cuenta. Lo ya copiado en el disco se conserva."))
-        self.b_disconnect.clicked.connect(lambda: self.remove(self.account(self._selected)))
-        head.addWidget(self.b_disconnect, 0, Qt.AlignmentFlag.AlignVCenter)
-        right.addLayout(head)
-        self.banner = Banner()
-        right.addWidget(self.banner)
-        self.progress = thin_bar(6)
-        self.progress.hide()
-        right.addWidget(self.progress)
-
-        self.opts = QFrame()
-        self.opts.setObjectName("hint")
-        oh = QHBoxLayout(self.opts)
-        oh.setContentsMargins(16, 8, 10, 8)
-        oh.setSpacing(10)
-        oh.addWidget(QLabel(_("Copia automática"), objectName="fieldLabel"))
-        self.schedule = QComboBox()
-        for key, text in GDRIVE_SCHEDULES.items():
-            self.schedule.addItem(_(text), key)
-        fm = self.schedule.fontMetrics()
-        self.schedule.setMinimumWidth(max(fm.horizontalAdvance(self.schedule.itemText(i))
-                                          for i in range(self.schedule.count())) + 64)
-        self.schedule.setToolTip(_("Con la app abierta (o en la bandeja) y el disco de copia conectado"))
-        self.schedule.currentIndexChanged.connect(self._on_schedule)
-        oh.addWidget(self.schedule)
-        oh.addSpacing(10)
-        self.sel_hint = ElideLabel(_("Marca lo que quieras copiar; se guarda al momento"), Qt.TextElideMode.ElideRight)
-        self.sel_hint.setObjectName("faint")
-        self.sel_hint.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        oh.addWidget(self.sel_hint, 1)
-        right.addWidget(self.opts)
-
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels([_("QUÉ COPIAR"), _("TAMAÑO"), _("MODIFICADO")])
-        self.tree.setUniformRowHeights(True)
-        self.tree.setIconSize(QSize(16, 16))
-        self.tree.itemExpanded.connect(self._on_expand)
-        self.tree.itemChanged.connect(self._on_check)
-        hdr = self.tree.header()
-        hdr.setStretchLastSection(False)
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((1, 100), (2, 150)):
-            hdr.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
-            self.tree.setColumnWidth(col, width)
-        right.addWidget(self.tree, 1)
-
-        actions = QFrame()
-        actions.setObjectName("hint")
-        ah = QHBoxLayout(actions)
-        ah.setContentsMargins(16, 8, 10, 8)
-        ah.setSpacing(8)
-        self.foot = ElideLabel("", Qt.TextElideMode.ElideRight)
-        self.foot.setObjectName("muted")
-        ah.addWidget(self.foot, 1)
-        self.b_open = QPushButton()
-        self.b_open.setObjectName("icon")
-        self.b_open.setIcon(glyph_icon(G.OPEN, C["text"], 14))
-        self.b_open.setFixedSize(38, 36)
-        self.b_open.setToolTip(_("Abrir la carpeta de la copia en el disco"))
-        self.b_open.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.b_open.clicked.connect(self._open_folder)
-        ah.addWidget(self.b_open)
-        self.b_stop = QPushButton("  " + _("Detener"))
-        self.b_stop.setIcon(glyph_icon(G.STOP, C["text"], 14))
-        self.b_stop.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.b_stop.clicked.connect(self._stop)
-        ah.addWidget(self.b_stop)
-        self.b_copy = QPushButton("  " + _("Copiar ahora"))
-        self.b_copy.setObjectName("primary")
-        self.b_copy.setIcon(glyph_icon(G.PLAY, "#FFFFFF", 14))
-        self.b_copy.setMinimumWidth(160)
-        self.b_copy.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.b_copy.clicked.connect(lambda: self.start(self._selected))
-        ah.addWidget(self.b_copy)
-        right.addWidget(actions)
-        body.addLayout(right, 1)
-        self.pages.addWidget(main)
-        v.addWidget(self.pages, 1)
-
-    # ── lista de cuentas ──
-    def refresh(self):
-        self.pages.setCurrentIndex(1 if self.accounts else 0)
-        if not self.accounts:
-            self.setup.refresh()
-        current = self._selected
-        self.list.blockSignals(True)
-        self.list.clear()
-        for a in self.accounts:
-            it = QListWidgetItem(gdrive_icon(24), f"{a.email or a.name}\n{self._status_line(a)}")
-            it.setData(self.ROLE, a.id)
-            it.setSizeHint(QSize(240, 52))
-            self.list.addItem(it)
-        keys = [a.id for a in self.accounts]
-        if current not in keys:
-            current = keys[0] if keys else ""
-        if current:
-            self.list.setCurrentRow(keys.index(current))
-        self.list.blockSignals(False)
-        root = self.disk_root()
-        self.disk_note.setText(_("Copias en {path}").format(path=gdrive.gdrive_root(root)) if root
-                               else _("Conecta el disco de copia para guardar o ver las copias."))
-        if current != self._selected or not self.tree.topLevelItemCount():
-            self._select(current)
-        else:
-            self._render()
-
-    def _status_line(self, a: gdrive.Account) -> str:
-        if self.busy and self.job_account is a:
-            return _("Copiando…")
-        if a.last_error and (not a.last_ok or a.last_try > a.last_ok):
-            return _("⚠ Falló la última copia")
-        if a.last_ok:
-            return _("Última copia {when}").format(when=fmt_ago(a.last_ok))
-        return _("Aún sin copias")
-
-    def _select(self, aid: str):
-        self._selected = aid or ""
-        acc = self.account(self._selected)
-        self.title.setText(acc.email if acc else "")
-        self.sub.setText(acc.name if acc else "")
-        if acc:
-            self.schedule.blockSignals(True)
-            self.schedule.setCurrentIndex(max(0, self.schedule.findData(acc.schedule)))
-            self.schedule.blockSignals(False)
-        self._build_tree(acc)
-        self._render()
-
-    # ── árbol «Qué copiar» ──
-    def _node_item(self, parent, name: str, node: dict, checked: bool, enabled: bool = True) -> QTreeWidgetItem:
-        it = QTreeWidgetItem([name, "", ""])
-        it.setData(0, self.NODE, node)
-        folder = node["kind"] in ("my", "group", "drive", "shared", "folder")
-        glyph = G.FOLDER if folder else G.DOC
-        it.setIcon(0, gdrive_icon(16) if node["kind"] in ("my", "drive", "shared")
-                   else glyph_icon(glyph, C["folder"] if folder else C["muted"], 16))
-        flags = it.flags() | Qt.ItemFlag.ItemIsUserCheckable
-        if node["kind"] == "group":
-            flags &= ~Qt.ItemFlag.ItemIsUserCheckable
-        it.setFlags(flags)
-        if node["kind"] != "group":
-            it.setCheckState(0, Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
-        it.setDisabled(not enabled)
-        if folder:
-            it.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
-        if parent is None:
-            self.tree.addTopLevelItem(it)
-        else:
-            parent.addChild(it)
-        return it
-
-    def _build_tree(self, acc: gdrive.Account | None):
-        self._gen += 1
-        self.tree.blockSignals(True)
-        self.tree.clear()
-        if acc is not None and not acc.can_read:
-            note = QTreeWidgetItem([_("Conectada solo para guardar copias en este Drive. Pulsa «Copiar ahora» para "
-                                      "darle permiso de lectura y copiar su Drive al disco.")])
-            note.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.tree.addTopLevelItem(note)
-        elif acc is not None:
-            self._node_item(None, _(gdrive.MY_DRIVE), {"kind": "my", "id": "root", "drive": ""}, acc.my_drive)
-            self._node_item(None, _(gdrive.SHARED_DRIVES), {"kind": "group", "id": "", "drive": ""}, True)
-            self._node_item(None, _(gdrive.SHARED_WITH_ME), {"kind": "shared", "id": "", "drive": ""},
-                            acc.shared_with_me)
-        self.tree.blockSignals(False)
-
-    def _effective(self, it: QTreeWidgetItem) -> bool:
-        """¿Se copia? Marcado él y todos los de encima."""
-        while it is not None:
-            node = it.data(0, self.NODE) or {}
-            if node.get("kind") != "group" and it.checkState(0) != Qt.CheckState.Checked:
-                return False
-            it = it.parent()
-        return True
-
-    def _on_expand(self, it: QTreeWidgetItem):
-        node = it.data(0, self.NODE) or {}
-        if node.get("loaded") or node.get("loading"):
-            return
-        acc = self.account(self._selected)
-        if acc is None:
-            return
-        node["loading"] = True
-        it.setData(0, self.NODE, node)
-        wait = QTreeWidgetItem([_("Cargando…")])
-        wait.setFlags(Qt.ItemFlag.NoItemFlags)
-        it.addChild(wait)
-        gen = self._gen
-
-        def work():
-            try:
-                drive = self.drive_for(acc)
-                kind = node["kind"]
-                if kind == "group":
-                    items = [{"id": d["id"], "name": d.get("name", ""), "mimeType": gdrive.FOLDER, "_drive": d["id"]}
-                             for d in drive.shared_drives()]
-                elif kind == "shared":
-                    items = drive.shared_with_me()
-                else:
-                    items = drive.children(node["id"], node.get("drive", ""))
-                result = items
-            except gdrive.DriveError as exc:
-                result = exc
-            try:
-                self.listed.emit(gen, it, result)
-            except RuntimeError:
-                pass
-
-        threading.Thread(target=work, name="drive-arbol", daemon=True).start()
-
-    def _on_listed(self, gen: int, it: QTreeWidgetItem, result):
-        if gen != self._gen:
-            return
-        acc = self.account(self._selected)
-        try:
-            node = it.data(0, self.NODE) or {}
-        except RuntimeError:  # el árbol se rehízo mientras tanto
-            return
-        self.tree.blockSignals(True)
-        it.takeChildren()
-        node["loading"] = False
-        if isinstance(result, gdrive.DriveError):
-            err = QTreeWidgetItem([drive_error_text(result)])
-            err.setFlags(Qt.ItemFlag.NoItemFlags)
-            it.addChild(err)
-            it.setData(0, self.NODE, node)
-            self.tree.blockSignals(False)
-            return
-        node["loaded"] = True
-        it.setData(0, self.NODE, node)
-        excluded = set(acc.excluded) if acc else set()
-        enabled = self._effective(it)
-        names = gdrive.disk_names(result)
-        for f in sorted(result, key=lambda f: (f.get("mimeType") != gdrive.FOLDER, names[f["id"]].lower())):
-            mime = f.get("mimeType", "")
-            if "_drive" in f:
-                child_node = {"kind": "drive", "id": f["id"], "drive": f["id"]}
-                checked = acc.drive_selected(f["id"]) and f["id"] not in excluded if acc else True
-            else:
-                child_node = {"kind": "folder" if mime == gdrive.FOLDER else "file", "id": f["id"],
-                              "drive": node.get("drive", "")}
-                checked = f["id"] not in excluded
-            name = names[f["id"]]
-            if mime == gdrive.SHORTCUT or (mime.startswith("application/vnd.google-apps.") and mime != gdrive.FOLDER
-                                          and mime not in gdrive.EXPORTS):
-                continue   # sin archivo: no se copian
-            c = self._node_item(it, name, child_node, checked, enabled)
-            if f.get("size"):
-                c.setText(1, fmt_bytes(int(f["size"])))
-            when = gdrive._mtime(f)
-            if when:
-                c.setText(2, short_stamp(datetime.fromtimestamp(when)))
-        if not it.childCount():
-            empty = QTreeWidgetItem([_("(vacía)")])
-            empty.setFlags(Qt.ItemFlag.NoItemFlags)
-            it.addChild(empty)
-        self.tree.blockSignals(False)
-
-    def _on_check(self, it: QTreeWidgetItem, col: int):
-        if col != 0:
-            return
-        acc = self.account(self._selected)
-        node = it.data(0, self.NODE) or {}
-        if acc is None or not node or node.get("kind") == "group" or (
-                node.get("kind") in ("drive", "folder", "file") and not node.get("id")):
-            return   # el grupo «Unidades compartidas» no tiene casilla (Qt avisa también de otros cambios)
-        on = it.checkState(0) == Qt.CheckState.Checked
-        kind = node["kind"]
-        if kind == "my":
-            acc.my_drive = on
-        elif kind == "shared":
-            acc.shared_with_me = on
-        elif kind == "drive":
-            acc.drives[node["id"]] = on
-            if on and node["id"] in acc.excluded:
-                acc.excluded.remove(node["id"])
-        else:
-            if on and node["id"] in acc.excluded:
-                acc.excluded.remove(node["id"])
-            elif not on and node["id"] not in acc.excluded:
-                acc.excluded.append(node["id"])
-        self._save()
-        # lo de debajo se ve activo o apagado según el padre
-        self.tree.blockSignals(True)
-        stack = [it.child(i) for i in range(it.childCount())]
-        while stack:
-            c = stack.pop()
-            if c.data(0, self.NODE):
-                c.setDisabled(not self._effective(c.parent()))
-                stack += [c.child(i) for i in range(c.childCount())]
-        self.tree.blockSignals(False)
-
-    # ── conectar y desconectar ──
     def connect_account(self, purpose: str = "copy", upgrade: gdrive.Account | None = None) -> gdrive.Account | None:
         """Conecta una cuenta (o pide otro permiso a una ya conectada). Devuelve la cuenta o None."""
-        if self.busy and purpose == "copy":
+        if not self.setup():
             return None
         dlg = GDriveConnectDialog(self, purpose, upgrade)
         if dlg.exec() != QDialog.DialogCode.Accepted or dlg.account is None:
             return None
         acc = dlg.account
         old = self.account(acc.id)
-        if old is not None:   # la misma cuenta otra vez: llave nueva, se conserva lo elegido
+        if old is not None:   # la misma cuenta otra vez: llave nueva, se conservan los permisos de antes
             old.email, old.name = acc.email, acc.name
-            old.scopes = sorted(set(acc.scopes) | set(old.scopes))  # include_granted_scopes: suma lo de antes
+            old.scopes = sorted(set(acc.scopes) | set(old.scopes))
             acc = old
         else:
-            if not acc.can_read:
-                acc.schedule = "manual"   # solo para guardar copias: no se copia su Drive al disco
             self.accounts.append(acc)
         self.secrets.set(gdrive.token_key(acc.id), dlg.token)
         self._drives.pop(acc.id, None)
-        acc.last_error = ""
         self._save()
-        if purpose == "copy":
-            self._selected = acc.id
-        self.refresh()
-        if purpose == "copy":
-            self._select(acc.id)
         self.win._log(_("Google Drive conectado: {email}").format(email=acc.email), C["ok"])
+        self.win._refresh_gdrive_accounts()
         return acc
+
+    def in_use(self, acc: gdrive.Account) -> bool:
+        win = self.win
+        uses = {gdrive_src.parse_src(win.src_card.path()), (gdrive_up.parse_dest(win.dst_card.path()) or ("",))[0]}
+        return win._state in RUNNING and acc.id in uses
 
     def remove(self, acc: gdrive.Account | None):
         if acc is None:
             return
-        if self.busy and self.job_account is acc:
+        if self.in_use(acc):
             QMessageBox.information(self.win, APP_NAME, _("Espera a que termine la copia en curso de {name}, o "
                                                           "detenla.").format(name=acc.email))
             return
         box = QMessageBox(QMessageBox.Icon.Question, APP_NAME, "", parent=self.win)
         box.setText(_("¿Desconectar {name}?").format(name=acc.email))
-        box.setInformativeText(_("La app deja de tener acceso a esa cuenta de Google y no hará más copias de ella. Lo ya "
-                                 "copiado en el disco se conserva."))
+        box.setInformativeText(_("La app deja de tener acceso a esa cuenta de Google: no copiará su Drive ni guardará "
+                                 "copias en él. Lo ya copiado se conserva."))
         box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
         box.button(QMessageBox.StandardButton.Yes).setText(_("Desconectar"))
         box.setDefaultButton(QMessageBox.StandardButton.Cancel)
@@ -4549,285 +4267,10 @@ class GDrivePage(QWidget):
         self.secrets.delete_prefix(f"gdrive/{acc.id}/")
         self._drives.pop(acc.id, None)
         self._save()
-        self.refresh()
+        self.win._refresh_gdrive_accounts()
 
     def _on_revoked(self, email: str, _error: str):
         self.win._log(_("Google Drive: {email} desconectado").format(email=email), C["muted"])
-
-    def _list_menu(self, pos):
-        it = self.list.itemAt(pos)
-        if it is None:
-            return
-        acc = self.account(it.data(self.ROLE))
-        if acc is None:
-            return
-        menu = QMenu(self)
-        menu.addAction(glyph_icon(G.REFRESH, C["text"], 14), _("Volver a conectar…"), lambda: self.connect_account())
-        menu.addSeparator()
-        act = menu.addAction(glyph_icon(G.CLOSE, C["err"], 14), _("Desconectar…"), lambda: self.remove(acc))
-        act.setEnabled(not (self.busy and self.job_account is acc))
-        menu.exec(self.list.viewport().mapToGlobal(pos))
-
-    def _open_folder(self):
-        acc = self.account(self._selected)
-        folder = self.folder_of(acc) if acc else None
-        if folder and os.path.isdir(folder):
-            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
-
-    def _on_schedule(self, *_a):
-        acc = self.account(self._selected)
-        if acc is not None:
-            acc.schedule = self.schedule.currentData()
-            self._save()
-            self._render()
-
-    # ── copiar ──
-    def start(self, aid: str, auto: bool = False, allow_mass_delete: bool = False) -> bool:
-        acc = self.account(aid)
-        if acc is None or self.busy:
-            return False
-        if not acc.can_read:
-            if not auto:
-                ans = QMessageBox.question(self.win, APP_NAME, _(
-                    "{email} está conectada solo para guardar copias en su Drive. ¿Darle también permiso de lectura "
-                    "para copiar su Drive al disco?").format(email=acc.email))
-                if ans == QMessageBox.StandardButton.Yes:
-                    self.connect_account("copy", acc)
-            return False
-        root = self.disk_root()
-        if not root:
-            if not auto:
-                QMessageBox.information(self.win, APP_NAME, _("Conecta el disco de copia: las copias de Google Drive "
-                                                              "se guardan en su carpeta GOOGLE DRIVE."))
-            return False
-        try:
-            drive = self.drive_for(acc)
-        except gdrive.DriveError as exc:
-            if not auto:
-                QMessageBox.warning(self.win, APP_NAME, drive_error_text(exc))
-            return False
-        gdrive.ensure_folder(gdrive.gdrive_root(root))
-        self.job = gdrive.DriveSync(acc, drive, os.path.join(gdrive.gdrive_root(root), acc.folder_name), root,
-                                    self.index_path(acc), allow_mass_delete=allow_mass_delete)
-        self.job_account = acc
-        acc.last_try = datetime.now().isoformat(timespec="seconds")
-        self._save()
-        self._finalized = False
-        self._samples.clear()
-        self.thread = threading.Thread(target=self.job.run, name="google-drive", daemon=True)
-        self.thread.start()
-        if self.win.awake_box.isChecked():
-            self.guard.start(_("{app_name}: copia de Google Drive en curso ({name})").format(app_name=APP_NAME,
-                                                                                           name=acc.email),
-                             None if engine.is_network(root) else root)
-        self.timer.start()
-        self.win._log(_("Google Drive: copia de {email}{auto}").format(
-            email=acc.email, auto=(" " + _("(automática)")) if auto else ""), C["accent2"])
-        if auto:
-            self.win._notify(_("Copia de Google Drive"), _("Copiando {name}…").format(name=acc.email))
-        self.refresh()
-        return True
-
-    def _stop(self):
-        if self.busy:
-            self.job.cancel()
-            self.b_stop.setEnabled(False)
-
-    def stop_and_wait(self, timeout: float = 10.0):
-        if self.busy:
-            self.job.cancel()
-            if self.thread:
-                self.thread.join(timeout=timeout)
-        self.guard.stop()
-
-    def _tick(self):
-        job = self.job
-        if job is None:
-            self.timer.stop()
-            return
-        if job.phase == "download":
-            self._samples.append((time.monotonic(), job.bytes_done))
-        self._render()
-        if not job.running and not self._finalized:
-            self._finish(job)
-
-    def _speed(self) -> float:
-        if len(self._samples) < 2:
-            return 0.0
-        (t0, b0), (t1, b1) = self._samples[0], self._samples[-1]
-        return (b1 - b0) / (t1 - t0) if t1 > t0 else 0.0
-
-    def _render(self):
-        acc = self.account(self._selected)
-        job = self.job
-        mine = job is not None and acc is not None and self.job_account is acc
-        busy = self.busy
-        self.b_stop.setVisible(busy)
-        self.b_stop.setEnabled(bool(busy and not job.stop.is_set()))
-        self.b_copy.setVisible(not busy)
-        self.b_copy.setEnabled(acc is not None)
-        self.b_add.setEnabled(not busy)
-        self.b_disconnect.setVisible(acc is not None)
-        self.b_disconnect.setEnabled(acc is not None and not (busy and mine))
-        self.opts.setVisible(acc is not None)
-        folder = self.folder_of(acc) if acc else None
-        self.b_open.setEnabled(bool(folder and os.path.isdir(folder)))
-        if acc is None:
-            self.banner.hide()
-            self.progress.hide()
-            self.foot.setText("")
-            return
-        self.banner.show()
-        if mine and job.running:
-            elapsed = _("Transcurrido {t}").format(t=fmt_clock(time.monotonic() - job.started))
-            if job.phase in ("connect", "scan"):
-                self.banner.set("run", _("Recorriendo tu Google Drive"),
-                                _("{folders} carpetas · {files} archivos ({size})").format(
-                                    folders=fmt_int(job.folders_scanned), files=fmt_int(job.files_found),
-                                    size=fmt_bytes(job.bytes_found)) + "\n" + elapsed, G.SYNC)
-                self.progress.setRange(0, 0)
-            else:
-                done, total = job.bytes_done, max(1, job.bytes_total)
-                speed = self._speed()
-                left = (total - done) / speed if speed > 0 else None
-                bits = [_("{done} de {total} archivos").format(done=fmt_int(job.files_done),
-                                                               total=fmt_int(len(job.to_get))),
-                        f"{fmt_bytes(done)} / {fmt_bytes(job.bytes_total)}"]
-                if speed > 0:
-                    bits.append(fmt_speed(speed))
-                if left is not None:
-                    bits.append(_("quedan {t}").format(t=fmt_clock(left)))
-                self.banner.set("run", _("Descargando de Google Drive"), "  ·  ".join(bits) + "\n" + elapsed, G.SYNC)
-                self.progress.setRange(0, 10000)
-                self.progress.setValue(int(min(1.0, done / total) * 10000))
-            self.progress.show()
-        else:
-            self.progress.hide()
-            if mine and not job.running:
-                self._result_banner(job)
-            elif acc.last_error and (not acc.last_ok or acc.last_try > acc.last_ok):
-                self.banner.set("err", _("Falló la última copia ({when})").format(when=fmt_ago(acc.last_try)),
-                                acc.last_error, G.ERROR)
-            elif acc.last_ok:
-                self.banner.set("ok", _("Última copia {when}").format(when=fmt_ago(acc.last_ok)),
-                                _("{files} archivos · {size}").format(files=fmt_int(acc.last_files),
-                                                                       size=fmt_bytes(acc.last_size))
-                                + self._next_text(acc), G.DONE)
-            else:
-                self.banner.set("info", _("Listo para la primera copia"),
-                                _("Marca abajo qué copiar y pulsa «Copiar ahora». La primera vez se descarga todo; "
-                                  "después, solo lo nuevo o cambiado.") + self._next_text(acc), G.INFO)
-        self.foot.setText(_("Copia en {path}").format(path=folder) if folder else
-                          _("Conecta el disco de copia para guardar o ver las copias."))
-
-    def _next_text(self, acc: gdrive.Account) -> str:
-        days = gdrive.SCHEDULE_DAYS.get(acc.schedule, 0)
-        if not days:
-            return ""
-        return "  ·  " + (_("copia automática cada día") if days == 1 else _("copia automática cada semana"))
-
-    def _result_banner(self, job: gdrive.DriveSync):
-        details = (_("Ver detalles"), lambda: self._show_details(job))
-        if job.phase == "done" and job.held:
-            self.banner.set("warn", _("Copia hecha, pero no se ha apartado nada de lo borrado"),
-                            _("Han desaparecido de Google Drive {n} archivos de golpe. Por si fue un error (un permiso "
-                              "retirado, una unidad que ya no ves), siguen en el disco. Si lo borraste tú, apártalos a "
-                              "versiones.").format(n=fmt_int(len(job.held))), G.WARN,
-                            (_("Apartarlos a versiones"), lambda: self.start(self.job_account.id, allow_mass_delete=True)))
-        elif job.phase == "done":
-            parts = [_("{n} nuevos o cambiados").format(n=fmt_int(job.files_done)),
-                     _("{n} iguales").format(n=fmt_int(job.unchanged))]
-            if job.versioned:
-                parts.append(_("{n} a versiones").format(n=fmt_int(job.versioned)))
-            if job.errors or job.skipped:
-                parts.append(_("{n} sin copiar").format(n=fmt_int(len(job.errors) + len(job.skipped))))
-            self.banner.set("warn" if job.errors else "ok",
-                            _("Copia de Google Drive terminada") if not job.errors
-                            else _("Copia terminada con archivos que no se pudieron copiar"),
-                            "  ·  ".join(parts), G.WARN if job.errors else G.DONE,
-                            details if job.errors or job.skipped else None)
-        elif job.phase == "cancelled":
-            self.banner.set("warn", _("Detenido"), _("Lo ya descargado se queda; la próxima vez sigue donde iba."),
-                            G.WARN)
-        else:
-            err = job.error
-            action = details if job.errors else None
-            if err and err.kind in ("auth", "noclient"):
-                action = (_("Volver a conectar…"), lambda: self.connect_account())
-            self.banner.set("err", _("No se pudo copiar Google Drive"), drive_error_text(err), G.ERROR, action)
-
-    def _show_details(self, job: gdrive.DriveSync):
-        reasons = {"google": _("formulario, sitio o mapa de Google: no tiene archivo"),
-                   "shortcut": _("acceso directo: se copia el original si está marcado")}
-        lines = []
-        if job.errors:
-            lines += ["── " + _("No se pudieron copiar") + " ──"] + [f"{rel}  ·  {msg}" for rel, msg in job.errors] + [""]
-        if job.skipped:
-            lines += ["── " + _("Omitidos") + " ──"] + [f"{rel}  ·  {reasons.get(why, why)}" for rel, why in job.skipped]
-        dlg = QDialog(self.win)
-        dlg.setWindowTitle(APP_NAME)
-        dlg.setWindowIcon(app_icon())
-        dlg.resize(860, 520)
-        lay = QVBoxLayout(dlg)
-        lay.setContentsMargins(22, 20, 22, 18)
-        box = QPlainTextEdit("\n".join(lines))
-        box.setReadOnly(True)
-        box.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        lay.addWidget(box, 1)
-        row = QHBoxLayout()
-        row.addStretch(1)
-        b = QPushButton(_("Cerrar"))
-        b.setObjectName("primary")
-        b.clicked.connect(dlg.accept)
-        row.addWidget(b)
-        lay.addLayout(row)
-        set_dark_titlebar(dlg)
-        dlg.exec()
-
-    def _finish(self, job: gdrive.DriveSync):
-        self._finalized = True
-        self.timer.stop()
-        self.guard.stop()
-        acc = self.job_account
-        if job.phase == "done":
-            acc.last_ok = datetime.now().isoformat(timespec="seconds")
-            acc.last_error = ""
-            acc.last_files = job.files_found
-            acc.last_size = job.bytes_found
-            self.win._log(_("Google Drive: {email}: {n} nuevos o cambiados, {same} iguales, {v} a versiones").format(
-                email=acc.email, n=fmt_int(job.files_done), same=fmt_int(job.unchanged), v=fmt_int(job.versioned)),
-                C["ok"])
-            for rel, msg in job.errors[:20]:
-                self.win._log(f"    {rel}: {msg}", C["warn"])
-            self.win._notify(_("Copia de Google Drive terminada"), acc.email)
-        elif job.phase == "failed":
-            acc.last_error = drive_error_text(job.error)
-            self.win._log(_("Google Drive: {email}: {text}").format(email=acc.email, text=acc.last_error), C["err"])
-            self.win._notify(_("Copia de Google Drive"), f"{acc.email}: {acc.last_error}")
-        else:
-            self.win._log(_("Google Drive: {email}: detenido").format(email=acc.email), C["warn"])
-        self._save()
-        self.refresh()
-        QTimer.singleShot(5000, self.check_due)
-
-    # ── automáticas ──
-    def due(self, acc: gdrive.Account, now: datetime | None = None) -> bool:
-        days = gdrive.SCHEDULE_DAYS.get(acc.schedule, 0)
-        if not days or not acc.can_read:
-            return False
-        now = now or datetime.now()
-        last = reminders.parse_time(acc.last_ok)
-        tried = reminders.parse_time(acc.last_try)
-        if tried and (now - tried) < timedelta(hours=2):
-            return False
-        return last is None or (now - last) >= timedelta(days=days) - timedelta(hours=2)
-
-    def check_due(self):
-        if self.busy or not self.disk_root():
-            return
-        for acc in self.accounts:
-            if self.due(acc) and self.start(acc.id, auto=True):
-                return
 
 
 CURRENT_VERSION = os.environ.get("DEVBACKUP_PRETEND_VERSION") or APP_VERSION  # para probar el actualizador
@@ -5756,6 +5199,7 @@ class ChangeChecker(QObject):
         super().__init__(parent)
         self.busy = False
         self._cancel = threading.Event()
+        self.remote = None  # (origen gdrive:, desde, cancelar) → cambios en Google Drive
 
     def check(self, items: list[dict], manual: bool) -> bool:
         if self.busy or not items:
@@ -5769,13 +5213,18 @@ class ChangeChecker(QObject):
             if since is not None:
                 jobs.append((it["id"], it["src"], since.timestamp(), it.get("patterns", []), it.get("excluded", [])))
 
+        remote = self.remote
+
         def run():
             results = {}
             for pid, src, since, patterns, excluded in jobs:
                 if cancel.is_set():
                     break
                 try:
-                    results[pid] = engine.changes_since(src, since, patterns, excluded, cancel=cancel)
+                    if gdrive_src.is_src(src):
+                        results[pid] = remote(src, since, cancel) if remote else {"missing": True, "complete": True}
+                    else:
+                        results[pid] = engine.changes_since(src, since, patterns, excluded, cancel=cancel)
                 except Exception:  # noqa: BLE001 - un origen raro no debe tumbar los avisos
                     results[pid] = {"missing": True, "complete": True}
             self.finished.emit(results, manual)
@@ -6326,6 +5775,7 @@ class MainWindow(QMainWindow):
 
         self._load_settings()
         self.vault = vault.Secrets(os.path.join(DATA_DIR, "secretos.json"))
+        self.gdrive = GDriveAccounts(self)
         if self.settings.contains("plesk_servers"):
             self.settings.remove("plesk_servers")
         try:
@@ -6334,6 +5784,8 @@ class MainWindow(QMainWindow):
             pass
         self._build()
         self._apply_settings()
+        self._migrate_gdrive_tab()
+        self._refresh_gdrive_accounts()
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(self._tick)
@@ -6347,6 +5799,7 @@ class MainWindow(QMainWindow):
 
         # recordatorios: cada media hora se mira qué copias toca revisar (solo se recorre el origen si toca)
         self.rem_checker = ChangeChecker(self)
+        self.rem_checker.remote = self._drive_changes
         self.rem_checker.finished.connect(self._on_changes_checked)
         self._remind_timer = QTimer(self)
         self._remind_timer.setInterval(30 * 60 * 1000)
@@ -6583,6 +6036,9 @@ class MainWindow(QMainWindow):
         self.dst_card = PathCard(_("Destino"), G.DRIVE, _("Carpeta de destino"), frameless=True)
         self.src_card.changed.connect(self._on_src_changed)
         self.dst_card.changed.connect(self._on_dst_changed)
+        self.src_card.menu_provider = self._src_menu
+        self.src_card.cloud_sub._mode = Qt.TextElideMode.ElideRight
+        self.src_card.btn.setToolTip(_("Elegir origen: una carpeta o un disco, o tu Google Drive"))
         self.dst_card.menu_provider = self._dst_menu
         self.dst_card.btn.setToolTip(_("Elegir destino: carpeta o disco, Google Drive o tu nube"))
         pair.body.addWidget(self.src_card)
@@ -6885,6 +6341,24 @@ class MainWindow(QMainWindow):
         self.gd_client_status.setObjectName("faint")
         self.gd_client_status.setWordWrap(True)
         gds.body.addWidget(self.gd_client_status)
+        gds.body.addWidget(QLabel(_("Cuentas conectadas"), objectName="fieldLabel"))
+        box = QWidget()
+        self.gd_accounts = QVBoxLayout(box)
+        self.gd_accounts.setContentsMargins(0, 0, 0, 0)
+        self.gd_accounts.setSpacing(6)
+        gds.body.addWidget(box)
+        links = QHBoxLayout()
+        links.setSpacing(4)
+        for text, glyph, slot in ((_("Conectar cuenta…"), G.ADD, lambda: self.gdrive.connect_account("copy")),
+                                  (_("Guía paso a paso"), G.HELP, self._gdrive_guide)):
+            b = QPushButton("  " + text)
+            b.setObjectName("link")
+            b.setIcon(glyph_icon(glyph, C["accent2"], 14))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(slot)
+            links.addWidget(b)
+        links.addStretch(1)
+        gds.body.addLayout(links)
         self._load_gdrive_client()
         lay.addStretch(1)
 
@@ -6937,8 +6411,6 @@ class MainWindow(QMainWindow):
                 # Google ata cada llave al ID con el que se creó
                 note = _("Vuelve a conectar tus cuentas de Google Drive: las llaves se crearon con el ID anterior.")
         self._gdrive_client_status(note)
-        if hasattr(self, "gdrive"):
-            self.gdrive.setup.refresh()
 
     # ── idioma ───────────────────────────────────────────────────────────
     def _on_language_changed(self):
@@ -7033,7 +6505,9 @@ class MainWindow(QMainWindow):
                                                                        else _("solo a mano")))
         if "gdrive" in sec:
             own = bool(self.settings.value("gdrive_client_id", "") or "")
-            sec["gdrive"].set_summary(_("Con tu ID de cliente") if own else _("Sin ID de cliente"))
+            n = len(self.gdrive.accounts) if hasattr(self, "gdrive") else 0
+            sec["gdrive"].set_summary((_("Con tu ID de cliente") if own else _("Sin ID de cliente")) + "  ·  "
+                                      + _n("{n} cuenta", "{n} cuentas", n).format(n=n))
 
     def _build_main(self) -> QVBoxLayout:
         col = QVBoxLayout()
@@ -7057,15 +6531,6 @@ class MainWindow(QMainWindow):
             self.seg_group.addButton(b, i)
             self.seg_buttons.append(b)
             sl.addWidget(b)
-        b = QPushButton("  Google Drive")
-        b.setObjectName("seg")
-        b.setCheckable(True)
-        b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.setIcon(gdrive_icon(14))
-        b.setToolTip(_("Copia de tu Google Drive en el disco de copia"))
-        self.seg_group.addButton(b, PAGE_GDRIVE)
-        self.seg_buttons.append(b)
-        sl.addWidget(b)
         top.addWidget(seg)
         top.addStretch(1)
         col.addLayout(top)
@@ -7082,11 +6547,8 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self._build_issues_page())
         self.recover = RecoverPage(self)
         self.stack.addWidget(self.recover)
-        self.gdrive = GDrivePage(self)
-        self.stack.addWidget(self.gdrive)
         self.seg_group.idClicked.connect(self.stack.setCurrentIndex)
         self.stack.currentChanged.connect(lambda i: self.recover.show_page() if i == PAGE_RECOVER else None)
-        self.stack.currentChanged.connect(lambda i: self.gdrive.refresh() if i == PAGE_GDRIVE else None)
         self.keep_combo.currentIndexChanged.connect(lambda *_a: self.recover.mark_stale())
         self.seg_buttons[PAGE_TREE].setChecked(True)
         col.addWidget(self.stack, 1)
@@ -7103,10 +6565,9 @@ class MainWindow(QMainWindow):
         h.setContentsMargins(16, 10, 10, 10)
         h.setSpacing(10)
         h.addWidget(glyph_label(G.INFO, C["accent2"], 16))
-        msg = QLabel(_("Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas, o "
-                       "selecciona varias (Ctrl o Mayús + clic) para marcarlas o desmarcarlas a la vez."))
+        msg = FitLabel(_("Desmarca las carpetas que no quieras copiar. Expande para elegir subcarpetas concretas, o "
+                         "selecciona varias (Ctrl o Mayús + clic) para marcarlas o desmarcarlas a la vez."))
         msg.setObjectName("muted")
-        msg.setWordWrap(True)
         h.addWidget(msg, 1)
         self.excl_count = QLabel("")
         self.excl_count.setObjectName("faint")
@@ -7712,8 +7173,6 @@ class MainWindow(QMainWindow):
             self._invalidate_plan()
             self._save_settings()
         self._refresh_disk_status()
-        self.gdrive.refresh()
-        QTimer.singleShot(30_000, self.gdrive.check_due)  # copias de Drive pendientes, sin pisar el aviso del disco
         if self._plan_due_on(root):
             QTimer.singleShot(1500, self._plan_tick)  # la copia programada que esperaba a este disco
             return
@@ -7792,7 +7251,19 @@ class MainWindow(QMainWindow):
     def _load_tree(self):
         src = self.src_card.path()
         excluded = self.excl_map.setdefault(self._excl_key(), set())
-        if os.path.isdir(src):
+        cloud = self._drive_src()
+        if cloud is not None:
+            acc = cloud[1]
+            try:
+                drive = self.gdrive.drive_for(acc) if acc is not None and acc.can_read else None
+            except gdrive.DriveError:
+                drive = None
+            if drive is not None:
+                self.tree.load(src, excluded, self._active_rules(), source=gdrive_src.DriveSource(drive))
+            else:
+                self.tree.clear()
+            self._refresh_src_card()
+        elif os.path.isdir(src):
             n = self.tree.load(src, excluded, self._active_rules())
             self.src_card.info.setText(self.src_card.info.text().split("  ·  ")[0]
                                        + ("  ·  " + _("{n} carpetas de primer nivel").format(n=fmt_int(n))))
@@ -7801,8 +7272,19 @@ class MainWindow(QMainWindow):
         self._on_tree_changed()
 
     def _on_src_changed(self):
+        src = self.src_card.path()
+        last = getattr(self, "_last_src", src)
+        self._last_src = src
+        if gdrive_src.is_src(last) and not gdrive_src.is_src(src) and self._state not in RUNNING:
+            # de Google Drive a una carpeta: el destino de antes de esa carpeta, no la copia de Drive
+            new = self._remembered_dst(src)
+            if new is None and gdrive.ROOT_DIR.lower() in os.path.normcase(self.dst_card.path()).lower().split(os.sep):
+                new = ""
+            if new is not None and os.path.normcase(new) != os.path.normcase(self.dst_card.path()):
+                self.dst_card.set_path(new)
+                self._on_dst_changed()
         info = self._drive_dest()
-        if info and self._state not in RUNNING:
+        if info and self._state not in RUNNING and not gdrive_src.is_src(src):
             # en Drive, la carpeta de la copia se llama como el origen
             new = self._drive_dest_for(info[0], self.src_card.path())
             if os.path.normcase(new) != os.path.normcase(self.dst_card.path()):
@@ -7821,8 +7303,6 @@ class MainWindow(QMainWindow):
         self._refresh_summaries()
         if hasattr(self, "recover"):
             self.recover.mark_stale()
-        if hasattr(self, "gdrive"):
-            self.gdrive.refresh()
         if hasattr(self, "cloud_state"):
             self._check_cloud()
 
@@ -7894,6 +7374,8 @@ class MainWindow(QMainWindow):
         self.cloud_btn.setVisible(not gdrive_up.is_dest(self.dst_card.path()))  # con Drive: en el menú de destino
 
     def _on_tree_changed(self):
+        if gdrive_src.is_src(self.src_card.path()):
+            self._refresh_src_card()
         n = len(self.tree.excluded)
         self.excl_count.setText(_n("{n} excluida a mano", "{n} excluidas a mano", n).format(n=n) if n else "")
         self._update_check_buttons()
@@ -8027,7 +7509,18 @@ class MainWindow(QMainWindow):
 
     # ── operación ────────────────────────────────────────────────────────
     def _validate(self, src: str, dst: str) -> str | None:
-        if not src or not os.path.isdir(src):
+        cloud_src = gdrive_src.is_src(src)
+        if cloud_src:
+            acc = self.gdrive.account(gdrive_src.parse_src(src))
+            if acc is None:
+                return _("La cuenta de Google Drive del origen ya no está conectada: elige el origen de nuevo.")
+            if not self.gdrive.client()[0]:
+                return _("Falta tu ID de cliente de Google (Ajustes → Google Drive).")
+            if not acc.can_read:
+                return _("Falta el permiso para leer Google Drive: elige el origen de nuevo y da el permiso.")
+            if gdrive_up.is_dest(dst):
+                return _("Google Drive no se puede copiar en Google Drive: elige una carpeta o un disco de destino.")
+        elif not src or not os.path.isdir(src):
             return _("La carpeta de origen no existe.")
         if not dst:
             return _("Elige una carpeta de destino.")
@@ -8044,9 +7537,9 @@ class MainWindow(QMainWindow):
                          "permiso.")
             return None
         ns, nd = os.path.normcase(os.path.abspath(src)), os.path.normcase(os.path.abspath(dst))
-        if ns == nd:
+        if not cloud_src and ns == nd:
             return _("El origen y el destino son la misma carpeta.")
-        if nd.startswith(ns.rstrip("\\/") + os.sep):
+        if not cloud_src and nd.startswith(ns.rstrip("\\/") + os.sep):
             return _("El destino no puede estar dentro del origen.")
         if not engine.volume_present(dst):
             if engine.is_network(dst):
@@ -8074,6 +7567,27 @@ class MainWindow(QMainWindow):
                                            self.mode_combo.currentData(), self.threads_spin.value(),
                                            keep_days=self.keep_combo.currentData(),
                                            force_full=self.full_box.isChecked())
+        elif gdrive_src.is_src(src):
+            acc = self.gdrive.account(gdrive_src.parse_src(src))
+            try:
+                reader = self.gdrive.drive_for(acc)
+            except gdrive.DriveError as exc:
+                QMessageBox.warning(self, APP_NAME, gdrive_src.error_text(exc))
+                return False
+            if not self.disk_id or engine.read_disk_id(engine.volume_root(dst)) != self.disk_id:
+                self._register_disk(dst)
+            parent = os.path.dirname(os.path.normpath(dst))
+            if os.path.basename(parent).lower() == gdrive.ROOT_DIR.lower():
+                try:
+                    gdrive.ensure_folder(parent)  # «GOOGLE DRIVE» con el icono de Drive
+                except OSError:
+                    pass
+            job = gdrive_src.DriveSourceJob(src, dst, self._active_rules(), self.tree.excluded, reader,
+                                            mode=self.mode_combo.currentData(), threads=self.threads_spin.value(),
+                                            index_path=self._index_path(), force_full=self.full_box.isChecked(),
+                                            keep_days=self.keep_combo.currentData(),
+                                            verify=self.verify_box.isChecked(),
+                                            scrub_seconds=-1 if scrub_all else self.scrub_seconds())
         else:
             if not self.disk_id or engine.read_disk_id(engine.volume_root(dst)) != self.disk_id:
                 self._register_disk(dst)
@@ -8085,7 +7599,7 @@ class MainWindow(QMainWindow):
         reuse = (copy and self.job is not None and self.job.phase == "ready"
                  and self.job.signature() == job.signature())
         if reuse:
-            if drive:
+            if drive or gdrive_src.is_src(src):
                 job.discard()  # se sigue con el análisis de antes: este no se usa
             if not self.job.stats.has_changes and not job.scrub_seconds:
                 self.seg_buttons[PAGE_PROGRESS].click()
@@ -8101,7 +7615,7 @@ class MainWindow(QMainWindow):
             self._reset_progress()
             self._op_start = time.perf_counter()
             self._op_wall = datetime.now()
-            self._log(_("Análisis iniciado  ·  {src}  →  {dst}").format(src=src, dst=self._dst_text(dst)), C["accent2"])
+            self._log(_("Análisis iniciado  ·  {src}  →  {dst}").format(src=self._dst_text(src), dst=self._dst_text(dst)), C["accent2"])
             self._log(_("Modo: {lower}  ·  reglas: {v}  ·  excluidas a mano: {excluded}").format(lower=mid(_(engine.MODES[job.mode])), v=', '.join(job.patterns) or _("ninguna"), excluded=len(job.excluded)))
         self.job = job
         self._finalized = False
@@ -8278,7 +7792,7 @@ class MainWindow(QMainWindow):
                     "copiar").format(threads=job.threads, ops_total=fmt_int(s.ops_total), plan_bytes=fmt_bytes(s.plan_bytes)), C["accent"])
         self._set_active_rows(job.threads)
         self.ring.set_busy(False)
-        self.banner.set("run", _("Sincronizando  {src}  →  {dst}").format(src=job.src, dst=self._dst_text(job.dst)),
+        self.banner.set("run", _("Sincronizando  {src}  →  {dst}").format(src=self._dst_text(job.src), dst=self._dst_text(job.dst)),
                         self._plan_text(s) + ("  ·  " + _("análisis en {scan_end}").format(scan_end=fmt_clock(s.scan_end - s.scan_start, ms=True))),
                         G.SYNC)
 
@@ -8539,6 +8053,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(2500, self._offer_update)
         if isinstance(job, gdrive_up.DriveBackupJob) and phase != "ready":
             self._refresh_dst_card()
+            self._quota_asked = {}
             self._fetch_drive_quota()
         self._plan_after(job, phase)
 
@@ -8662,7 +8177,7 @@ class MainWindow(QMainWindow):
         if s.errors:
             parts.append(issues)
         action = (_("Ver registro"), self._open_log) if self._last_log else None
-        brief = _("{src}  →  {dst}  ·  {bytes_done} copiados  ·  media {avg}").format(src=job.src, dst=self._dst_text(job.dst), bytes_done=fmt_bytes(s.bytes_done), avg=fmt_speed(avg))
+        brief = _("{src}  →  {dst}  ·  {bytes_done} copiados  ·  media {avg}").format(src=self._dst_text(job.src), dst=self._dst_text(job.dst), bytes_done=fmt_bytes(s.bytes_done), avg=fmt_speed(avg))
         if phase == "cancelled":
             self.banner.set("warn", _("Sincronización cancelada tras {total}").format(total=fmt_clock(total, ms=True)),
                             brief + ("  ·  " + _("lo copiado se conserva; vuelve a pulsar Sincronizar para continuar")),
@@ -8849,8 +8364,19 @@ class MainWindow(QMainWindow):
         acc = self.gdrive.account(parsed[0]) if hasattr(self, "gdrive") else None
         return parsed + (acc,)
 
+    def _drive_src(self, src: str | None = None):
+        """(cuenta, Account o None) si el origen es Google Drive; si no, None."""
+        aid = gdrive_src.parse_src(self.src_card.path() if src is None else src)
+        if aid is None:
+            return None
+        return aid, (self.gdrive.account(aid) if hasattr(self, "gdrive") else None)
+
     def _dst_text(self, dst: str) -> str:
-        """El destino para enseñarlo: la ruta, o «Google Drive · correo › DEV Backup Studio › PC › DEV»."""
+        """Un origen o destino para enseñarlo: la ruta, «Google Drive · correo» o
+        «Google Drive · correo › DEV Backup Studio › PC › DEV»."""
+        src = self._drive_src(dst)
+        if src is not None:
+            return "Google Drive · " + (src[1].email if src[1] is not None else _("cuenta desconectada"))
         info = self._drive_dest(dst)
         if info is None:
             return dst
@@ -8894,17 +8420,168 @@ class MainWindow(QMainWindow):
         a.triggered.connect(self._pair_cloud)
         return menu
 
-    def _choose_drive_dest(self, account_id: str | None):
+    def _src_menu(self) -> QMenu:
+        """Elegir origen: una carpeta o un disco, o el Google Drive de una cuenta."""
+        menu = QMenu(self)
+        cur = self._drive_src()
+        a = menu.addAction(glyph_icon(G.FOLDER, C["text"], 14), _("Carpeta o disco…"))
+        a.triggered.connect(self.src_card.pick_folder)
+        menu.addSeparator()
+        for acc in self.gdrive.accounts:
+            a = menu.addAction(gdrive_icon(14), _("Google Drive · {email}").format(email=acc.email))
+            a.setCheckable(True)
+            a.setChecked(bool(cur and cur[0] == acc.id))
+            a.triggered.connect(lambda _c=False, aid=acc.id: self._choose_drive_src(aid))
+        a = menu.addAction(gdrive_icon(14), _("Google Drive · otra cuenta…") if self.gdrive.accounts
+                           else _("Google Drive…"))
+        a.triggered.connect(lambda _c=False: self._choose_drive_src(None))
+        return menu
+
+    def _remembered_dst(self, src: str) -> str | None:
+        """El destino de la última copia de ese origen (copias habituales), o None."""
+        key = os.path.normcase(os.path.normpath(src))
+        for it in self.registry.to_list():  # la más reciente primero
+            if os.path.normcase(os.path.normpath(it.get("src", ""))) == key:
+                return self._pair_dest(it) or it.get("dst") or None
+        try:
+            prev = json.loads(self.settings.value("prev_local_pair", "") or "[]")
+        except (TypeError, ValueError):
+            prev = []
+        if len(prev) == 2 and os.path.normcase(os.path.normpath(prev[0])) == key:
+            return prev[1]
+        return None
+
+    def _drive_copy_dst(self, acc: gdrive.Account) -> str | None:
+        """Dónde va la copia de un Drive si no se ha elegido: GOOGLE DRIVE/<cuenta> en el disco de copia."""
+        dst = self.dst_card.path()
+        root = None
+        if dst and not gdrive_up.is_dest(dst) and engine.volume_present(dst):
+            root = engine.volume_root(dst)
+        elif self.disk_id:
+            root = self._disk_roots().get(self.disk_id)
+        return os.path.join(gdrive.gdrive_root(root), acc.folder_name) if root else None
+
+    def _choose_drive_src(self, account_id: str | None):
         if self._state in RUNNING:
             QMessageBox.information(self, APP_NAME, _("Espera a que termine la copia en curso."))
             return
         page = self.gdrive
-        if not page.client()[0]:
-            QMessageBox.information(self, APP_NAME, _(
-                "Para guardar copias en Google Drive hace falta tu propio ID de cliente de Google (se crea gratis, "
-                "una sola vez). La pestaña Google Drive tiene la guía paso a paso."))
-            self.seg_buttons[PAGE_GDRIVE].click()
+        acc = page.account(account_id) if account_id else None
+        if acc is None or not acc.can_read:
+            acc = page.connect_account("copy", acc)
+            if acc is None:
+                return
+            if not acc.can_read:
+                QMessageBox.warning(self, APP_NAME, _("Google no ha dado el permiso de lectura. Vuelve a intentarlo y "
+                                                      "deja marcada la casilla de Google Drive."))
+                return
+        src = gdrive_src.make_src(acc.id)
+        old_src, old_dst = self.src_card.path(), self.dst_card.path()
+        if old_src and not gdrive_src.is_src(old_src) and old_dst:
+            self.settings.setValue("prev_local_pair", json.dumps([old_src, old_dst], ensure_ascii=False))
+        self.excl_map[self._excl_key()] = self.tree.excluded
+        if os.path.normcase(src) not in self.excl_map:
+            self.excl_map[os.path.normcase(src)] = set(gdrive_src.DEFAULT_EXCLUDED)
+        dst = self._remembered_dst(src) or self._drive_copy_dst(acc)
+        if dst is None:
+            chosen = QFileDialog.getExistingDirectory(self, _("¿Dónde guardo la copia de tu Google Drive?"),
+                                                      os.path.expanduser("~"))
+            if not chosen:
+                return
+            dst = os.path.join(gdrive.gdrive_root(os.path.normpath(chosen)), acc.folder_name)
+        self.src_card.set_path(src)
+        self._last_src = src
+        self.dst_card.set_path(dst)
+        self._on_dst_changed()
+        self._on_src_changed()
+        self._save_settings()
+        self._log(_("Origen: {src}  ·  destino: {dst}").format(src=self._dst_text(src), dst=dst), C["accent2"])
+
+    def _refresh_src_card(self):
+        info = self._drive_src()
+        if info is None:
             return
+        aid, acc = info
+        title = _("Google Drive · {email}").format(email=acc.email if acc else _("cuenta desconectada"))
+        excluded = self.excl_map.get(self._excl_key(), set())
+        parts = [_(p) for p in gdrive_src.ROOTS if engine.norm_rel(p) not in excluded]
+        sub = "  ·  ".join(parts) if parts else _("Nada marcado")
+        q = self._drive_quota.get(aid)
+        if acc is None:
+            text = _("Vuelve a elegir el origen para conectar la cuenta")
+        elif not acc.can_read:
+            text = _("Falta el permiso de lectura: vuelve a elegir el origen")
+        elif q is None:
+            text = "Google Drive"
+        else:
+            text = _("{used} usados en tu Google Drive").format(used=fmt_bytes(q[1]))
+        self.src_card.set_cloud(title, sub, "https://drive.google.com/drive/my-drive", text,
+                                (q[1] / q[0]) if q and q[0] else 0.0, gdrive_pixmap(26))
+        self._fetch_drive_quota(acc)
+
+    def _gdrive_guide(self):
+        """Ajustes → Google Drive → «Guía paso a paso»; su botón «Conectar» conecta una cuenta."""
+        if GDriveSetupDialog(self.gdrive).exec() == QDialog.DialogCode.Accepted:
+            self.gdrive.connect_account("copy")
+
+    def _refresh_gdrive_accounts(self):
+        """Ajustes → Google Drive: las cuentas conectadas, y las tarjetas de origen y destino."""
+        if not hasattr(self, "gd_accounts"):
+            return
+        while self.gd_accounts.count():
+            w = self.gd_accounts.takeAt(0).widget()
+            if w is not None:
+                w.hide()
+                w.deleteLater()
+        for acc in self.gdrive.accounts:
+            row = QFrame()
+            row.setObjectName("remRow")
+            h = QHBoxLayout(row)
+            h.setContentsMargins(10, 6, 6, 6)
+            h.setSpacing(10)
+            logo = QLabel()
+            logo.setPixmap(gdrive_pixmap(18))
+            h.addWidget(logo)
+            col = QVBoxLayout()
+            col.setSpacing(0)
+            name = ElideLabel(acc.email, Qt.TextElideMode.ElideRight)
+            name.setObjectName("remTitle")
+            uses = [t for ok, t in ((acc.can_read, _("copiar su Drive")), (acc.can_write, _("guardar copias")))
+                    if ok]
+            sub = QLabel(" · ".join(uses) or _("sin permisos"))
+            sub.setObjectName("remSub")
+            sub.setStyleSheet(f"color: {C['muted']};")
+            col.addWidget(name)
+            col.addWidget(sub)
+            h.addLayout(col, 1)
+            b = QPushButton(_("Desconectar"))
+            b.setObjectName("link")
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _c=False, a=acc: self.gdrive.remove(a))
+            h.addWidget(b)
+            self.gd_accounts.addWidget(row)
+        if not self.gdrive.accounts:
+            empty = QLabel(_("Ninguna. Elige Google Drive en Origen (para copiar tu Drive) o en Destino (para guardar "
+                             "copias en él)."))
+            empty.setObjectName("faint")
+            empty.setWordWrap(True)
+            self.gd_accounts.addWidget(empty)
+        self._refresh_src_card()
+        self._refresh_dst_card()
+        self._refresh_summaries()
+
+    def _choose_drive_dest(self, account_id: str | None):
+        if self._state in RUNNING:
+            QMessageBox.information(self, APP_NAME, _("Espera a que termine la copia en curso."))
+            return
+        if gdrive_src.is_src(self.src_card.path()):
+            QMessageBox.information(self, APP_NAME, _("El origen es Google Drive: elige una carpeta o un disco de "
+                                                      "destino."))
+            return
+        page = self.gdrive
+        if not page.client()[0]:
+            if not page.setup():
+                return
         acc = page.account(account_id) if account_id else None
         if acc is None or not acc.can_write:
             acc = page.connect_account("dest", acc)
@@ -8944,20 +8621,26 @@ class MainWindow(QMainWindow):
         url = gdrive_up.folder_url(gdrive_up.dest_folder_id(gdrive_up.index_path(DATA_DIR, self.dst_card.path())))
         self.dst_card.set_cloud(title, sub, url, info_text, used, gdrive_pixmap(26))
 
-    def _fetch_drive_quota(self):
-        """El espacio libre en Drive de la cuenta del destino, fuera de la ventana."""
-        info = self._drive_dest()
-        if info is None or info[3] is None or not info[3].can_write:
+    def _fetch_drive_quota(self, acc: gdrive.Account | None = None):
+        """El espacio de Drive de una cuenta (la del destino, si no se dice), fuera de la ventana."""
+        if acc is None:
+            info = self._drive_dest()
+            acc = info[3] if info is not None else None
+        if acc is None:
             return
         try:
-            writer = self.gdrive.writer_for(info[3])
+            reader = self.gdrive.drive_for(acc)
         except gdrive.DriveError:
             return
-        aid = info[0]
+        aid = acc.id
+        if getattr(self, "_quota_asked", {}).get(aid, 0) > time.monotonic() - 60:
+            return  # como mucho una vez por minuto
+        self._quota_asked = {**getattr(self, "_quota_asked", {}), aid: time.monotonic()}
 
         def work():
             try:
-                limit, usage = writer.quota()
+                q = reader.get("/about", {"fields": "storageQuota(limit,usage)"}).get("storageQuota") or {}
+                limit, usage = (int(q["limit"]) if q.get("limit") else None), int(q.get("usage") or 0)
             except Exception:  # noqa: BLE001 - sin red: se queda sin cifra
                 return
             try:
@@ -8970,8 +8653,60 @@ class MainWindow(QMainWindow):
     def _on_drive_quota(self, aid: str, limit, usage):
         self._drive_quota[aid] = (limit, usage)
         self._refresh_dst_card()
+        info = self._drive_src()
+        if info is not None and info[0] == aid:
+            self._quota_asked = {**getattr(self, "_quota_asked", {}), aid: time.monotonic()}
+            self._refresh_src_card()
 
     # ── recordatorios de copia ───────────────────────────────────────────
+    def _migrate_gdrive_tab(self):
+        """2.7: la pestaña Google Drive pasa a ser un origen más. Lo elegido allí pasa al árbol de Carpetas
+        y sus copias automáticas (cada día, cada semana) pasan a ser copias programadas. Una sola vez."""
+        if self.settings.value("gdrive_tab_migrated", "") == "1":
+            return
+        self.settings.setValue("gdrive_tab_migrated", "1")
+        dst = self.dst_card.path()
+        root = engine.volume_root(dst) if dst and not gdrive_up.is_dest(dst) else None
+        moved = 0
+        for acc in self.gdrive.accounts:
+            if not acc.can_read:
+                continue
+            src = gdrive_src.make_src(acc.id)
+            excluded = set() if acc.shared_with_me else set(gdrive_src.DEFAULT_EXCLUDED)
+            if not acc.my_drive:
+                excluded.add(engine.norm_rel(gdrive.MY_DRIVE))
+            self.excl_map.setdefault(os.path.normcase(src), excluded)
+            try:
+                os.remove(os.path.join(DATA_DIR, "estado", f"gdrive-{vault.safe_name(acc.id)}.json"))
+            except OSError:
+                pass
+            days = {"daily": list(planner.WEEK), "weekly": [6]}.get(acc.schedule)
+            if days and self.disk_id and root:
+                target = os.path.join(gdrive.gdrive_root(root), acc.folder_name)
+                rel = engine.rel_to_volume(target)
+                pid = reminders.pair_id(src, self.disk_id, rel, target)
+                if pid not in self.plans.items:
+                    label = (engine.volume_info(root)[0] if engine.volume_present(root) else "") or engine.vol_name(root)
+                    self.plans.put(planner.Plan(id=pid, src=src, dst=target, disk_id=self.disk_id, dst_rel=rel,
+                                                label=label, days=days, at="21:00"), self._now())
+                    moved += 1
+        if moved:
+            self._save_plans()
+            self._log(_n("La copia automática de Google Drive pasa a Copias programadas ({n} cuenta)",
+                         "Las copias automáticas de Google Drive pasan a Copias programadas ({n} cuentas)",
+                         moved).format(n=moved), C["accent2"])
+        self._save_settings()
+
+    def _drive_changes(self, src: str, since: float, cancel) -> dict:
+        """Recordatorios con Google Drive de origen: lo cambiado en Drive desde la última copia (otro hilo)."""
+        acc = self.gdrive.account(gdrive_src.parse_src(src) or "")
+        if acc is None or not acc.can_read:
+            return {"missing": True, "complete": True}
+        try:
+            return gdrive_src.changes_since(self.gdrive.drive_for(acc), since, cancel)
+        except gdrive.DriveError:
+            return {"missing": True, "complete": True}
+
     def _remind_days(self) -> int:
         return int(self.remind_combo.currentData() or 3) if self.remind_box.isChecked() else 0
 
@@ -9598,7 +9333,16 @@ class MainWindow(QMainWindow):
                 continue
             if st != "due":
                 continue
-            if not os.path.isdir(p.src):
+            cloud_ok = None
+            if gdrive_src.is_src(p.src):
+                acc = self.gdrive.account(gdrive_src.parse_src(p.src))
+                cloud_ok = acc is not None and acc.can_read
+                if cloud_ok and not gdrive_up.online():
+                    if self.plans.wait(p.id, slot, "net"):
+                        changed = True
+                        self._log(_("Copia programada en espera: sin conexión con Google Drive"), C["warn"])
+                    continue
+            if cloud_ok is False or (cloud_ok is None and not os.path.isdir(p.src)):
                 if self.plans.wait(p.id, slot, "src"):
                     changed = True
                     self._log(_("Copia programada en espera: no se encuentra el origen {src}").format(src=p.src),
@@ -9799,15 +9543,6 @@ class MainWindow(QMainWindow):
             self.job.cancel()
             if self.job_thread:
                 self.job_thread.join(timeout=15)
-        if self.gdrive.busy:
-            ans = QMessageBox.question(self, APP_NAME, _("Hay una copia de Google Drive en curso. ¿Detenerla y salir?"
-                                                         "\n\nLo ya descargado se queda; la próxima vez sigue donde "
-                                                         "iba."))
-            if ans != QMessageBox.StandardButton.Yes:
-                self._quitting = False
-                event.ignore()
-                return
-        self.gdrive.stop_and_wait()
         self._guard_stop()
         self.waker.close()
         if self.tray:
@@ -9853,7 +9588,7 @@ class MainWindow(QMainWindow):
         if IS_WIN:
             keepawake.block_shutdown(int(self.winId()),
                                      _("Copia de seguridad en curso ({src} → {dst}). Si apagas ahora se interrumpe; lo ya copiado "
-                                       "se conserva.").format(src=job.src, dst=self._dst_text(job.dst)))
+                                       "se conserva.").format(src=self._dst_text(job.src), dst=self._dst_text(job.dst)))
         if not self._guard_logged:
             self._guard_logged = True
             parts = [_("el equipo no se suspende ({v})").format(v=_(self.guard.method) if self.guard.method else _("no disponible"))]
@@ -9953,7 +9688,6 @@ class MainWindow(QMainWindow):
             self.job.cancel()
             if self.job_thread:
                 self.job_thread.join(timeout=4)
-        self.gdrive.stop_and_wait(timeout=4)
         self._guard_stop()
 
     def _allow_quit(self) -> bool:
@@ -9969,14 +9703,6 @@ class MainWindow(QMainWindow):
                 self.job.cancel()
                 if self.job_thread:
                     self.job_thread.join(timeout=15)
-            if IS_MAC and self.gdrive.busy:
-                self._show_window()
-                ans = QMessageBox.question(self, APP_NAME, _("Hay una copia de Google Drive en curso. ¿Detenerla y "
-                                                             "salir?\n\nLo ya descargado se queda; la próxima vez sigue "
-                                                             "donde iba."))
-                if ans != QMessageBox.StandardButton.Yes:
-                    return False
-                self.gdrive.stop_and_wait()
             self._quitting = True
         return True
 
@@ -10049,99 +9775,55 @@ def install_crash_log() -> None:
 
 
 def selftest_gdrive(win: "MainWindow", say) -> None:
-    """Google Drive contra una imitación de su API (en CI no hay cuenta de Google): copia con un corte a
-    mitad, Documentos exportados, nombres repetidos, carpeta desmarcada, cambios a versiones, y que la
+    """Google Drive de origen contra una imitación de su API (en CI no hay cuenta de Google): Documentos
+    exportados, nombres repetidos, «Compartido conmigo» desmarcado, unidad compartida, sin cambios y
+    versiones; desde la ventana: elegir el origen, el árbol de Carpetas y sincronizar. Y que la
     sincronización espejo no toque GOOGLE DRIVE (ni PLESK, de versiones anteriores) en la raíz del disco."""
-    import http.server
-
-    files = {
-        "p": ("Proyectos", gdrive.FOLDER, "root", b""), "a": ("a.txt", "text/plain", "p", b"hola"),
-        "b": ("grande.bin", "application/octet-stream", "p", os.urandom(600_000)),
-        "d1": ("dup.txt", "text/plain", "p", b"uno"), "d2": ("dup.txt", "text/plain", "p", b"dos"),
-        "doc": ("Informe", "application/vnd.google-apps.document", "p", b""),
-        "f": ("Fotos", gdrive.FOLDER, "root", b""), "x": ("x.jpg", "image/jpeg", "f", b"jpg"),
-    }
-    cut = {"b"}
-
-    class Fake(http.server.BaseHTTPRequestHandler):
-        def log_message(self, *_a):
-            pass
-
-        def _json(self, data, status=200):
-            raw = json.dumps(data).encode()
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(raw)))
-            self.end_headers()
-            self.wfile.write(raw)
-
-        def do_POST(self):  # noqa: N802
-            self.rfile.read(int(self.headers.get("Content-Length") or 0))
-            self._json({"access_token": "at", "refresh_token": "rt", "expires_in": 3600})
-
-        def do_GET(self):  # noqa: N802
-            from urllib.parse import parse_qsl, urlsplit
-            u = urlsplit(self.path)
-            q = dict(parse_qsl(u.query))
-            if u.path.endswith("/about"):
-                return self._json({"user": {"emailAddress": "prueba@example.com", "permissionId": "p1"}})
-            if u.path.endswith("/drives"):
-                return self._json({"drives": []})
-            if u.path.endswith("/files"):
-                parent = q.get("q", "").split("'")[1] if "in parents" in q.get("q", "") else ""
-                out = []
-                for fid, (name, mime, par, data) in files.items():
-                    if par == parent:
-                        meta = {"id": fid, "name": name, "mimeType": mime, "modifiedTime": "2026-11-01T10:00:00Z"}
-                        if not mime.startswith("application/vnd.google-apps."):
-                            meta.update(size=str(len(data)), md5Checksum=hashlib.md5(data).hexdigest())
-                        out.append(meta)
-                return self._json({"files": out})
-            fid = u.path.split("/files/")[1].split("/")[0]
-            name, mime, _par, data = files[fid]
-            if u.path.endswith("/export"):
-                data = b"EXPORT " + q["mimeType"].encode()
-            start = int((self.headers.get("Range") or "bytes=0-")[6:].rstrip("-"))
-            body = data[start:]
-            self.send_response(206 if start else 200)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            if fid in cut:
-                cut.discard(fid)
-                self.wfile.write(body[: len(body) // 2])
-                self.close_connection = True
-                return
-            self.wfile.write(body)
-
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fake)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    base = f"http://127.0.0.1:{server.server_address[1]}"
+    import gdrive_fake
+    app = QApplication.instance()
+    fake = gdrive_fake.FakeDrive()
     try:
+        t0 = "2026-03-01T10:00:00.123Z"
+        with fake.lock:
+            p = fake.add("Proyectos", ["root"], mtime=t0)
+            fake.add("a.txt", [p], "text/plain", b"hola", mtime=t0)
+            fake.add("grande.bin", [p], "application/octet-stream", os.urandom(600_000), mtime=t0)
+            fake.add("dup.txt", [p], "text/plain", b"uno", mtime=t0)
+            fake.add("dup.txt", [p], "text/plain", b"dos", mtime=t0)
+            fake.add("Informe", ["root"], "application/vnd.google-apps.document", b"doc", mtime=t0)
+            fake.drives.append(("d1", "Equipo"))
+            fake.add("x.txt", ["d1"], "text/plain", b"equipo", mtime=t0)
+            fake.add("ana.txt", [], "text/plain", b"ana", mtime=t0, shared=True)
+        drive = gdrive.Drive("rt", "cid", "secreto", api=fake.base + "/drive/v3", token_url=fake.base + "/token")
+        src = gdrive_src.make_src("p1")
         with tempfile.TemporaryDirectory() as vol:
-            drive = gdrive.Drive("rt", "cid", "secreto", api=base + "/drive/v3", token_url=base + "/token")
-            acc = gdrive.Account(id="p1", email="prueba@example.com", excluded=["f"])
-            folder = os.path.join(gdrive.gdrive_root(vol), acc.folder_name)
-            idx = os.path.join(vol, "_estado", "gd.json")
+            folder = os.path.join(gdrive.gdrive_root(vol), "prueba@example.com")
+            idx = os.path.join(vol, "_estado", "gd.db")
 
             def run():
-                job = gdrive.DriveSync(acc, drive, folder, vol, idx)
+                time.sleep(1.05)
+                job = gdrive_src.DriveSourceJob(src, folder, [], set(gdrive_src.DEFAULT_EXCLUDED), drive,
+                                                index_path=idx, meta_root=vol, scrub_seconds=0)
                 job.run()
-                assert job.phase == "done", f"Google Drive: {job.phase} {job.error} {job.errors}"
+                assert job.phase == "done", f"Google Drive: {job.phase} {job.fatal} {job.errors[:2]}"
                 return job
 
             j = run()
             my = os.path.join(folder, gdrive.MY_DRIVE, "Proyectos")
-            with open(os.path.join(my, "grande.bin"), "rb") as fh:
-                assert fh.read() == files["b"][3], "Google Drive: el archivo cortado a mitad no quedó entero"
             names = sorted(os.listdir(my))
-            assert "Informe.docx" in names and len([n for n in names if n.startswith("dup")]) == 2, names
-            assert not os.path.exists(os.path.join(folder, gdrive.MY_DRIVE, "Fotos")), "Google Drive: copió lo desmarcado"
-            assert run().files_done == 0, "Google Drive: volvió a bajar lo que no cambió"
-            time.sleep(1.1)
-            files["a"] = ("a.txt", "text/plain", "p", b"hola cambiado")
-            del files["d2"]
+            assert len([n for n in names if n.startswith("dup")]) == 2, names
+            assert open(os.path.join(folder, gdrive.MY_DRIVE, "Informe.docx"), "rb").read().startswith(b"EXPORT")
+            assert os.path.exists(os.path.join(folder, gdrive.SHARED_DRIVES, "Equipo", "x.txt")), "unidad compartida"
+            assert not os.path.exists(os.path.join(folder, gdrive.SHARED_WITH_ME)), "copió lo desmarcado"
+            assert j.stats.verified_copies >= 5, "Google Drive: sin MD5"
+            assert run().stats.files_done == 0, "Google Drive: volvió a bajar lo que no cambió"
+            with fake.lock:
+                a = next(f for f, x in fake.files.items() if x["name"] == "a.txt")
+                fake.files[a]["data"], fake.files[a]["modifiedTime"] = b"hola cambiado", "2026-03-02T09:00:00.000Z"
+                fake.files.pop([f for f, x in fake.files.items() if x["name"] == "dup.txt"][1])
             j = run()
-            assert j.files_done == 1 and j.versioned == 2, f"Google Drive: {j.files_done} bajados, {j.versioned} a versiones"
+            assert j.stats.files_done == 1 and j.stats.versions_saved == 2, \
+                f"Google Drive: {j.stats.files_done} bajados, {j.stats.versions_saved} a versiones"
             if IS_WIN:
                 gdrive.ensure_folder(gdrive.gdrive_root(vol))
                 assert os.path.exists(os.path.join(gdrive.gdrive_root(vol), "desktop.ini")), "GOOGLE DRIVE sin icono"
@@ -10150,14 +9832,14 @@ def selftest_gdrive(win: "MainWindow", say) -> None:
             with open(os.path.join(vol, "PLESK", "srv", "copia.tar"), "wb") as fh:
                 fh.write(b"tar")
             with tempfile.TemporaryDirectory() as side:
-                src, meta = os.path.join(side, "src"), os.path.join(side, "meta")
-                os.makedirs(os.path.join(src, "GOOGLE DRIVE"))
+                lsrc, meta = os.path.join(side, "src"), os.path.join(side, "meta")
+                os.makedirs(os.path.join(lsrc, "GOOGLE DRIVE"))
                 os.makedirs(meta)
-                with open(os.path.join(src, "a.txt"), "w") as fh:
+                with open(os.path.join(lsrc, "a.txt"), "w") as fh:
                     fh.write("a")
-                with open(os.path.join(src, "GOOGLE DRIVE", "otro.txt"), "w") as fh:
+                with open(os.path.join(lsrc, "GOOGLE DRIVE", "otro.txt"), "w") as fh:
                     fh.write("no se copia encima")
-                job = engine.BackupJob(src, vol, [], [], meta_root=meta, scrub_seconds=0)
+                job = engine.BackupJob(lsrc, vol, [], [], meta_root=meta, scrub_seconds=0)
                 job.dst_is_root = True
                 job.allow_mass_delete = True
                 job.run()
@@ -10167,11 +9849,76 @@ def selftest_gdrive(win: "MainWindow", say) -> None:
             for kind in ("noclient", "auth", "denied", "unreachable", "quota", "server", "space", "cancelled", "otro"):
                 for detail in ("", "texto", "1234567"):
                     assert drive_error_text(gdrive.DriveError(kind, detail)), f"Google Drive: sin texto para {kind}"
-            win.gdrive.refresh()
-        say("  Google Drive: copia con corte a mitad y MD5, Documentos a Office, nombres repetidos, carpeta "
-            "desmarcada, cambios a versiones, GOOGLE DRIVE y PLESK a salvo de la sincronización")
+                    assert gdrive_src.error_text(gdrive.DriveError(kind, detail))
+
+            # desde la ventana: Google Drive de origen, el árbol de Carpetas y sincronizar
+            saved = dict(src=win.src_card.path(), dst=win.dst_card.path(), disk_id=win.disk_id, dst_rel=win.dst_rel,
+                         copias=win.registry.to_list(), accounts=list(win.gdrive.accounts),
+                         client=win.settings.value("gdrive_client_id", ""), excl=dict(win.excl_map))
+            win.gdrive.accounts.append(gdrive.Account(id="p1", email="ventana@example.com", scopes=[gdrive.SCOPE]))
+            win.gdrive.drive_for = lambda _a: drive
+            win.settings.setValue("gdrive_client_id", "x.apps.googleusercontent.com")
+            # la carpeta temporal hace de disco de copia: nada se escribe en la raíz de la unidad de verdad
+            vroot = vol + os.sep
+            real = (engine.volume_root, engine.volume_present, engine.mounted_volumes)
+
+            def under(p: str) -> bool:
+                p = os.path.normcase(os.path.abspath(p))
+                return p == os.path.normcase(vol) or p.startswith(os.path.normcase(vroot))
+
+            engine.volume_root = lambda p: vroot if under(p) else real[0](p)
+            engine.volume_present = lambda p: os.path.isdir(vol) if under(p) else real[1](p)
+            engine.mounted_volumes = lambda network=True, extra=(): real[2](network, extra) | {vroot}
+            temp_disk = ""
+            try:
+                win.dst_card.set_path(os.path.join(vol, "copia-ventana"))
+                win._on_dst_changed()
+                win.registry = reminders.Registry()
+                win._choose_drive_src("p1")
+                assert gdrive_src.is_src(win.src_card.path()), "Google Drive: no se eligió el origen"
+                assert win.dst_card.path().lower().endswith(os.path.join("google drive", "ventana@example.com")), \
+                    f"Google Drive: destino {win.dst_card.path()}"
+                assert win.src_card.cloud_box.isVisibleTo(win.src_card), "Google Drive: la tarjeta no enseña la cuenta"
+                tops = [win.tree.topLevelItem(i) for i in range(win.tree.topLevelItemCount())]
+                assert len(tops) == 3 and tops[2].checkState(0) == Qt.CheckState.Unchecked, "Google Drive: árbol"
+                tops[0].setExpanded(True)
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline and not (tops[0].childCount() and tops[0].child(0).data(0, FolderTree.REL)):
+                    app.processEvents()
+                    time.sleep(0.03)
+                assert tops[0].child(0).text(0) == "Proyectos", "Google Drive: el árbol no cargó las carpetas"
+                assert win._validate(win.src_card.path(), win.dst_card.path()) is None
+                assert win._start(copy=True), "Google Drive: la ventana no empezó"
+                deadline = time.monotonic() + 60
+                while time.monotonic() < deadline and win._state in RUNNING:
+                    app.processEvents()
+                    time.sleep(0.03)
+                assert win.job.phase == "done" and win.job.stats.files_done >= 5, \
+                    f"Google Drive desde la ventana: {win.job.phase} {win.job.fatal}"
+                temp_disk = win.disk_id
+            finally:
+                engine.volume_root, engine.volume_present, engine.mounted_volumes = real
+                if temp_disk:
+                    try:
+                        os.remove(os.path.join(DATA_DIR, "estado", f"{temp_disk}.db"))
+                    except OSError:
+                        pass
+                win.gdrive.accounts[:] = saved["accounts"]
+                win.gdrive.drive_for = types.MethodType(GDriveAccounts.drive_for, win.gdrive)
+                win.settings.setValue("gdrive_client_id", saved["client"])
+                win.excl_map = saved["excl"]
+                win.src_card.set_path(saved["src"])
+                win._last_src = saved["src"]
+                win.dst_card.set_path(saved["dst"])
+                win.disk_id, win.dst_rel = saved["disk_id"], saved["dst_rel"]
+                win.registry = reminders.Registry(saved["copias"])
+                win._save_registry()
+                win._save_settings()
+                win._load_tree()
+        say("  Google Drive de origen: Documentos a Office, nombres repetidos, lo desmarcado fuera, unidad compartida, "
+            "sin cambios, versiones; origen, árbol y sincronizar desde la ventana; GOOGLE DRIVE y PLESK a salvo")
     finally:
-        server.shutdown()
+        fake.stop()
 
 
 def selftest_gdrive_up(win: "MainWindow", say) -> None:
@@ -10275,7 +10022,7 @@ def selftest_gdrive_up(win: "MainWindow", say) -> None:
                 assert win.recover.cloud() and win.recover.snaps, "Drive: Recuperar no enseña las versiones"
             finally:
                 win.gdrive.accounts[:] = saved["accounts"]
-                win.gdrive.writer_for = types.MethodType(GDrivePage.writer_for, win.gdrive)
+                win.gdrive.writer_for = types.MethodType(GDriveAccounts.writer_for, win.gdrive)
                 win.settings.setValue("gdrive_client_id", saved["client"])
                 win.src_card.set_path(saved["src"])
                 win.dst_card.set_path(saved["dst"])

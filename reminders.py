@@ -49,6 +49,8 @@ def stamp(when: datetime) -> str:
 
 def short_name(path: str) -> str:
     """«D:\\DEV» → «DEV»; una unidad entera se queda en «F:»."""
+    if str(path or "").lower().startswith("gdrive:"):
+        return "Google Drive"  # origen o destino en Google Drive (gdrive:/<cuenta>…)
     path = os.path.normpath(path)
     name = os.path.basename(path.rstrip("\\/"))
     return name or path.rstrip("\\/") or path

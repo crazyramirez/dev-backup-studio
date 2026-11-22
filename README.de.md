@@ -176,25 +176,33 @@ Synchronisierung an, sobald sie wieder da ist – wie beim Anschließen eines La
 
 ## Google Drive
 
-Im Tab **Google Drive** kopiert die App Ihr Drive auf das Sicherungslaufwerk, **ohne die App von
-Google zu installieren**: Sie spricht direkt mit der offiziellen Google-Drive-API.
+Google Drive dient als **Quelle** (Ihr Drive auf ein Laufwerk sichern) und als **Ziel** (Ihre
+Sicherungen in Drive speichern), **ohne die App von Google zu installieren**: Die App spricht direkt mit
+der offiziellen Google-Drive-API. Es gibt keine eigenen Ansichten: Gewählt wird in den Karten *Quelle*
+und *Ziel*, alles andere funktioniert wie gewohnt.
 
-- **Verbinden**: *Konto verbinden…*. Der Browser öffnet sich, Sie melden sich mit Ihrem Google-Konto
-  an (Gmail oder geschäftlich) und erteilen **Lesezugriff**: Die App sieht Ihr Passwort nie und ändert
-  nie etwas in Ihrem Drive. Sie können mehrere Konten verbinden.
-- **Auswählen, was gesichert wird**: ein Baum mit Kästchen für *Meine Ablage*, jede *geteilte Ablage*
-  und *Für mich freigegeben*, bis zum letzten Ordner oder zur letzten Datei. Lässt sich jederzeit
-  ändern und gilt für die nächste Sicherung.
-- **Sichern**: *Jetzt sichern* oder automatisch täglich bzw. wöchentlich, solange die App geöffnet
-  (oder im Infobereich) und das Laufwerk verbunden ist. Es wird nur Neues oder Geändertes
-  heruntergeladen; jede Datei wird mit der MD5 von Google geprüft und nach einem Abbruch dort
-  fortgesetzt. Google-Dokumente, -Tabellen und -Präsentationen werden als `.docx`, `.xlsx` und `.pptx`
-  gespeichert (Formulare, Websites und Karten haben keine Datei).
-- **Wo**: `GOOGLE DRIVE/<Konto>/` im **Stammverzeichnis des Sicherungslaufwerks**, in einem Ordner
-  mit dem Drive-Symbol. Was Sie in Drive löschen oder ändern, wird nach `.devbackup/versiones`
-  gelegt, mit denselben Fristen wie bei der Synchronisierung; Abgewähltes bleibt unberührt auf dem
-  Laufwerk. Verschwindet auf einmal viel aus Drive (eine entzogene Berechtigung, eine nicht mehr
-  sichtbare Ablage), wird nichts ohne Bestätigung beiseitegelegt.
+### Ihr Google Drive auf ein Laufwerk sichern
+
+- **Quelle wählen**: Die Schaltfläche der Karte *Quelle* öffnet das Menü **Ordner oder Laufwerk… ·
+  Google Drive · Ihr Konto · Google Drive · anderes Konto…**. Beim ersten Mal öffnet sich der Browser:
+  Sie melden sich mit Ihrem Google-Konto an (Gmail oder geschäftlich) und erteilen **Lesezugriff**. Die
+  App sieht Ihr Passwort nie und ändert nie etwas in Ihrem Drive. Sie können mehrere Konten verbinden.
+- **Auswählen, was gesichert wird**: Im Tab *Ordner* zeigt der Baum *Meine Ablage*, *Geteilte Ablagen*
+  (jede einzeln) und *Für mich freigegeben* mit ihren Ordnern, die beim Aufklappen geladen werden.
+  Markieren und Abwählen wie bei jedem Ordner; die Regeln (`node_modules`…) gelten auch. *Für mich
+  freigegeben* ist anfangs abgewählt.
+- **Wo**: `GOOGLE DRIVE/<Konto>/` auf dem Sicherungslaufwerk, in einem Ordner mit dem Drive-Symbol
+  (änderbar unter *Ziel*). Jede Quelle merkt sich ihr Ziel: Wechseln Sie von Drive zurück zu einem
+  Ordner, kehrt dessen Ziel zurück.
+- **Sichern**: *Analysieren* zeigt, was sich in Drive geändert hat; *Synchronisieren* lädt nur Neues oder
+  Geändertes herunter, geprüft mit der MD5 von Google. Google-Dokumente, -Tabellen und -Präsentationen
+  werden als `.docx`, `.xlsx` und `.pptx` gespeichert (Formulare, Websites und Karten haben keine
+  Datei). Was Sie in Drive löschen oder ändern, kommt in die Versionen und lässt sich unter
+  *Wiederherstellen* zurückholen (*Wiederherstellen in…*); ein Massenlöschen fragt nach; die
+  Integritätsprüfung lädt neu herunter, was auf dem Laufwerk beschädigt ist. Ohne Verbindung wartet die
+  Sicherung und läuft von selbst weiter.
+- **Automatisch**: mit *Geplante Sicherungen* (an welchen Tagen und um welche Uhrzeit) und den
+  Erinnerungen, wie jede Sicherung.
 
 Die Sicherungen, die Plesk von Servern in Google Drive ablegt (sein Ordner `My Plesk`), lassen sich so
 ebenfalls auf Ihr Laufwerk kopieren.

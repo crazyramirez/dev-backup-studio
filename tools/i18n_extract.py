@@ -17,7 +17,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-MODULES = ["backup_studio.py", "engine.py", "versions.py", "reminders.py", "keepawake.py", "updater.py", "gdrive_up.py"]
+MODULES = ["backup_studio.py", "engine.py", "versions.py", "reminders.py", "keepawake.py", "updater.py", "gdrive_up.py", "gdrive_src.py"]
 LOCALES = os.path.join(ROOT, "locales")
 PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 

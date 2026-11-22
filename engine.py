@@ -1264,15 +1264,13 @@ class BackupJob:
                 dfiles, ddirs = dest
             self._seen_dirs.append(rel)
             try:
-                with os.scandir(lp(sdir)) as it:
-                    entries = list(it)
+                entries = self._src_entries(rel, sdir)
             except OSError as exc:
                 self._error(sdir, exc)
                 continue
             subdirs = []
             taken = set()
-            for entry in entries:
-                name = entry.name
+            for name, kind, size, mtime, err in entries:
                 key = fold(name)
                 if key in taken:
                     # Linux: «Foto.jpg» y «foto.jpg» no caben juntos en un destino que no distingue
@@ -1282,12 +1280,14 @@ class BackupJob:
                     continue
                 taken.add(key)
                 try:
-                    if is_link(entry):
+                    if err is not None:
+                        raise err
+                    if kind == "link":
                         s.links_skipped += 1
                         ddirs.pop(key, None)
                         dfiles.pop(key, None)
                         continue
-                    if entry.is_dir(follow_symlinks=False):
+                    if kind == "dir":
                         dname = ddirs.pop(key, None)
                         child = os.path.join(rel, name) if rel else name
                         if dname is not None and dname != name and not match_rule(name, self.patterns) \
@@ -1308,15 +1308,13 @@ class BackupJob:
                             self.pruned.append((child, _("excluida a mano")))
                         else:
                             subdirs.append(child)
-                    elif entry.is_file(follow_symlinks=False):
+                    elif kind == "file":
                         if name.endswith(TMP_SUFFIX):
                             continue
-                        st = entry.stat(follow_symlinks=False)
-                        size, mtime = st.st_size, st.st_mtime_ns
                         s.files_found += 1
                         s.bytes_found += size
                         have = dfiles.pop(key, None)
-                        if have is not None and self._same(size, mtime, have):
+                        if have is not None and self._same_entry(rel, name, size, mtime, have):
                             s.skip_files += 1
                             s.skip_bytes += size
                             if have[0] != name:
@@ -1354,6 +1352,35 @@ class BackupJob:
             self._reader = None
         s.scan_end = time.perf_counter()
         return True
+
+    def _src_entries(self, rel: str, sdir: str) -> list[tuple]:
+        """Lo que hay en una carpeta del origen: (nombre, «file» | «dir» | «link» | «other» | «error», tamaño,
+        fecha_ns, error). Un origen que no es un disco (Google Drive) lo cambia por lo suyo."""
+        out = []
+        with os.scandir(lp(sdir)) as it:
+            for e in it:
+                try:
+                    if is_link(e):
+                        out.append((e.name, "link", 0, 0, None))
+                    elif e.is_dir(follow_symlinks=False):
+                        out.append((e.name, "dir", 0, 0, None))
+                    elif e.is_file(follow_symlinks=False):
+                        st = e.stat(follow_symlinks=False)
+                        out.append((e.name, "file", st.st_size, st.st_mtime_ns, None))
+                    else:
+                        out.append((e.name, "other", 0, 0, None))
+                except OSError as exc:
+                    out.append((e.name, "error", 0, 0, exc))
+        return out
+
+    def _src_exists(self, rel: str) -> bool:
+        return os.path.exists(lp(os.path.join(self.src, rel)))
+
+    def _src_isdir(self, rel: str) -> bool:
+        return os.path.isdir(lp(os.path.join(self.src, rel)))
+
+    def _same_entry(self, rel: str, name: str, size: int, mtime: int, have: tuple) -> bool:
+        return self._same(size, mtime, have)
 
     def _same(self, size: int, mtime: int, have: tuple) -> bool:
         _key, dsize, dmtime = have
@@ -1602,7 +1629,7 @@ class BackupJob:
             for old, new in self.renamed_dirs:
                 if ex == old or ex.startswith(old + os.sep):
                     target = new + ex[len(old):]
-                    if os.path.exists(lp(os.path.join(self.src, ex))) or not os.path.isdir(lp(os.path.join(self.src, target))):
+                    if self._src_exists(ex) or not self._src_isdir(target):
                         break  # la carpeta antigua sigue ahí, o la nueva no existe: no es este renombrado
                     moved.append((ex, norm_rel(target)))
                     break
