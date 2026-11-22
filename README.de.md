@@ -4,10 +4,11 @@
 
 <p align="center"><a href="README.md">Español</a> · <b>Deutsch</b></p>
 
-Sicherung und Synchronisierung von Projektordnern auf ein externes Laufwerk, für Windows, macOS und
-Linux. Erkennt, was sich geändert hat, verschiebt Umbenanntes, statt es erneut zu kopieren, bewahrt
-Versionen dessen auf, was Sie löschen oder ändern, prüft jede Kopie mit SHA-256 und fragt, ob
-synchronisiert werden soll, sobald Sie das Laufwerk anschließen.
+Sicherung und Synchronisierung von Projektordnern auf ein externes Laufwerk, in Ihre Cloud zu Hause
+oder in Google Drive, für Windows, macOS und Linux. Erkennt, was sich geändert hat, verschiebt
+Umbenanntes, statt es erneut zu kopieren, bewahrt Versionen dessen auf, was Sie löschen oder ändern,
+prüft jede Kopie mit SHA-256, läuft von selbst zur gewählten Uhrzeit und fragt, ob synchronisiert werden
+soll, sobald Sie das Laufwerk anschließen. Außerdem sichert sie Ihr Google Drive auf ein Laufwerk.
 
 ## Herunterladen und installieren
 
@@ -88,13 +89,21 @@ Die Apps sind nicht mit einem Entwicklerzertifikat signiert, daher warnt das Sys
   unter macOS oder ein im Dateimanager geöffneter Netzwerkordner unter Linux. Vorher prüft die App in
   einer Sekunde, ob der Server antwortet, sodass ein ausgeschalteter Server sie nicht warten lässt.
   Sobald das Netz wieder da ist, bietet sie die Synchronisierung an, wie beim Anschließen des Laufwerks.
+  Im Netzwerk liest die Analyse mehrere Ordner gleichzeitig, statt auf jeden einzeln zu warten.
 - **Verbindet sich mit einem Code mit Personal Cloud Storage.** *Mit meiner Cloud verbinden…* findet
   die Cloud im Netzwerk und fragt nach dem 6-stelligen Code aus deren Weboberfläche. Die Zugangsdaten
   werden im System gespeichert und das Ziel automatisch eingetragen: keine Adressen, keine Passwörter.
   Unter Linux wird der Ordner mit GVFS eingebunden (wie beim Öffnen von `smb://` im Dateimanager, ohne
   Administratorrechte), die Zugangsdaten liegen in einer nur für Ihr Benutzerkonto lesbaren Datei
   (`~/.config/DEV Backup Studio/nube-credenciales.json`), und nach einem Neustart wird der Ordner
-  automatisch wieder eingebunden, sobald die Cloud antwortet.
+  automatisch wieder eingebunden, sobald die Cloud antwortet. War der Computer schon einmal verbunden,
+  bietet *Meine Cloud* an, diese Verbindung ohne neuen Code zu verwenden.
+- **Das Ziel folgt der Quelle.** Jede Quelle merkt sich, wohin sie gesichert wird: Beim Wechsel der
+  Quelle kehrt das Ziel zum Ordner ihrer Sicherung zurück. Enthält das Ziel beim Analysieren die
+  Sicherung einer anderen Quelle, sagt die App das, bevor sie etwas anfasst, und bietet an, den Ordner
+  der eigenen Sicherung zu verwenden, sie getrennt in einem neuen Ordner abzulegen, einen anderen zu
+  wählen oder trotzdem dorthin zu kopieren. Eine geplante Sicherung, bei der niemand vor dem Computer
+  sitzt, kopiert nie über die Sicherung einer anderen Quelle.
 - **Nichts unterbricht die Sicherung.** Während der Analyse oder Synchronisierung geht der Computer
   nicht wegen Inaktivität in den Ruhezustand, und das USB-Laufwerk schläft nicht ein. Herunterfahren
   oder Neustarten verlangt eine Bestätigung: Unter Windows erscheint „Sicherung läuft“, unter macOS
@@ -125,9 +134,10 @@ Die Apps sind nicht mit einem Entwicklerzertifikat signiert, daher warnt das Sys
   direkt aus der Erinnerung synchronisiert.
 - **In sieben Sprachen.** Spanisch, Englisch, Französisch, Deutsch, Italienisch, Chinesisch und
   Japanisch: automatisch nach Systemsprache oder unter *System → Sprache* wählbar.
-- **Kurzanleitung.** Beim ersten Start zeigt sie in sechs Schritten mit Bildschirmfotos der App, wie
-  alles eingerichtet wird: Quelle und Ziel (Laufwerk oder Cloud), was gesichert wird, Analysieren und
-  Synchronisieren, Gelöschtes wiederherstellen und das Laufwerk anschließen. Nach einem Update mit
+- **Kurzanleitung.** Beim ersten Start zeigt sie in acht Schritten mit Bildschirmfotos der App, wie
+  alles eingerichtet wird: Quelle und Ziel (Laufwerk, Cloud oder Google Drive), was gesichert wird,
+  Analysieren und Synchronisieren, Sicherungen planen, Google Drive in beide Richtungen, Gelöschtes
+  wiederherstellen und das Laufwerk anschließen. Nach einem Update mit
   wichtigen Neuerungen erscheint sie einmal erneut. Wieder öffnen lässt sie sich mit der Schaltfläche
   *Anleitung*, mit F1 (⌘? unter macOS) oder über das Symbol im Infobereich.
 - **Aktualisiert sich selbst, nach Rückfrage.** Prüft auf GitHub, ob es eine neue Version gibt
@@ -171,6 +181,10 @@ Die Verbindung ist in einer Minute eingerichtet, ohne Adressen oder Passwörter 
    Netzwerk; Code eingeben und auf *Verbinden* klicken. Das Ziel zeigt nun auf den Ordner dieses
    Computers.
 
+Der Code wird pro Computer nur einmal benötigt: Die Zugangsdaten bleiben im System gespeichert. Wählen
+Sie danach beim Ziel *Meine Cloud*, bietet die App an, diese Verbindung zu verwenden (mit dem Ordner der
+Sicherung der gewählten Quelle, falls es ihn schon gibt) oder sich mit einem neuen Code zu verbinden.
+
 Ist die Cloud ausgeschaltet oder nicht erreichbar, meldet die App das in einer Sekunde und bietet die
 Synchronisierung an, sobald sie wieder da ist – wie beim Anschließen eines Laufwerks.
 
@@ -194,6 +208,12 @@ und *Ziel*, alles andere funktioniert wie gewohnt.
 - **Wo**: `GOOGLE DRIVE/<Konto>/` auf dem Sicherungslaufwerk, in einem Ordner mit dem Drive-Symbol
   (änderbar unter *Ziel*). Jede Quelle merkt sich ihr Ziel: Wechseln Sie von Drive zurück zu einem
   Ordner, kehrt dessen Ziel zurück.
+- **Schnell, auch bei einem riesigen Drive.** Beim ersten Mal wird bei Google die Liste des gesamten
+  Drive auf einmal abgefragt (je 1000 Einträge, nicht Ordner für Ordner) und auf dem Computer
+  gespeichert; danach fragt jede Analyse nur ab, was sich seit dem letzten Mal geändert hat: ohne
+  Änderungen ein paar Anfragen und wenige Sekunden. Ein in Drive umbenannter Ordner wird auf dem
+  Laufwerk verschoben, ohne etwas erneut herunterzuladen. Einmal pro Woche wird sicherheitshalber die
+  ganze Liste neu abgefragt. Der Baum im Tab *Ordner* erscheint sofort aus dieser Liste.
 - **Sichern**: *Analysieren* zeigt, was sich in Drive geändert hat; *Synchronisieren* lädt nur Neues oder
   Geändertes herunter, geprüft mit der MD5 von Google. Google-Dokumente, -Tabellen und -Präsentationen
   werden als `.docx`, `.xlsx` und `.pptx` gespeichert (Formulare, Websites und Karten haben keine
@@ -266,9 +286,11 @@ Nanosekunde verglichen, sodass auch eine Bearbeitung ohne Größenänderung erka
 gilt deren Toleranz von 2 s.
 
 Damit das externe Laufwerk nicht jeden Tag komplett gelesen werden muss, wird am Ende ein Index
-(SQLite) mit dem Zustand des Ziels gespeichert. Die tägliche Analyse vergleicht die Quelle mit diesem
-Index und greift nur für Geändertes auf das Laufwerk zu. Alle 7 Tage oder nach einer Änderung der
-Einstellungen wird das gesamte Ziel gelesen.
+(SQLite) mit dem Zustand des Ziels gespeichert, einer pro Sicherung (Quelle und Zielordner): Wer zwei
+Sicherungen auf demselben Laufwerk abwechselt, muss es nicht neu lesen. Die tägliche Analyse vergleicht
+die Quelle mit diesem Index und greift nur für Geändertes auf das Laufwerk zu. Alle 7 Tage oder nach
+einer Änderung der Einstellungen wird das gesamte Ziel gelesen; in einem Netzwerkordner mehrere Ordner
+gleichzeitig.
 
 | | Erkennt Änderungen über | Gelöschtes | Umbenanntes | Verlauf |
 |---|---|---|---|---|
@@ -283,8 +305,8 @@ Einstellungen wird das gesamte Ziel gelesen.
 - **Auf dem Sicherungslaufwerk**: versteckter Ordner `.devbackup/` im Stammverzeichnis mit der Kennung
   des Laufwerks (`disco.json`), dem Sicherungsverlauf, den Versionen und `latido`, der winzigen Datei,
   die das Laufwerk wach hält. Die Google-Drive-Sicherungen liegen in `GOOGLE DRIVE/<Konto>/`.
-- **Auf dem Computer**: Einstellungen (mit den regelmäßigen Sicherungen für die Erinnerungen), Indizes
-  und Protokolle in `%APPDATA%\DEV Backup Studio` (Windows),
+- **Auf dem Computer**: Einstellungen (mit den regelmäßigen Sicherungen für die Erinnerungen und den
+  geplanten Sicherungen), Indizes, die gespeicherte Liste jedes Google Drive als Quelle und Protokolle in `%APPDATA%\DEV Backup Studio` (Windows),
   `~/Library/Application Support/DEV Backup Studio` (macOS) oder `~/.config/DEV Backup Studio` (Linux).
   Die Schlüssel der Google-Konten liegen getrennt in `secretos.json`
   (unter Windows mit DPAPI verschlüsselt, unter macOS und Linux nur für Ihren Benutzer lesbar).

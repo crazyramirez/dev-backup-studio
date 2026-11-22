@@ -4,10 +4,11 @@
 
 <p align="center"><b>Español</b> · <a href="README.de.md">Deutsch</a></p>
 
-Copia de seguridad y sincronización de carpetas de proyectos a un disco externo, para Windows, macOS y Linux.
-Detecta qué ha cambiado, mueve lo renombrado en vez de volver a copiarlo, guarda versiones de lo que
-borras o modificas, comprueba cada copia con SHA-256 y te pregunta si quieres sincronizar en cuanto
-conectas el disco.
+Copia de seguridad y sincronización de carpetas de proyectos a un disco externo, a tu nube en casa o a
+Google Drive, para Windows, macOS y Linux. Detecta qué ha cambiado, mueve lo renombrado en vez de volver
+a copiarlo, guarda versiones de lo que borras o modificas, comprueba cada copia con SHA-256, se hace sola
+a la hora que elijas y te pregunta si quieres sincronizar en cuanto conectas el disco. También copia tu
+Google Drive a un disco.
 
 ## Descargar e instalar
 
@@ -82,13 +83,20 @@ primera vez:
   de casa, por ejemplo la carpeta `DEV_Backup_Studio` de [Personal Cloud Storage](#juntos-con-personal-cloud-storage): una unidad de red (`Z:`) o la
   ruta `\\nube.local\DEV_Backup_Studio\MiPC` en Windows, el recurso montado en `/Volumes` en macOS o una carpeta
   de red abierta desde el gestor de archivos en Linux. Antes de tocarla comprueba en un segundo que el servidor responde, así que un servidor apagado no deja la app
-  esperando. Al volver a la red se ofrece sincronizar, como al conectar el disco.
+  esperando. Al volver a la red se ofrece sincronizar, como al conectar el disco. En red, el análisis
+  lee varias carpetas a la vez en lugar de esperar a cada una.
 - **Se conecta a Personal Cloud Storage con un código.** *Conectar con mi nube…* encuentra la nube en
   la red y pide el código de 6 cifras de su web. Guarda la credencial en el sistema y pone el destino
   solo: no hay que escribir direcciones ni contraseñas. En Linux monta la carpeta con GVFS (como al
   abrir `smb://` en el gestor de archivos, sin permisos de administrador), guarda la credencial en un
   archivo que solo puede leer tu usuario (`~/.config/DEV Backup Studio/nube-credenciales.json`) y la
-  vuelve a montar sola tras reiniciar, en cuanto la nube responde.
+  vuelve a montar sola tras reiniciar, en cuanto la nube responde. Si el ordenador ya se conectó antes,
+  *Mi nube* ofrece usar esa conexión sin pedir otro código.
+- **El destino sigue al origen.** Cada origen recuerda dónde se copia: al cambiar de origen, el destino
+  vuelve a la carpeta de su copia. Y si al analizar el destino guarda la copia de otro origen, la app lo
+  dice antes de tocar nada y ofrece usar la carpeta de su copia, guardarla aparte en una carpeta nueva,
+  elegir otra o copiar ahí igualmente. Una copia programada, sin nadie delante, nunca copia encima de
+  la de otro origen.
 - **No deja que nada pare la copia.** Mientras analiza o sincroniza, el equipo no se suspende por
   inactividad y el disco USB no se duerme. Apagar o reiniciar pide confirmación: en Windows aparece
   «Copia de seguridad en curso», y en macOS lo pide la propia app (en Linux se usa `systemd-inhibit`
@@ -116,9 +124,9 @@ primera vez:
   Con el disco conectado, se sincroniza desde el propio aviso.
 - **En siete idiomas.** Español, inglés, francés, alemán, italiano, chino y japonés: automático según el
   sistema o elegido en *Sistema → Idioma*.
-- **Guía rápida.** La primera vez enseña en seis pasos, con capturas de la propia app, cómo dejarla
-  lista: origen y destino (disco o nube), qué copiar, analizar y sincronizar, recuperar lo borrado y
-  conectar el disco. Tras una actualización con novedades importantes vuelve a salir una vez. Se vuelve a abrir con el botón *Guía*, con F1 (⌘? en macOS) o desde el icono de la bandeja.
+- **Guía rápida.** La primera vez enseña en ocho pasos, con capturas de la propia app, cómo dejarla
+  lista: origen y destino (disco, nube o Google Drive), qué copiar, analizar y sincronizar, programar
+  las copias, Google Drive en los dos sentidos, recuperar lo borrado y conectar el disco. Tras una actualización con novedades importantes vuelve a salir una vez. Se vuelve a abrir con el botón *Guía*, con F1 (⌘? en macOS) o desde el icono de la bandeja.
 - **Se actualiza sola, preguntando.** Comprueba en GitHub si hay una versión nueva (como mucho una vez
   al día), enseña las novedades y, si aceptas, descarga el instalador, comprueba su SHA-256, lo instala
   y se vuelve a abrir. Se puede desactivar o buscar a mano en *Actualizaciones*. Novedades de cada
@@ -157,6 +165,10 @@ Conectarlas es cosa de un minuto, sin escribir direcciones ni contraseñas:
 3. En DEV Backup Studio, debajo del destino: *Conectar con mi nube…* La app encuentra la nube en la
    red; escribe el código y pulsa *Conectar*. El destino queda puesto en la carpeta de este ordenador.
 
+El código se pide una sola vez por ordenador: la credencial queda guardada en el sistema. Después, al
+elegir *Mi nube* en el destino, la app ofrece usar esa conexión (con la carpeta de la copia del origen
+elegido, si ya la tiene) o conectar con un código nuevo.
+
 Si la nube está apagada o fuera de alcance, la app lo dice en un segundo y ofrece sincronizar en
 cuanto vuelve, igual que al conectar un disco.
 
@@ -180,6 +192,11 @@ siempre.
 - **Dónde**: `GOOGLE DRIVE/<cuenta>/` en el disco de copia, en una carpeta con el icono de Drive (se
   puede cambiar en *Destino*). Cada origen recuerda su destino: al volver de Drive a una carpeta, vuelve
   el destino de esa carpeta.
+- **Rápido aunque el Drive sea enorme.** La primera vez se pide a Google la lista de todo el Drive de
+  golpe (de 1000 en 1000, no carpeta por carpeta) y se guarda en el equipo; después, cada análisis solo
+  pide lo que ha cambiado desde la vez anterior: sin cambios son un par de peticiones y unos segundos.
+  Una carpeta renombrada en Drive se mueve en el disco sin volver a bajar nada. Cada semana se vuelve a
+  pedir la lista entera, por si acaso. El árbol de *Carpetas* sale al momento de esa lista.
 - **Copiar**: *Analizar* enseña qué ha cambiado en Drive; *Sincronizar* baja solo lo nuevo o cambiado,
   comprobado con el MD5 de Google. Los Documentos, Hojas y Presentaciones de Google se guardan como
   `.docx`, `.xlsx` y `.pptx` (los formularios, sitios y mapas no tienen archivo). Lo que borras o cambias
@@ -246,8 +263,10 @@ rsync o FreeFileSync en su modo por defecto. En NTFS y APFS la fecha se compara 
 se detecta incluso una edición que no cambia el tamaño; en FAT/exFAT se admite su margen de 2 s.
 
 Para no releer todo el disco externo cada día, al terminar se guarda un índice (SQLite) con el estado
-del destino. El análisis diario compara el origen con ese índice y solo toca el disco para lo que ha
-cambiado. Cada 7 días, o si cambia la configuración, se lee el destino entero.
+del destino, uno por cada copia (origen y carpeta de destino): alternar dos copias en el mismo disco no
+obliga a releerlo. El análisis diario compara el origen con ese índice y solo toca el disco para lo que
+ha cambiado. Cada 7 días, o si cambia la configuración, se lee el destino entero; en una carpeta de red,
+varias carpetas a la vez.
 
 | | Detecta cambios por | Borrados | Renombrados | Historial |
 |---|---|---|---|---|
@@ -262,7 +281,8 @@ cambiado. Cada 7 días, o si cambia la configuración, se lee el destino entero.
 - **En el disco de copia**: carpeta oculta `.devbackup/` en la raíz con la marca del disco
   (`disco.json`), el historial de copias, las versiones y `latido`, el archivo diminuto que mantiene
   despierto el disco. Las copias de Google Drive, en `GOOGLE DRIVE/<cuenta>/`.
-- **En el equipo**: ajustes (con las copias habituales de los recordatorios), índices y registros en
+- **En el equipo**: ajustes (con las copias habituales de los recordatorios y las programadas), índices,
+  la lista guardada de cada Google Drive de origen y registros en
   `%APPDATA%\DEV Backup Studio` (Windows), `~/Library/Application Support/DEV Backup Studio` (macOS) o
   `~/.config/DEV Backup Studio` (Linux). Las llaves de las cuentas de Google van aparte, en
   `secretos.json` (en Windows cifradas con DPAPI; en macOS y Linux, legibles solo

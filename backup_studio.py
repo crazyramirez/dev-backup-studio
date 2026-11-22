@@ -65,7 +65,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.7.4"
+APP_VERSION = "2.7.5"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"

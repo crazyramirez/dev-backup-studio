@@ -1,5 +1,11 @@
 # Novedades
 
+## 2.7.5
+
+- **README al día** (español y alemán): Google Drive en la introducción, la guía de ocho pasos, el
+  destino que sigue al origen y el aviso antes de mezclar dos copias, *Mi nube* sin otro código, la
+  lista guardada de Google Drive (solo los cambios), un índice por copia y el análisis más rápido en red.
+
 ## 2.7.4
 
 - **La guía rápida, al día.** Dos pasos nuevos: *Programa tus copias* (qué días y a qué hora se hace sola) y
