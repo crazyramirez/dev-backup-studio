@@ -10684,10 +10684,8 @@ def selftest_plans(win: "MainWindow", say) -> None:
             assert win._plan_running is None, "la copia programada empezó antes de hora"
             clock[0] = datetime(2030, 1, 7, 21, 0, 30)
             tick()
-            assert win._plan_running == pid, ("la copia programada no empezó a su hora", win._plan_warming,
-                                              win.plans.get(pid).last_result, win.plans.get(pid).last_detail,
-                                              win.plans.get(pid).waiting_for, win._state, win._plan_busy(),
-                                              win.log.toPlainText().splitlines()[-4:])
+            # con pocos archivos puede empezar y terminar mientras se espera la comprobación previa
+            assert win._plan_running == pid or win.plans.get(pid).runs == 1,                 "la copia programada no empezó a su hora"
             until_idle()
             p = win.plans.get(pid)
             assert p.last_result == "ok" and p.runs == 1, (p.last_result, p.last_detail)
@@ -10703,7 +10701,7 @@ def selftest_plans(win: "MainWindow", say) -> None:
             clock[0] = datetime(2030, 1, 10, 8, 0)  # dos días después
             os.rename(off, vol)
             tick()
-            assert win._plan_running == pid, "al volver el disco no hizo la copia pendiente"
+            assert win._plan_running == pid or win.plans.get(pid).runs == 2,                 "al volver el disco no hizo la copia pendiente"
             until_idle()
             assert p.runs == 2 and p.last_slot.startswith("2030-01-09T21:00"), (p.runs, p.last_slot)
             assert os.path.exists(os.path.join(dst, "p", "nuevo.txt"))
