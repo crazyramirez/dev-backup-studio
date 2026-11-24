@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import ctypes
 import fnmatch
+import functools
 import hashlib
 import json
 import os
@@ -167,6 +168,111 @@ def is_unc(path: str) -> bool:
     return IS_WIN and path.startswith(("\\\\", "//")) and not path.startswith("\\\\?\\")
 
 
+# ── la ventana nunca espera a la red ─────────────────────────────────────────
+# Al encender el equipo una carpeta de red puede tardar segundos (o un minuto) en contestar. Lo que la
+# ventana pregunta de una unidad de red (¿está?, su marca, su nombre, el espacio libre) se contesta con lo
+# último que se sabe; si no se sabe nada, se espera como mucho UI_WAIT y, mientras, se pregunta en otro
+# hilo. Al llegar la respuesta se avisa a la ventana (ui_listener) para que se repinte. Los hilos de copia
+# preguntan de verdad, y de paso dejan la respuesta para la ventana.
+UI_WAIT = 0.25
+UI_TTL = 15.0
+ui_listener = None   # función (sin argumentos) que se llama desde otro hilo cuando llega un dato de red
+_ui_cache: dict[tuple, tuple[float, object]] = {}
+_ui_events: dict[tuple, threading.Event] = {}
+_ui_lock = threading.Lock()
+
+
+def _ui_thread() -> bool:
+    return threading.current_thread() is threading.main_thread()
+
+
+def is_remote(path: str | None) -> bool:
+    """¿Está en una unidad de red? Sin tocar la red: solo la ruta y la tabla de unidades."""
+    if not path:
+        return False
+    try:
+        return network_host(volume_root(path)) is not None
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _ui_store(key: tuple, value) -> None:
+    with _ui_lock:
+        _ui_cache[key] = (time.monotonic(), value)
+
+
+def _ui_probe(key: tuple, call) -> threading.Event:
+    """Pregunta en otro hilo (una sola vez a la vez por dato) y avisa a la ventana al terminar."""
+    with _ui_lock:
+        ev = _ui_events.get(key)
+        if ev is not None:
+            return ev
+        ev = _ui_events[key] = threading.Event()
+
+    def work():
+        try:
+            _ui_store(key, call())
+        except Exception:  # noqa: BLE001 - sin dato: la ventana sigue con lo que tenía
+            pass
+        finally:
+            with _ui_lock:
+                _ui_events.pop(key, None)
+            ev.set()
+            listener = ui_listener
+            if listener is not None:
+                try:
+                    listener()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    threading.Thread(target=work, name="red-ventana", daemon=True).start()
+    return ev
+
+
+def ui_safe(default, by_root: bool = False):
+    """Hace que una consulta de unidad no bloquee la ventana en una unidad de red (ver arriba)."""
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(path, *args):
+            if not is_remote(path):
+                return fn(path, *args)
+            key = (fn.__name__, os.path.normcase(volume_root(path) if by_root else path), args)
+            if not _ui_thread():
+                value = fn(path, *args)
+                _ui_store(key, value)
+                return value
+            with _ui_lock:
+                hit = _ui_cache.get(key)
+            if hit is not None and time.monotonic() - hit[0] < UI_TTL:
+                return hit[1]
+            done = _ui_probe(key, lambda: fn(path, *args))
+            if hit is not None:
+                return hit[1]  # lo último que se sabía, mientras llega lo nuevo
+            done.wait(UI_WAIT)
+            with _ui_lock:
+                hit = _ui_cache.get(key)
+            return hit[1] if hit is not None else default
+        wrapper.raw = fn
+        wrapper.ui_key = lambda path, *args: (fn.__name__, os.path.normcase(volume_root(path) if by_root else path),
+                                              args)
+        return wrapper
+    return deco
+
+
+def ui_known(fn, path, *args) -> bool:
+    """¿La ventana ya tiene una respuesta (aunque sea antigua) de esta consulta de red?"""
+    if not is_remote(path):
+        return True
+    with _ui_lock:
+        return fn.ui_key(path, *args) in _ui_cache
+
+
+def ui_forget() -> None:
+    """Olvida lo sabido de la red (pruebas)."""
+    with _ui_lock:
+        _ui_cache.clear()
+
+
 def volume_root(path: str) -> str:
     """Raíz de la unidad que contiene la ruta: «E:\\» o «\\\\servidor\\recurso\\» en Windows,
     «/Volumes/X» en macOS."""
@@ -202,12 +308,39 @@ def _gvfs_host(share: str) -> str:
     return dict(f.split("=", 1) for f in fields if "=" in f).get("server", "")
 
 
+@ui_safe(True)
+def path_isdir(path: str) -> bool:
+    """os.path.isdir que no bloquea la ventana en una carpeta de red."""
+    return os.path.isdir(path)
+
+
+@ui_safe(None)
+def disk_free(path: str) -> tuple[int, int, int] | None:
+    """(libre, usado, total) de la unidad, o None si no se puede saber. No bloquea la ventana en red."""
+    try:
+        du = shutil.disk_usage(path)
+    except OSError:
+        return None
+    return du.free, du.used, du.total
+
+
+@ui_safe(None)
+def history_lines(root: str) -> list[str] | None:
+    """Las líneas del historial del disco (None si no hay). No bloquea la ventana en red."""
+    try:
+        with open(os.path.join(root, META_DIR, "historial.jsonl"), encoding="utf-8") as fh:
+            return fh.read().splitlines()
+    except (OSError, ValueError):
+        return None
+
+
 def rel_to_volume(path: str) -> str:
     """Ruta dentro de su unidad: «E:\\DEV» → «DEV»."""
     rel = os.path.relpath(os.path.abspath(path), volume_root(path))
     return "" if rel == "." else rel
 
 
+@ui_safe(True, by_root=True)
 def volume_present(path: str) -> bool:
     """¿Está conectada la unidad de esta ruta?
 
@@ -421,6 +554,7 @@ def _unix_fs_type(root: str) -> str:
     return ""
 
 
+@ui_safe(("", 0, ""))
 def volume_info(root: str) -> tuple[str, int, str]:
     """(etiqueta, número de serie, sistema de archivos) de una unidad."""
     if not IS_WIN:
@@ -637,6 +771,7 @@ def changes_since(src: str, since: float, patterns=(), excluded=(), cancel: thre
 
 # ── identidad del disco e historial ─────────────────────────────────────────
 
+@ui_safe(None)
 def read_disk_id(root: str) -> str | None:
     try:
         with open(os.path.join(root, META_DIR, "disco.json"), encoding="utf-8") as fh:
@@ -698,6 +833,7 @@ def append_history(root: str, entry: dict) -> None:
         pass
 
 
+@ui_safe(None)
 def last_history(root: str) -> dict | None:
     try:
         with open(os.path.join(root, META_DIR, "historial.jsonl"), encoding="utf-8") as fh:

@@ -1122,6 +1122,21 @@
   "Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de tus carpetas. Con tu propia cuenta de Google, sin instalar nada más.": "Fai il backup del tuo Google Drive su un disco (poi, solo ciò che cambia) o salva su Drive i backup delle tue cartelle. Con il tuo account Google, senza installare altro.",
   "De Drive a tu disco": "Da Drive al tuo disco",
   "De tu disco a Drive": "Dal tuo disco a Drive",
-  "Con tu propio ID de Google": "Con il tuo ID Google"
+  "Con tu propio ID de Google": "Con il tuo ID Google",
+  "Copia programada": "Backup programmato",
+  "{root}  ·  comprobando la carpeta de red…": "{root}  ·  controllo della cartella di rete…",
+  "Ver progreso": "Vedi avanzamento",
+  "Ocultar el aviso (la copia sigue)": "Nascondi l'avviso (il backup continua)",
+  "Empezando…": "Avvio…",
+  "Analizando  ·  {n} archivos revisados": "Analisi  ·  {n} file controllati",
+  "Copia completa  ·  comprobando la integridad del disco": "Backup completato  ·  controllo dell'integrità del disco",
+  "Sincronizando  ·  {pct}  ·  {done} de {total}": "Sincronizzazione  ·  {pct}  ·  {done} di {total}",
+  "Hecha: todo al día": "Fatto: tutto aggiornato",
+  "Detenida: revisa la lista antes de seguir": "Fermato: controlla l'elenco prima di continuare",
+  "No pudo terminar": "Non è stato possibile terminare",
+  "Cancelada": "Annullato",
+  "Disco conectado": "Disco collegato",
+  "Hecha  ·  {n} archivos copiados": "Fatto  ·  {n} file copiati",
+  "No pudo empezar: mira el registro": "Non è stato possibile avviare: vedi il registro"
  }
 }

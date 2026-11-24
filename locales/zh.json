@@ -1085,6 +1085,21 @@
   "Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de tus carpetas. Con tu propia cuenta de Google, sin instalar nada más.": "把 Google 云端硬盘备份到磁盘（之后只复制变化的部分），或把文件夹的备份保存到云端硬盘。使用你自己的 Google 账号，无需安装其他软件。",
   "De Drive a tu disco": "从云端硬盘到磁盘",
   "De tu disco a Drive": "从磁盘到云端硬盘",
-  "Con tu propio ID de Google": "使用你自己的 Google ID"
+  "Con tu propio ID de Google": "使用你自己的 Google ID",
+  "Copia programada": "计划备份",
+  "{root}  ·  comprobando la carpeta de red…": "{root}  ·  正在检查网络文件夹…",
+  "Ver progreso": "查看进度",
+  "Ocultar el aviso (la copia sigue)": "隐藏提示（备份继续进行）",
+  "Empezando…": "正在开始…",
+  "Analizando  ·  {n} archivos revisados": "正在分析  ·  已扫描 {n} 个文件",
+  "Copia completa  ·  comprobando la integridad del disco": "备份完成  ·  正在检查磁盘完整性",
+  "Sincronizando  ·  {pct}  ·  {done} de {total}": "正在同步  ·  {pct}  ·  {done} / {total}",
+  "Hecha: todo al día": "完成：全部已是最新",
+  "Detenida: revisa la lista antes de seguir": "已停止：继续前请查看列表",
+  "No pudo terminar": "未能完成",
+  "Cancelada": "已取消",
+  "Disco conectado": "磁盘已连接",
+  "Hecha  ·  {n} archivos copiados": "完成  ·  已复制 {n} 个文件",
+  "No pudo empezar: mira el registro": "未能开始：请查看日志"
  }
 }

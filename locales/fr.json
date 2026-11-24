@@ -1122,6 +1122,21 @@
   "Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de tus carpetas. Con tu propia cuenta de Google, sin instalar nada más.": "Sauvegardez votre Google Drive sur un disque (ensuite, seulement ce qui change) ou gardez dans Drive les sauvegardes de vos dossiers. Avec votre propre compte Google, rien d’autre à installer.",
   "De Drive a tu disco": "De Drive vers votre disque",
   "De tu disco a Drive": "De votre disque vers Drive",
-  "Con tu propio ID de Google": "Avec votre propre ID Google"
+  "Con tu propio ID de Google": "Avec votre propre ID Google",
+  "Copia programada": "Sauvegarde planifiée",
+  "{root}  ·  comprobando la carpeta de red…": "{root}  ·  vérification du dossier réseau…",
+  "Ver progreso": "Voir la progression",
+  "Ocultar el aviso (la copia sigue)": "Masquer l’avis (la sauvegarde continue)",
+  "Empezando…": "Démarrage…",
+  "Analizando  ·  {n} archivos revisados": "Analyse  ·  {n} fichiers examinés",
+  "Copia completa  ·  comprobando la integridad del disco": "Sauvegarde terminée  ·  vérification de l’intégrité du disque",
+  "Sincronizando  ·  {pct}  ·  {done} de {total}": "Synchronisation  ·  {pct}  ·  {done} sur {total}",
+  "Hecha: todo al día": "Terminée : tout est à jour",
+  "Detenida: revisa la lista antes de seguir": "Arrêtée : vérifiez la liste avant de continuer",
+  "No pudo terminar": "N’a pas pu se terminer",
+  "Cancelada": "Annulée",
+  "Disco conectado": "Disque connecté",
+  "Hecha  ·  {n} archivos copiados": "Terminée  ·  {n} fichiers copiés",
+  "No pudo empezar: mira el registro": "N’a pas pu démarrer : voir le journal"
  }
 }

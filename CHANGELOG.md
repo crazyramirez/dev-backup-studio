@@ -1,5 +1,17 @@
 # Novedades
 
+## 2.7.6
+
+- **La ventana ya no se congela al empezar una copia sola.** Al encender el equipo, una carpeta de red
+  (tu nube, un NAS) puede tardar en contestar, y la ventana esperaba a cada consulta. Ahora lo que la
+  ventana pregunta de una carpeta de red se contesta con lo último que se sabe y se completa aparte; lo
+  que necesita una copia programada se comprueba en otro hilo antes de empezar. Con una red lenta
+  simulada, abrir la ventana pasa de 49 s a 3 s y lanzar la copia programada, de 41 s a 0,1 s.
+- **Aviso al empezar una copia sola.** Una copia programada (o al conectar el disco con «Sincronizar
+  sin preguntar») muestra abajo a la derecha un aviso con un anillo animado: qué copia es, si está
+  analizando o copiando y cuánto lleva, y cómo terminó. *Ver progreso* lleva a la página de progreso;
+  se retira solo. El icono de la bandeja lleva una insignia mientras hay una copia en marcha.
+
 ## 2.7.5
 
 - **README al día** (español y alemán): Google Drive en la introducción, la guía de ocho pasos, el

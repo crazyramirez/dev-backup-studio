@@ -65,7 +65,7 @@ import versions
 from i18n import N_, _, _n
 
 APP_NAME = "DEV Backup Studio"
-APP_VERSION = "2.7.5"
+APP_VERSION = "2.7.6"
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
@@ -1829,17 +1829,20 @@ class PathCard(Card):
             self.disk.setValue(0)
             return
         root = engine.volume_root(path)
-        try:
-            if not engine.volume_present(path):
-                raise OSError
-            du = shutil.disk_usage(root)
-        except OSError:
-            self.info.setText(_("Servidor de red no disponible") if engine.is_network(path) else _("Unidad no conectada"))
+        du = engine.disk_free(root) if engine.volume_present(path) else None
+        if du is None:
+            if engine.is_remote(path) and not engine.ui_known(engine.disk_free, root):
+                # la red aún no ha contestado (al encender el equipo): se repinta al llegar la respuesta
+                self.info.setText(_("{root}  ·  comprobando la carpeta de red…").format(root=engine.vol_name(root)))
+            else:
+                self.info.setText(_("Servidor de red no disponible") if engine.is_network(path)
+                                  else _("Unidad no conectada"))
             self.disk.setValue(0)
             return
-        self.disk.setValue(int(du.used / du.total * 10000) if du.total else 0)
-        note = "" if os.path.isdir(path) else ("  ·  " + _("se creará"))
-        self.info.setText(_("{root}  ·  {free} libres de {total}{note}").format(root=engine.vol_name(root), free=fmt_bytes(du.free), total=fmt_bytes(du.total), note=note))
+        free, used, total = du
+        self.disk.setValue(int(used / total * 10000) if total else 0)
+        note = "" if engine.path_isdir(path) else ("  ·  " + _("se creará"))
+        self.info.setText(_("{root}  ·  {free} libres de {total}{note}").format(root=engine.vol_name(root), free=fmt_bytes(free), total=fmt_bytes(total), note=note))
 
 
 # ── ventana principal ────────────────────────────────────────────────────────
@@ -5384,6 +5387,257 @@ class ReminderBar(QFrame):
         self.setMaximumHeight(16777215)
 
 
+class LaunchToast(QWidget):
+    """Aviso flotante cuando una copia empieza sola (programada o al conectar el disco): qué copia es y
+    cómo va, con un anillo animado. Se va solo unos segundos después de empezar a copiar (o al terminar);
+    con la ventana oculta, espera a que se vea. «Ver progreso» lleva a la página de progreso."""
+    show_progress = pyqtSignal()
+    CARD_W, PAD, RADIUS, BLUR = 500, 30, 18, 13
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedWidth(self.CARD_W + 2 * self.PAD)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(self.PAD + 76, self.PAD + 14, self.PAD + 12, self.PAD + 14)
+        lay.setSpacing(10)
+        col = QVBoxLayout()
+        col.setSpacing(2)
+        self.eyebrow = QLabel("")
+        self.eyebrow.setStyleSheet(f"color:{C['accent2']}; font-size:10px; font-weight:700; letter-spacing:1.4px;")
+        self.title = ElideLabel("", Qt.TextElideMode.ElideMiddle)
+        self.title.setStyleSheet(f"color:{C['text']}; font-size:14px; font-weight:700;")
+        self.status = ElideLabel("", Qt.TextElideMode.ElideRight)
+        self.status.setStyleSheet(f"color:{C['muted']}; font-size:12px;")
+        for w in (self.eyebrow, self.title, self.status):
+            col.addWidget(w)
+        lay.addLayout(col, 1)
+        self.go = QPushButton(_("Ver progreso"))
+        self.go.setObjectName("link")
+        self.go.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.go.clicked.connect(self._go)
+        self.close_btn = QPushButton()
+        self.close_btn.setObjectName("remClose")
+        self.close_btn.setIcon(glyph_icon(G.CLOSE, C["muted"], 12))
+        self.close_btn.setFixedSize(28, 28)
+        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn.setToolTip(_("Ocultar el aviso (la copia sigue)"))
+        self.close_btn.clicked.connect(self.dismiss)
+        lay.addWidget(self.go, 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addWidget(self.close_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.adjustSize()
+        self.setFixedHeight(max(self.sizeHint().height(), 2 * self.PAD + 84))
+
+        self.active = False        # hay una copia que seguir
+        self.frac: float | None = None   # progreso de la copia (None: anillo girando)
+        self.tone = C["accent"]
+        self.glyph = G.SYNC
+        self._angle = 0.0
+        self._shown = 0.0          # 0…1: animación de entrada y salida
+        self._shadow: QPixmap | None = None
+        self._hide_left: float | None = None   # segundos visibles que faltan para irse solo
+        self._spin = QTimer(self)
+        self._spin.setInterval(16)
+        self._spin.timeout.connect(self._step)
+        self._anim = QVariantAnimation(self)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._anim.valueChanged.connect(self._set_shown)
+        self._anim.finished.connect(self._anim_done)
+        self._fx = QGraphicsOpacityEffect(self)
+        self._fx.setOpacity(0.0)
+        self.setGraphicsEffect(self._fx)
+        parent.installEventFilter(self)
+        self.hide()
+
+    # ── lo que cuenta ──
+    def open(self, eyebrow: str, title: str) -> None:
+        self.eyebrow.setText(eyebrow.upper())
+        self.title.setText(title)
+        self.status.setText(_("Empezando…"))
+        self.active, self.frac, self.tone, self.glyph = True, None, C["accent"], G.SYNC
+        self._hide_left = None
+        self.go.show()
+        self._place()
+        self.raise_()
+        if not self.isVisible() or self._anim.endValue() == 0.0:
+            self.show()
+            self._animate(1.0, 420)
+        self._spin.start()
+
+    def track(self, job: "engine.BackupJob", frac: float) -> None:
+        """Cada décima de segundo, con la copia en marcha."""
+        if not self.active:
+            return
+        s = job.stats
+        if job.phase == "scanning":
+            self.frac = None
+            self.status.setText(_("Analizando  ·  {n} archivos revisados").format(n=fmt_int(s.files_found)))
+        elif job.phase == "copying":
+            self.frac = frac
+            if s.step == "verificando":
+                self.status.setText(_("Copia completa  ·  comprobando la integridad del disco"))
+            else:
+                self.status.setText(_("Sincronizando  ·  {pct}  ·  {done} de {total}").format(
+                    pct=pct(frac), done=fmt_bytes(s.bytes_done), total=fmt_bytes(s.plan_bytes)))
+            if self._hide_left is None:
+                self._hide_left = 6.0  # ya se ve cómo va: se retira solo
+        self.update()
+
+    def finish(self, phase: str, text: str = "") -> None:
+        """La copia terminó (o no pudo empezar): se dice cómo y se va solo."""
+        if not self.active and not self.isVisible():
+            return
+        self.active = False
+        ok = phase in ("done", "ok")
+        self.frac = 1.0  # anillo completo y quieto, del color del resultado
+        if ok:
+            self.tone = C["ok"]
+        else:
+            self.tone = C["warn"] if phase in ("held", "cancelled", "wait") else C["err"]
+        self.glyph = G.CHECK if ok else G.WARN
+        self.status.setText(text or {"done": _("Hecha: todo al día"), "ok": _("Hecha: todo al día"),
+                                     "held": _("Detenida: revisa la lista antes de seguir"),
+                                     "cancelled": _("Cancelada")}.get(phase, _("No pudo terminar")))
+        self.go.setVisible(phase != "wait")
+        self._hide_left = 5.0 if ok else 9.0
+        self.update()
+
+    def dismiss(self) -> None:
+        self._hide_left = None
+        self._animate(0.0, 220)
+
+    def _go(self) -> None:
+        self.show_progress.emit()
+        self.dismiss()
+
+    # ── animación y dibujo ──
+    def _animate(self, to: float, ms: int) -> None:
+        if not ui_animations():
+            self._anim.stop()
+            self._set_shown(to)
+            self._anim_done()
+            return
+        self._anim.stop()
+        self._anim.setStartValue(self._shown)
+        self._anim.setEndValue(to)
+        self._anim.setDuration(ms)
+        self._anim.start()
+
+    def _set_shown(self, v) -> None:
+        self._shown = float(v)
+        self._fx.setOpacity(self._shown)
+        self._place()
+
+    def _anim_done(self) -> None:
+        if self._shown <= 0.01:
+            self._spin.stop()
+            self.hide()
+
+    def _place(self) -> None:
+        p = self.parentWidget()
+        if p is None:
+            return
+        # abajo a la derecha, encima de los botones de la ventana; entra deslizándose desde abajo
+        foot = self.window().findChild(QFrame, "footer")
+        bottom = foot.mapTo(p, QPoint(0, 0)).y() if foot is not None and foot.isVisible() else p.height()
+        y = bottom - self.height() + self.PAD - 10 + int((1.0 - self._shown) * 22)
+        self.move(max(0, p.width() - self.width() - 4), y)
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        if obj is self.parentWidget() and event.type() == QEvent.Type.Resize:
+            self._place()
+        return False
+
+    def _step(self) -> None:
+        self._angle = (self._angle + 4.2) % 360
+        win = self.window()
+        seen = win.isVisible() and not win.isMinimized()
+        if self._hide_left is not None and seen and not self.underMouse():
+            self._hide_left -= self._spin.interval() / 1000
+            if self._hide_left <= 0:
+                self.dismiss()
+        self.update()
+
+    def paintEvent(self, _e):  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        card = QRectF(self.PAD, self.PAD - 4, self.width() - 2 * self.PAD, self.height() - 2 * self.PAD)
+        if self._shadow is None:
+            self._shadow = soft_shadow(card.width(), card.height(), self.RADIUS, self.BLUR, 170)
+        pad = self.BLUR * 2  # soft_shadow deja ese margen alrededor (y la dibuja a media resolución)
+        p.drawPixmap(QRectF(card.x() - pad, card.y() - pad + 8, card.width() + 2 * pad, card.height() + 2 * pad),
+                     self._shadow, QRectF(self._shadow.rect()))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(C["card"]))
+        p.drawRoundedRect(card, self.RADIUS, self.RADIUS)
+        # borde con degradado (del color del estado al cian)
+        g = QLinearGradient(card.topLeft(), card.topRight())
+        edge = QColor(self.tone)
+        edge.setAlpha(170)
+        g.setColorAt(0, edge)
+        tail = QColor(C["accent2"])
+        tail.setAlpha(60)
+        g.setColorAt(1, tail)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(QBrush(g), 1.2))
+        p.drawRoundedRect(card.adjusted(0.6, 0.6, -0.6, -0.6), self.RADIUS, self.RADIUS)
+        # el anillo: girando mientras prepara o analiza; con el progreso al copiar
+        c = QPointF(card.x() + 42, card.center().y())
+        r = 21.0
+        halo = QRadialGradient(c, r * 1.9)
+        glow = QColor(self.tone)
+        glow.setAlpha(60)
+        halo.setColorAt(0, glow)
+        glow.setAlpha(0)
+        halo.setColorAt(1, glow)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(halo)
+        p.drawEllipse(c, r * 1.9, r * 1.9)
+        p.setBrush(QColor(C["bg"]))
+        p.drawEllipse(c, r, r)
+        ring = QRectF(c.x() - r, c.y() - r, 2 * r, 2 * r).adjusted(1.5, 1.5, -1.5, -1.5)
+        p.setPen(QPen(QColor(255, 255, 255, 22), 3))
+        p.drawEllipse(ring)
+        cg = QConicalGradient(c, -self._angle if self.frac is None else 90)
+        cg.setColorAt(0, QColor(self.tone))
+        cg.setColorAt(0.5, QColor(C["accent2"]))
+        cg.setColorAt(1, QColor(self.tone))
+        pen = QPen(QBrush(cg), 3)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        if self.frac is None:
+            p.drawArc(ring, int(-self._angle * 16), int(110 * 16))
+        else:
+            p.drawArc(ring, 90 * 16, -int(max(0.02, min(1.0, self.frac)) * 360 * 16))
+        icon = cached_glyph(self.glyph, self.tone, 16)
+        p.drawPixmap(QRectF(c.x() - 8, c.y() - 8, 16, 16), icon, QRectF(icon.rect()))
+        p.end()
+
+
+def tray_busy_icon() -> QIcon:
+    """El icono de la bandeja con una insignia: hay una copia en marcha."""
+    icon = QIcon()
+    for px in (16, 24, 32, 48, 64):
+        pm = app_icon_pixmap(px).copy()
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        d = px * 0.52
+        rect = QRectF(px - d - px * 0.02, px - d - px * 0.02, d, d)
+        g = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        g.setColorAt(0, QColor(C["accent"]))
+        g.setColorAt(1, QColor(C["accent2"]))
+        p.setPen(QPen(QColor(C["bg"]), max(1.0, px / 16)))
+        p.setBrush(g)
+        p.drawEllipse(rect)
+        glyph = glyph_pixmap(G.SYNC, "#FFFFFF", max(6, int(d * 0.62)))
+        gs = d * 0.62
+        p.drawPixmap(QRectF(rect.center().x() - gs / 2, rect.center().y() - gs / 2, gs, gs), glyph,
+                     QRectF(glyph.rect()))
+        p.end()
+        icon.addPixmap(pm)
+    return icon
+
+
 # ── copias programadas ───────────────────────────────────────────────────────
 
 PLAN_KINDS = {"daily": N_("Cada día"), "days": N_("Días concretos"), "monthly": N_("Una vez al mes")}
@@ -5738,6 +5992,8 @@ class PlanRow(QFrame):
 class MainWindow(QMainWindow):
     # comprobación de la nube en segundo plano: (servidor, destino corregido o "", ok | down | none)
     cloud_checked = pyqtSignal(str, str, str)
+    net_learned = pyqtSignal()        # llegó una respuesta de una carpeta de red (engine.ui_listener)
+    plan_warmed = pyqtSignal(bool)    # comprobaciones previas de una copia programada hechas (¿hay internet?)
     drive_quota = pyqtSignal(str, object, object)  # cuenta, límite (None = sin límite), usado
 
     def __init__(self, tray_mode: bool = False, updated: bool = False):
@@ -5806,6 +6062,13 @@ class MainWindow(QMainWindow):
         self._set_state("idle")
         self._show_idle_banner()
 
+        self._net_timer = QTimer(self)
+        self._net_timer.setSingleShot(True)
+        self._net_timer.setInterval(400)
+        self._net_timer.timeout.connect(self._on_net_learned)
+        self.net_learned.connect(self._net_timer.start)
+        engine.ui_listener = self._emit_net_learned
+
         self.watcher = DiskWatcher(self)
         self.watcher.arrived.connect(self._on_drive_arrived)
         self._watch_network_roots()
@@ -5823,7 +6086,18 @@ class MainWindow(QMainWindow):
         self.watcher.arrived.connect(lambda _root: QTimer.singleShot(3000, self._refresh_reminders))
         self._refresh_reminders()
 
-        # copias programadas: cada 20 s se mira si alguna tiene la hora vencida
+        # aviso flotante cuando una copia empieza sola
+        self.launch_toast = LaunchToast(self)
+        self.launch_toast.show_progress.connect(
+            lambda: (self._show_window(), self.seg_buttons[PAGE_PROGRESS].click()))
+        self._tray_busy = None
+
+        # copias programadas: cada 20 s se mira si alguna tiene la hora vencida. Lo que toca la red o
+        # el disco se comprueba antes en otro hilo (_plan_warm): la ventana nunca espera
+        self._plan_online = True
+        self._plan_warm_at = -1e9
+        self._plan_warming = False
+        self.plan_warmed.connect(self._on_plan_warmed)
         self._plan_hold_until = time.monotonic() + (90 if tray_mode else 8)  # al iniciar sesión, sin prisa
         self._plan_timer = QTimer(self)
         self._plan_timer.setInterval(20_000)
@@ -7006,12 +7280,13 @@ class MainWindow(QMainWindow):
             self._fetch_drive_quota()
             self._refresh_disk_status()
             return
-        if dst and os.path.isdir(dst):
-            found = engine.read_disk_id(engine.volume_root(dst))
+        if dst and engine.path_isdir(dst):
+            root = engine.volume_root(dst)
+            found = engine.read_disk_id(root)
             if found:
                 self.disk_id = found
                 self.dst_rel = engine.rel_to_volume(dst)
-            else:
+            elif engine.ui_known(engine.read_disk_id, root):
                 self._register_disk(dst)
         self._refresh_disk_status()
 
@@ -7217,7 +7492,11 @@ class MainWindow(QMainWindow):
         self._show_window()
         if action == "auto":
             self._notify(_("Disco de copia conectado"), _("Sincronizando…"))
-            self._start(copy=True)
+            self.launch_toast.open(_("Disco conectado"), new_dst)
+            if not self._start(copy=True):
+                self.launch_toast.finish("failed", _("No pudo empezar: mira el registro"))
+            elif self._state not in RUNNING:
+                self.launch_toast.finish("done")
             return
         if not self._start(copy=False, show_progress=False):
             return
@@ -7593,6 +7872,9 @@ class MainWindow(QMainWindow):
                                 "paused": Taskbar.PAUSED}.get(state, Taskbar.OFF))
         if self.tray:
             self.tray.setToolTip(f"{APP_NAME} · {mid(text)}")
+            if running and getattr(self, "_tray_busy", None) is None:
+                self._tray_busy = tray_busy_icon()
+            self.tray.setIcon(self._tray_busy if running else app_icon())
         if not running:
             self.setWindowTitle(APP_NAME)
         if hasattr(self, "remind_bar"):
@@ -7850,6 +8132,8 @@ class MainWindow(QMainWindow):
             self._render_scan(job, now)
         elif phase == "copying":
             self._render_copy(job, now)
+        if self.launch_toast.active:
+            self.launch_toast.track(job, self._progress(job.stats))
         self._drain_errors(job)
         self._watch_disk(job)
         self._sync_guard(job)
@@ -8130,6 +8414,11 @@ class MainWindow(QMainWindow):
 
     def _finish(self, job: engine.BackupJob, phase: str):
         self._guard_stop()
+        if self.launch_toast.active:
+            held = phase == "ready" and job.held
+            self.launch_toast.finish("held" if held else phase,
+                                     _("Hecha  ·  {n} archivos copiados").format(n=fmt_int(job.stats.files_done))
+                                     if phase == "done" and job.stats.files_done else "")
         self._apply_renamed_exclusions(job)
         s = job.stats
         if self._pause_at is not None:
@@ -8562,11 +8851,8 @@ class MainWindow(QMainWindow):
                 if where and os.path.normcase(os.path.normpath(where)) == key:
                     return it.get("src") or None
         # copias hechas desde otro equipo: el historial que guarda el propio disco
-        try:
-            root = engine.volume_root(dst)
-            with open(os.path.join(root, engine.META_DIR, "historial.jsonl"), encoding="utf-8") as fh:
-                lines = fh.read().splitlines()
-        except (OSError, ValueError):
+        lines = engine.history_lines(engine.volume_root(dst))
+        if not lines:
             return None
         tail = os.path.normcase(os.path.splitdrive(os.path.normpath(dst))[1])
         for line in reversed(lines):
@@ -8973,7 +9259,7 @@ class MainWindow(QMainWindow):
             if root is None:
                 return None
             return os.path.join(root, it["dst_rel"]) if it.get("dst_rel") else root
-        return it["dst"] if it.get("dst") and os.path.isdir(it["dst"]) else None
+        return it["dst"] if it.get("dst") and engine.path_isdir(it["dst"]) else None
 
     def _is_current_pair(self, it: dict) -> bool:
         if os.path.normcase(self.src_card.path()) != os.path.normcase(it["src"]):
@@ -9515,7 +9801,11 @@ class MainWindow(QMainWindow):
         changed = False
         if self.plans_box.isChecked() and self.plans.items and time.monotonic() >= self._plan_hold_until \
                 and not self._plan_busy():
-            changed = self._plan_check(now)
+            due = [p for p in self.plans.ordered(now) if p.state(now)[0] == "due"]
+            if due and time.monotonic() - self._plan_warm_at > 10:
+                self._plan_warm(due)  # vuelve aquí al terminar, con lo de la red ya sabido
+            else:
+                changed = self._plan_check(now)
         if changed:
             self._save_plans()
         sig = tuple(self._plan_status(p, now)[0] for p in self.plans.ordered(now))
@@ -9523,6 +9813,66 @@ class MainWindow(QMainWindow):
             self._refresh_plans(now)
         elif self.waker.when is None or self.waker.when < now:
             self._arm_wake(now)
+
+    def _plan_warm(self, due: list) -> None:
+        """Antes de decidir: en otro hilo se pregunta a los discos, a las carpetas de red y a Google lo que
+        hará falta (engine.ui_safe guarda las respuestas). Al encender el equipo la red puede tardar en
+        contestar: así la ventana no se queda congelada mientras."""
+        if self._plan_warming:
+            return
+        self._plan_warming = True
+        extra = sorted(self._network_roots())
+        plans = [dataclasses.replace(p) for p in due]
+
+        def work():
+            online = True
+            try:
+                roots = engine.mounted_volumes(extra=extra)
+                for root in roots:
+                    engine.read_disk_id(root)
+                    engine.volume_info(root)
+                for p in plans:
+                    if gdrive_src.is_src(p.src) or gdrive_up.is_dest(p.dst):
+                        online = online and gdrive_up.online()
+                    if not gdrive_src.is_src(p.src):
+                        engine.path_isdir(p.src)
+                    if not gdrive_up.is_dest(p.dst):
+                        engine.path_isdir(p.dst)
+                        engine.volume_present(p.dst)
+                        engine.history_lines(engine.volume_root(p.dst))
+                        engine.disk_free(engine.volume_root(p.dst))
+            except Exception:  # noqa: BLE001 - lo que falte se preguntará después, sin bloquear
+                pass
+            try:
+                self.plan_warmed.emit(online)
+            except RuntimeError:  # la ventana ya se cerró
+                pass
+
+        threading.Thread(target=work, name="preparar-copia", daemon=True).start()
+
+    def _on_plan_warmed(self, online: bool) -> None:
+        self._plan_warming = False
+        self._plan_online = online
+        self._plan_warm_at = time.monotonic()
+        self._plan_tick()
+
+    def _emit_net_learned(self) -> None:
+        try:
+            self.net_learned.emit()
+        except RuntimeError:  # la ventana ya se cerró
+            pass
+
+    def _on_net_learned(self) -> None:
+        """Llegó lo que se esperaba de una carpeta de red: se repinta lo que depende de ella."""
+        if getattr(self, "_quitting", False):
+            return
+        self.src_card.refresh()
+        if self._state in RUNNING:
+            self._refresh_disk_status()
+        else:
+            self._adopt_disk()
+        self._refresh_plans()
+        self._refresh_reminders()
 
     def _plan_check(self, now: datetime) -> bool:
         """Atiende la primera copia vencida que se pueda hacer. True si algo cambió."""
@@ -9544,12 +9894,12 @@ class MainWindow(QMainWindow):
             if gdrive_src.is_src(p.src):
                 acc = self.gdrive.account(gdrive_src.parse_src(p.src))
                 cloud_ok = acc is not None and acc.can_read
-                if cloud_ok and not gdrive_up.online():
+                if cloud_ok and not self._plan_online:
                     if self.plans.wait(p.id, slot, "net"):
                         changed = True
                         self._log(_("Copia programada en espera: sin conexión con Google Drive"), C["warn"])
                     continue
-            if cloud_ok is False or (cloud_ok is None and not os.path.isdir(p.src)):
+            if cloud_ok is False or (cloud_ok is None and not engine.path_isdir(p.src)):
                 if self.plans.wait(p.id, slot, "src"):
                     changed = True
                     self._log(_("Copia programada en espera: no se encuentra el origen {src}").format(src=p.src),
@@ -9558,7 +9908,7 @@ class MainWindow(QMainWindow):
                                  _("No se encuentra {src}. Se hará en cuanto esté disponible.").format(
                                      src=reminders.short_name(p.src)))
                 continue
-            if gdrive_up.is_dest(p.dst) and self._plan_dest(p) and not gdrive_up.online():
+            if gdrive_up.is_dest(p.dst) and self._plan_dest(p) and not self._plan_online:
                 if self.plans.wait(p.id, slot, "net"):
                     changed = True
                     self._log(_("Copia programada en espera: sin conexión con Google Drive"), C["warn"])
@@ -9619,6 +9969,9 @@ class MainWindow(QMainWindow):
             self._save_plans()
             self._log(_("La copia programada no pudo empezar: {problem}").format(problem=problem), C["err"])
             self._notify(_("La copia programada no pudo empezar"), f"{self._plan_title(p)}: {problem}")
+            if not manual:
+                self.launch_toast.open(_("Copia programada"), self._plan_title(p))
+                self.launch_toast.finish("failed", problem)
             self._refresh_plans()
             return False
         self._plan_running = p.id
@@ -9627,13 +9980,17 @@ class MainWindow(QMainWindow):
         watching = self.isVisible() and not self.isMinimized() and self.isActiveWindow()
         if not watching and not manual:
             self._notify(_("Copia programada en marcha"), self._plan_title(p))
+        if not manual:
+            self.launch_toast.open(_("Copia programada"), self._plan_title(p))
         started = self._start(copy=True, show_progress=manual or not watching, interactive=manual or watching)
         if not started:
             self._plan_running = None
             self.plans.finish(p.id, "failed", now, _("no pudo empezar"))
             self._save_plans()
+            self.launch_toast.finish("failed", _("No pudo empezar: mira el registro"))
         elif self._state not in RUNNING:
             self._plan_finish("ok", "")  # el análisis de hace un momento ya decía que estaba al día
+            self.launch_toast.finish("done")
         self._refresh_plans()
         return started
 
@@ -10264,7 +10621,10 @@ def selftest_plans(win: "MainWindow", say) -> None:
     mano. Al terminar, los ajustes de la ventana quedan como estaban."""
     app = QApplication.instance()
     saved = dict(src=win.src_card.path(), dst=win.dst_card.path(), plans=win.plans, on=win.plans_box.isChecked(),
-                 disk_id=win.disk_id, dst_rel=win.dst_rel, copias=win.registry.to_list())
+                 disk_id=win.disk_id, dst_rel=win.dst_rel, copias=win.registry.to_list(),
+                 connect=win.connect_combo.currentIndex())
+    # al conectar el «disco» de prueba, solo avisar: sin diálogo ni análisis que ocupen la ventana
+    win.connect_combo.setCurrentIndex(max(0, win.connect_combo.findData("none")))
     real = (engine.volume_root, engine.volume_present, engine.mounted_volumes)
     with tempfile.TemporaryDirectory() as tmp:
         vol = os.path.join(tmp, "USB")
@@ -10312,26 +10672,35 @@ def selftest_plans(win: "MainWindow", say) -> None:
                     time.sleep(0.03)
                 assert win._plan_running is None, f"la copia programada no terminó ({win._state})"
 
-            win._plan_tick()
+            def tick():
+                """Como el temporizador: las comprobaciones previas van en otro hilo y luego se decide."""
+                win._plan_tick()
+                deadline = time.monotonic() + 20
+                while win._plan_warming and time.monotonic() < deadline:
+                    app.processEvents()
+                    time.sleep(0.01)
+                app.processEvents()
+
+            tick()
             assert win._plan_running is None, "la copia programada empezó antes de hora"
             clock[0] = datetime(2030, 1, 7, 21, 0, 30)
-            win._plan_tick()
+            tick()
             assert win._plan_running == pid, "la copia programada no empezó a su hora"
             until_idle()
             p = win.plans.get(pid)
             assert p.last_result == "ok" and p.runs == 1, (p.last_result, p.last_detail)
             assert os.path.exists(os.path.join(dst, "p", "f11.txt")), "la copia programada no copió"
-            win._plan_tick()
+            tick()
             assert win._plan_running is None, "repitió la misma hora"
             with open(os.path.join(src, "p", "nuevo.txt"), "w") as fh:
                 fh.write("nuevo")
             os.rename(vol, off)
             clock[0] = datetime(2030, 1, 8, 21, 0, 10)
-            win._plan_tick()
+            tick()
             assert p.waiting_for == "disk" and win._plan_running is None, "sin disco no esperó"
             clock[0] = datetime(2030, 1, 10, 8, 0)  # dos días después
             os.rename(off, vol)
-            win._plan_tick()
+            tick()
             assert win._plan_running == pid, "al volver el disco no hizo la copia pendiente"
             until_idle()
             assert p.runs == 2 and p.last_slot.startswith("2030-01-09T21:00"), (p.runs, p.last_slot)
@@ -10346,6 +10715,7 @@ def selftest_plans(win: "MainWindow", say) -> None:
             win._now = types.MethodType(MainWindow._now, win)
             win._notify = types.MethodType(MainWindow._notify, win)
             win.plans = saved["plans"]
+            win.connect_combo.setCurrentIndex(saved["connect"])
             win.plans_box.blockSignals(True)
             win.plans_box.setChecked(saved["on"])
             win.plans_box.blockSignals(False)
@@ -10365,6 +10735,42 @@ def selftest_plans(win: "MainWindow", say) -> None:
             win._save_settings()
             win._refresh_plans()
     say("  copias programadas: a su hora, una sola vez, esperando al disco y al conectarlo")
+
+
+def selftest_netwait(win: "MainWindow", say) -> None:
+    """La ventana no espera a la red: una consulta lenta de una carpeta de red contesta enseguida con lo
+    que se sabe y se completa en otro hilo. Y el aviso flotante de una copia que empieza sola."""
+    if IS_WIN:
+        heard: list[int] = []
+        listener = engine.ui_listener
+        engine.ui_listener = lambda: heard.append(1)
+        try:
+            slow = engine.ui_safe("pendiente")(lambda path: (time.sleep(0.8), "listo")[1])
+            path = "\\\\nube.invalid\\copias\\prueba-" + os.urandom(6).hex()
+            t = time.perf_counter()
+            assert slow(path) == "pendiente" and time.perf_counter() - t < 0.6, "la ventana esperó a la red"
+            deadline = time.perf_counter() + 5
+            while not engine.ui_known(slow, path) and time.perf_counter() < deadline:
+                time.sleep(0.05)
+            t = time.perf_counter()
+            assert slow(path) == "listo" and time.perf_counter() - t < 0.1, "la respuesta de la red no quedó"
+            assert heard, "no se avisó a la ventana"
+        finally:
+            engine.ui_listener = listener
+    toast = win.launch_toast
+    toast.open(_("Copia programada"), "DEV  →  USB")
+    job = types.SimpleNamespace(phase="scanning", stats=types.SimpleNamespace(
+        files_found=10, step="", bytes_done=0, plan_bytes=0))
+    toast.track(job, 0.0)
+    job.phase = "copying"
+    toast.track(job, 0.4)
+    assert toast.active and toast.frac == 0.4 and toast._hide_left is not None
+    toast.grab()
+    toast.finish("done")
+    assert not toast.active and toast.frac == 1.0
+    toast.dismiss()
+    tray_busy_icon()
+    say("  red lenta: la ventana no espera (contesta con lo sabido y pregunta aparte) · aviso de copia automática")
 
 
 def selftest_owner(win: "MainWindow", say) -> None:
@@ -10748,6 +11154,7 @@ def selftest() -> int:
         selftest_gdrive(win, say)
         selftest_plans(win, say)
         selftest_owner(win, say)
+        selftest_netwait(win, say)
         selftest_gdrive_up(win, say)
         if IS_LINUX:
             # montaje con GVFS: un «gio» de mentira con las mismas preguntas que el de verdad

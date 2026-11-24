@@ -1085,6 +1085,21 @@
   "Copia tu Google Drive a un disco (después, solo lo que cambia) o guarda en Drive las copias de tus carpetas. Con tu propia cuenta de Google, sin instalar nada más.": "Google ドライブをディスクにバックアップ（2 回目からは変更分のみ）、またはフォルダーのバックアップをドライブに保存。自分の Google アカウントで、追加のインストールは不要です。",
   "De Drive a tu disco": "ドライブからディスクへ",
   "De tu disco a Drive": "ディスクからドライブへ",
-  "Con tu propio ID de Google": "自分の Google ID で"
+  "Con tu propio ID de Google": "自分の Google ID で",
+  "Copia programada": "スケジュールバックアップ",
+  "{root}  ·  comprobando la carpeta de red…": "{root}  ·  ネットワークフォルダーを確認中…",
+  "Ver progreso": "進行状況を表示",
+  "Ocultar el aviso (la copia sigue)": "通知を閉じる（バックアップは続行）",
+  "Empezando…": "開始しています…",
+  "Analizando  ·  {n} archivos revisados": "分析中  ·  {n} 個のファイルを確認",
+  "Copia completa  ·  comprobando la integridad del disco": "バックアップ完了  ·  ディスクの整合性を確認中",
+  "Sincronizando  ·  {pct}  ·  {done} de {total}": "同期中  ·  {pct}  ·  {done} / {total}",
+  "Hecha: todo al día": "完了：すべて最新です",
+  "Detenida: revisa la lista antes de seguir": "停止：続行する前に一覧を確認してください",
+  "No pudo terminar": "完了できませんでした",
+  "Cancelada": "キャンセルしました",
+  "Disco conectado": "ディスクが接続されました",
+  "Hecha  ·  {n} archivos copiados": "完了  ·  {n} 個のファイルをコピー",
+  "No pudo empezar: mira el registro": "開始できませんでした：ログを確認してください"
  }
 }
