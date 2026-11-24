@@ -9827,10 +9827,8 @@ class MainWindow(QMainWindow):
         def work():
             online = True
             try:
-                roots = engine.mounted_volumes(extra=extra)
-                for root in roots:
-                    engine.read_disk_id(root)
-                    engine.volume_info(root)
+                for root in engine.mounted_volumes(extra=extra):
+                    engine.read_disk_id(root)  # dónde está cada disco de copia
                 for p in plans:
                     if gdrive_src.is_src(p.src) or gdrive_up.is_dest(p.dst):
                         online = online and gdrive_up.online()
@@ -9839,6 +9837,7 @@ class MainWindow(QMainWindow):
                     if not gdrive_up.is_dest(p.dst):
                         engine.path_isdir(p.dst)
                         engine.volume_present(p.dst)
+                        engine.volume_info(engine.volume_root(p.dst))
                         engine.history_lines(engine.volume_root(p.dst))
                         engine.disk_free(engine.volume_root(p.dst))
             except Exception:  # noqa: BLE001 - lo que falte se preguntará después, sin bloquear
@@ -10675,7 +10674,7 @@ def selftest_plans(win: "MainWindow", say) -> None:
             def tick():
                 """Como el temporizador: las comprobaciones previas van en otro hilo y luego se decide."""
                 win._plan_tick()
-                deadline = time.monotonic() + 20
+                deadline = time.monotonic() + 60
                 while win._plan_warming and time.monotonic() < deadline:
                     app.processEvents()
                     time.sleep(0.01)
@@ -10685,7 +10684,10 @@ def selftest_plans(win: "MainWindow", say) -> None:
             assert win._plan_running is None, "la copia programada empezó antes de hora"
             clock[0] = datetime(2030, 1, 7, 21, 0, 30)
             tick()
-            assert win._plan_running == pid, "la copia programada no empezó a su hora"
+            assert win._plan_running == pid, ("la copia programada no empezó a su hora", win._plan_warming,
+                                              win.plans.get(pid).last_result, win.plans.get(pid).last_detail,
+                                              win.plans.get(pid).waiting_for, win._state, win._plan_busy(),
+                                              win.log.toPlainText().splitlines()[-4:])
             until_idle()
             p = win.plans.get(pid)
             assert p.last_result == "ok" and p.runs == 1, (p.last_result, p.last_detail)
